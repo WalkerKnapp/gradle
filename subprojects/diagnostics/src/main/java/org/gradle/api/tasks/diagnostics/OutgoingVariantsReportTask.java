@@ -30,6 +30,7 @@ import org.gradle.api.internal.artifacts.ProjectBackedModule;
 import org.gradle.api.internal.artifacts.configurations.ConfigurationInternal;
 import org.gradle.api.internal.attributes.AttributeContainerInternal;
 import org.gradle.api.internal.file.FileResolver;
+import org.gradle.api.internal.project.ProjectInternal;
 import org.gradle.api.provider.Property;
 import org.gradle.api.tasks.Input;
 import org.gradle.api.tasks.Optional;
@@ -38,6 +39,7 @@ import org.gradle.api.tasks.options.Option;
 import org.gradle.internal.logging.text.StyledTextOutput;
 import org.gradle.internal.logging.text.StyledTextOutputFactory;
 
+import javax.annotation.Nullable;
 import javax.inject.Inject;
 import java.io.File;
 import java.util.Collection;
@@ -92,7 +94,7 @@ public class OutgoingVariantsReportTask extends DefaultTask {
             reportNoMatchingVariant(configurations, output);
         } else {
             Legend legend = new Legend();
-            configurations.forEach(cnf -> reportVariant((ConfigurationInternal) cnf, new ProjectBackedModule(getProject()), output, legend));
+            configurations.forEach(cnf -> reportVariant((ConfigurationInternal) cnf, new ProjectBackedModule((ProjectInternal) getProject()), output, legend));
             legend.print(output);
         }
     }
@@ -135,12 +137,10 @@ public class OutgoingVariantsReportTask extends DefaultTask {
         NamedDomainObjectContainer<ConfigurationVariant> outgoing = cnf.getOutgoing().getVariants();
         if (!outgoing.isEmpty()) {
             tree.section("Secondary variants (*)", () -> {
-                outgoing.forEach(variant -> {
-                    tree.section("Variant", variant.getName(), () -> {
-                        formatAttributes(variant.getAttributes(), tree);
-                        formatArtifacts(variant.getArtifacts(), tree);
-                    });
-                });
+                outgoing.forEach(variant -> tree.section("Variant", variant.getName(), () -> {
+                    formatAttributes(variant.getAttributes(), tree);
+                    formatArtifacts(variant.getArtifacts(), tree);
+                }));
                 legend.hasPublications = true;
             });
             return true;
@@ -150,11 +150,9 @@ public class OutgoingVariantsReportTask extends DefaultTask {
 
     private boolean formatArtifacts(PublishArtifactSet artifacts, Formatter tree) {
         if (!artifacts.isEmpty()) {
-            tree.section("Artifacts", () -> {
-                artifacts.stream()
-                    .sorted(Comparator.comparing(PublishArtifact::toString))
-                    .forEach(artifact -> formatArtifact(artifact, tree));
-            });
+            tree.section("Artifacts", () -> artifacts.stream()
+                .sorted(Comparator.comparing(PublishArtifact::toString))
+                .forEach(artifact -> formatArtifact(artifact, tree)));
             return true;
         }
         return false;
@@ -172,17 +170,15 @@ public class OutgoingVariantsReportTask extends DefaultTask {
         tree.println();
     }
 
-    private boolean formatAttributes(AttributeContainer attributes, Formatter tree) {
+    private void formatAttributes(AttributeContainer attributes, Formatter tree) {
         if (!attributes.isEmpty()) {
             tree.section("Attributes", () -> {
                 Integer max = attributes.keySet().stream().map(attr -> attr.getName().length()).max(Integer::compare).get();
-                attributes.keySet().stream().sorted(Comparator.comparing(Attribute::getName)).forEach(attr -> {
-                    tree.value(StringUtils.rightPad(attr.getName(), max), String.valueOf(attributes.getAttribute(attr)));
-                });
+                attributes.keySet().stream().sorted(Comparator.comparing(Attribute::getName)).forEach(attr ->
+                    tree.value(StringUtils.rightPad(attr.getName(), max), String.valueOf(attributes.getAttribute(attr)))
+                );
             });
-            return true;
         }
-        return false;
     }
 
     private void formatCapabilities(Collection<? extends Capability> capabilities, ProjectBackedModule projectBackedModule, Formatter tree) {
@@ -227,9 +223,7 @@ public class OutgoingVariantsReportTask extends DefaultTask {
         }
         if (variantSpec.isPresent()) {
             String variantName = variantSpec.get();
-            configurations = configurations.filter(cnf -> {
-                return cnf.getName().equals(variantName);
-            });
+            configurations = configurations.filter(cnf -> cnf.getName().equals(variantName));
         }
         return configurations.collect(Collectors.toList());
     }
@@ -276,7 +270,7 @@ public class OutgoingVariantsReportTask extends DefaultTask {
             section(title, null, action);
         }
 
-        void section(String title, String description, Runnable action) {
+        void section(String title, @Nullable String description, Runnable action) {
             output.style(StyledTextOutput.Style.Description);
             text(title);
             output.style(StyledTextOutput.Style.Normal);

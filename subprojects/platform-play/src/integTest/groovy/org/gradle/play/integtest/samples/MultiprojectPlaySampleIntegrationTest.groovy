@@ -16,7 +16,7 @@
 
 package org.gradle.play.integtest.samples
 
-import org.gradle.integtests.fixtures.ToBeFixedForInstantExecution
+import org.gradle.integtests.fixtures.ToBeFixedForConfigurationCache
 import org.gradle.integtests.fixtures.Sample
 import org.gradle.integtests.fixtures.executer.GradleHandle
 import org.junit.Rule
@@ -27,7 +27,7 @@ import static org.gradle.integtests.fixtures.UrlValidator.assertUrlContentContai
 
 class MultiprojectPlaySampleIntegrationTest extends AbstractPlaySampleIntegrationTest {
     @Rule
-    Sample multiprojectSample = new Sample(temporaryFolder, "play/multiproject")
+    Sample multiprojectSample = new Sample(temporaryFolder, "play/multiproject/groovy")
 
     Sample getPlaySample() {
         return multiprojectSample
@@ -51,7 +51,7 @@ class MultiprojectPlaySampleIntegrationTest extends AbstractPlaySampleIntegratio
         return new File(playSample.dir, "modules/${module}/public/${asset}")
     }
 
-    @ToBeFixedForInstantExecution
+    @ToBeFixedForConfigurationCache
     def "can run module subproject independently" () {
         when:
         executer.usingInitScript(initScript)

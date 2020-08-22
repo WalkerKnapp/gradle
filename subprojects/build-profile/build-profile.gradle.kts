@@ -13,34 +13,25 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import org.gradle.gradlebuild.unittestandcompile.ModuleType
-
 plugins {
-    `java-library`
-    gradlebuild.classycle
+    id("gradlebuild.distribution.implementation-java")
 }
 
 description = "Provides high-level insights into a Gradle build (--profile)"
 
 dependencies {
-    implementation(project(":baseServices"))
+    implementation(project(":base-services"))
     implementation(project(":messaging"))
     implementation(project(":logging"))
-    implementation(project(":coreApi"))
+    implementation(project(":core-api"))
     implementation(project(":core"))
+    implementation(project(":build-option"))
 
-    implementation(library("guava"))
-    
-    testImplementation(project(":internalTesting"))
+    implementation(libs.guava)
 
-    integTestImplementation(project(":buildOption"))
-    integTestImplementation(testLibrary("jsoup"))
+    testImplementation(project(":internal-testing"))
 
-    integTestRuntimeOnly(project(":runtimeApiInfo"))
-}
+    integTestImplementation(libs.jsoup)
 
-java {
-    gradlebuildJava {
-        moduleType = ModuleType.CORE
-    }
+    integTestDistributionRuntimeOnly(project(":distributions-full"))
 }

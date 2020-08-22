@@ -14,55 +14,36 @@
  * limitations under the License.
  */
 
-import org.gradle.gradlebuild.test.integrationtests.IntegrationTest
-import org.gradle.gradlebuild.unittestandcompile.ModuleType
-import plugins.futurePluginVersionsFile
-import org.gradle.gradlebuild.testing.integrationtests.cleanup.WhenNotEmpty
+import gradlebuild.cleanup.WhenNotEmpty
 
 plugins {
-    `kotlin-library`
+    id("gradlebuild.internal.kotlin")
 }
 
 description = "Kotlin DSL Integration Tests"
 
-gradlebuildJava {
-    moduleType = ModuleType.INTERNAL
-}
-
 dependencies {
-    testImplementation(project(":kotlinDslTestFixtures"))
+    testImplementation(testFixtures(project(":kotlin-dsl")))
 
-    integTestImplementation(project(":baseServices"))
-    integTestImplementation(project(":coreApi"))
+    integTestImplementation(project(":base-services"))
+    integTestImplementation(project(":core-api"))
     integTestImplementation(project(":core"))
-    integTestImplementation(project(":internalTesting"))
+    integTestImplementation(project(":internal-testing"))
     integTestImplementation("com.squareup.okhttp3:mockwebserver:3.9.1")
 
-    val allTestRuntimeDependencies: DependencySet by rootProject.extra
-    allTestRuntimeDependencies.forEach {
-        integTestRuntimeOnly(it)
-    }
+    integTestDistributionRuntimeOnly(project(":distributions-full"))
+
+    integTestLocalRepository(project(":kotlin-dsl-plugins"))
 }
 
 val pluginBundles = listOf(
-    ":kotlinDslPlugins")
+    ":kotlin-dsl-plugins")
 
 pluginBundles.forEach {
     evaluationDependsOn(it)
 }
 
 tasks {
-    val testEnvironment by registering {
-        pluginBundles.forEach {
-            dependsOn("$it:publishPluginsToTestRepository")
-        }
-    }
-
-    val integTestTasks: DomainObjectCollection<IntegrationTest> by project.extra
-    integTestTasks.configureEach {
-        dependsOn(testEnvironment)
-    }
-
     val writeFuturePluginVersions by registering {
 
         group = "build"
@@ -75,7 +56,7 @@ tasks {
 
         dependsOn(futurePluginVersionsTasks)
         inputs.files(futurePluginVersionsTasks.map { it.outputFile })
-        outputs.file(processIntegTestResources.get().futurePluginVersionsFile)
+        outputs.file(layout.buildDirectory.file("generated-resources/future-plugin-versions/future-plugin-versions.properties"))
 
         doLast {
             outputs.files.singleFile.bufferedWriter().use { writer ->
@@ -85,10 +66,9 @@ tasks {
             }
         }
     }
-
-    processIntegTestResources {
-        dependsOn(writeFuturePluginVersions)
-    }
+    sourceSets.integTest.get().output.dir(
+        writeFuturePluginVersions.map { it.outputs.files.singleFile.parentFile }
+    )
 }
 
 testFilesCleanup {

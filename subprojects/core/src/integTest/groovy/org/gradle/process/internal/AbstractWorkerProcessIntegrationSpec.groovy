@@ -38,6 +38,9 @@ import org.gradle.internal.logging.TestOutputEventListener
 import org.gradle.internal.logging.events.OutputEventListener
 import org.gradle.internal.logging.services.DefaultLoggingManagerFactory
 import org.gradle.internal.logging.services.LoggingServiceRegistry
+import org.gradle.internal.operations.CurrentBuildOperationRef
+import org.gradle.internal.operations.DefaultBuildOperationRef
+import org.gradle.internal.operations.OperationIdentifier
 import org.gradle.internal.remote.MessagingServer
 import org.gradle.internal.service.DefaultServiceRegistry
 import org.gradle.internal.service.ServiceRegistryBuilder
@@ -54,7 +57,8 @@ import spock.lang.Shared
 import spock.lang.Specification
 
 abstract class AbstractWorkerProcessIntegrationSpec extends Specification {
-    @Shared DefaultServiceRegistry services = (DefaultServiceRegistry) ServiceRegistryBuilder.builder()
+    @Shared
+    DefaultServiceRegistry services = (DefaultServiceRegistry) ServiceRegistryBuilder.builder()
         .parent(NativeServicesTestFixture.getInstance())
         .provider(LoggingServiceRegistry.NO_OP)
         .provider(new GlobalScopeServices(false))
@@ -72,9 +76,15 @@ abstract class AbstractWorkerProcessIntegrationSpec extends Specification {
     final ClassPathRegistry classPathRegistry = new DefaultClassPathRegistry(new DefaultClassPathProvider(moduleRegistry), workerProcessClassPathProvider)
     final JavaExecHandleFactory execHandleFactory = TestFiles.javaExecHandleFactory(tmpDir.testDirectory)
     final OutputEventListener outputEventListener = new TestOutputEventListener()
-    DefaultWorkerProcessFactory workerFactory = new DefaultWorkerProcessFactory(loggingManager(LogLevel.DEBUG), server, classPathRegistry, new LongIdGenerator(), tmpDir.file("gradleUserHome"), new TmpDirTemporaryFileProvider(), execHandleFactory, new CachingJvmVersionDetector(new DefaultJvmVersionDetector(execHandleFactory)), outputEventListener, Stub(MemoryManager))
+    DefaultWorkerProcessFactory workerFactory = new DefaultWorkerProcessFactory(loggingManager(LogLevel.DEBUG), server, classPathRegistry, new LongIdGenerator(), tmpDir.file("gradleUserHome"), new TmpDirTemporaryFileProvider(),
+        execHandleFactory, new CachingJvmVersionDetector(new DefaultJvmVersionDetector(execHandleFactory)), outputEventListener, Stub(MemoryManager))
+
+    def setup() {
+        CurrentBuildOperationRef.instance().set(new DefaultBuildOperationRef(new OperationIdentifier(123), null))
+    }
 
     def cleanup() {
+        CurrentBuildOperationRef.instance().clear()
         workerProcessClassPathProvider.close()
     }
 

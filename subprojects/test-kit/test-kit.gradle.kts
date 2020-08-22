@@ -13,48 +13,56 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import org.gradle.gradlebuild.test.integrationtests.IntegrationTest
-import org.gradle.gradlebuild.unittestandcompile.ModuleType
-import org.gradle.gradlebuild.testing.integrationtests.cleanup.WhenNotEmpty
+import gradlebuild.cleanup.WhenNotEmpty
+import gradlebuild.integrationtests.getIncludeCategories
+import org.gradle.api.internal.runtimeshaded.PackageListGenerator
 
 plugins {
-    `java-library`
-    gradlebuild.`strict-compile`
+    id("gradlebuild.distribution.implementation-java")
 }
 
 dependencies {
-    implementation(project(":baseServices"))
-    implementation(project(":coreApi"))
+    implementation(project(":base-services"))
+    implementation(project(":core-api"))
     implementation(project(":core"))
     implementation(project(":wrapper"))
-    implementation(project(":toolingApi"))
-    implementation(library("commons_io"))
+    implementation(project(":tooling-api"))
+    implementation(libs.commonsIo)
 
-    runtimeOnly(project(":native"))
-
-    testImplementation(library("guava"))
+    testImplementation(libs.guava)
     testImplementation(testFixtures(project(":core")))
 
     integTestImplementation(project(":native"))
     integTestImplementation(project(":logging"))
     integTestImplementation(project(":launcher"))
-    integTestImplementation(project(":buildOption"))
-    integTestImplementation(project(":jvmServices"))
-    integTestImplementation(library("slf4j_api"))
-    integTestRuntimeOnly(project(":toolingApiBuilders"))
-    integTestRuntimeOnly(project(":pluginDevelopment"))
-    integTestRuntimeOnly(project(":runtimeApiInfo"))
-    integTestRuntimeOnly(project(":testingJunitPlatform"))
+    integTestImplementation(project(":build-option"))
+    integTestImplementation(project(":jvm-services"))
+    integTestImplementation(libs.slf4jApi)
+
+    testRuntimeOnly(project(":distributions-core")) {
+        because("Tests instantiate DefaultClassLoaderRegistry which requires a 'gradle-plugins.properties' through DefaultPluginModuleRegistry")
+    }
+    integTestDistributionRuntimeOnly(project(":distributions-basics"))
 }
 
-gradlebuildJava {
-    moduleType = ModuleType.CORE
+val generateTestKitPackageList by tasks.registering(PackageListGenerator::class) {
+    classpath = sourceSets.main.get().runtimeClasspath
+    outputFile = file(layout.buildDirectory.file("runtime-api-info/test-kit-relocated.txt"))
+}
+tasks.jar {
+    into("org/gradle/api/internal/runtimeshaded") {
+        from(generateTestKitPackageList)
+    }
 }
 
-tasks.register<IntegrationTest>("crossVersionTests") {
-    description = "Runs the TestKit version compatibility tests"
-    systemProperties["org.gradle.integtest.testkit.compatibility"] = "all"
-    systemProperties["org.gradle.integtest.executer"] = "forking"
+classycle {
+    excludePatterns.set(listOf("org/gradle/testkit/runner/internal/**"))
+}
+
+tasks.integMultiVersionTest {
+    systemProperty("org.gradle.integtest.testkit.compatibility", "all")
+    // TestKit multi version tests are not using JUnit categories
+    getIncludeCategories().clear()
 }
 
 testFilesCleanup {

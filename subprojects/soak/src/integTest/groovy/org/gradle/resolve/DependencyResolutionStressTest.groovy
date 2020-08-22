@@ -16,22 +16,20 @@
 
 package org.gradle.resolve
 
+import org.gradle.integtests.fixtures.daemon.DaemonLogsAnalyzer
 import org.gradle.integtests.fixtures.executer.GradleDistribution
 import org.gradle.integtests.fixtures.executer.GradleExecuter
 import org.gradle.integtests.fixtures.executer.IntegrationTestBuildContext
 import org.gradle.integtests.fixtures.executer.UnderDevelopmentGradleDistribution
-import org.gradle.soak.categories.SoakTest
 import org.gradle.test.fixtures.ConcurrentTestUtil
 import org.gradle.test.fixtures.file.TestNameTestDirectoryProvider
 import org.junit.Rule
-import org.junit.experimental.categories.Category
 import org.junit.rules.ExternalResource
 import org.mortbay.jetty.Connector
 import org.mortbay.jetty.HttpHeaders
 import org.mortbay.jetty.Server
 import org.mortbay.jetty.handler.AbstractHandler
 import org.mortbay.jetty.nio.SelectChannelConnector
-import spock.lang.Ignore
 import spock.lang.Specification
 
 import javax.servlet.http.HttpServletRequest
@@ -39,7 +37,6 @@ import javax.servlet.http.HttpServletResponse
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 
-@Category(SoakTest)
 class DependencyResolutionStressTest extends Specification {
     @Rule TestNameTestDirectoryProvider workspace = new TestNameTestDirectoryProvider(getClass())
     GradleDistribution distribution = new UnderDevelopmentGradleDistribution()
@@ -50,7 +47,10 @@ class DependencyResolutionStressTest extends Specification {
         concurrent.shortTimeout = 180000
     }
 
-    @Ignore('https://github.com/gradle/gradle-private/issues/2984')
+    def cleanup() {
+        new DaemonLogsAnalyzer(workspace.file("daemon")).daemons.each { it.kill() }
+    }
+
     def "handles concurrent access to changing artifacts"() {
         expect:
         4.times { count ->
@@ -90,7 +90,7 @@ task check {
         """
 
                 GradleExecuter executer = distribution.executer(workspace, IntegrationTestBuildContext.INSTANCE).
-                        requireGradleDistribution().
+                        requireDaemon().requireIsolatedDaemons().
                         withGradleUserHomeDir(workspace.file("user-home"))
                 8.times {
                     executer.inDirectory(buildDir).withArgument("--refresh-dependencies").withTasks('check').run()

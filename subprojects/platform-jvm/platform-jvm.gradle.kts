@@ -1,46 +1,55 @@
-import org.gradle.gradlebuild.unittestandcompile.ModuleType
+import gradlebuild.integrationtests.integrationTestUsesSampleDir
 
 plugins {
-    `java-library`
-    gradlebuild.classycle
+    id("gradlebuild.distribution.api-java")
+    id("gradlebuild.jmh")
 }
 
 dependencies {
-    implementation(project(":baseServices"))
+    implementation(project(":base-services"))
     implementation(project(":logging"))
-    implementation(project(":fileCollections"))
+    implementation(project(":file-collections"))
     implementation(project(":execution"))
-    implementation(project(":processServices"))
-    implementation(project(":coreApi"))
-    implementation(project(":modelCore"))
+    implementation(project(":process-services"))
+    implementation(project(":core-api"))
+    implementation(project(":model-core"))
     implementation(project(":core"))
-    implementation(project(":baseServicesGroovy"))
-    implementation(project(":dependencyManagement"))
-    implementation(project(":platformBase"))
+    implementation(project(":base-services-groovy"))
+    implementation(project(":dependency-management"))
+    implementation(project(":platform-base"))
     implementation(project(":diagnostics"))
-    implementation(project(":normalizationJava"))
+    implementation(project(":normalization-java"))
+    implementation(project(":resources"))
+    implementation(project(":persistent-cache"))
+    implementation(project(":native"))
 
-    implementation(library("groovy"))
-    implementation(library("guava"))
-    implementation(library("commons_lang"))
-    implementation(library("commons_io"))
-    implementation(library("inject"))
-    implementation(library("asm"))
+    implementation(libs.groovy)
+    implementation(libs.guava)
+    implementation(libs.commonsLang)
+    implementation(libs.commonsCompress)
+    implementation(libs.commonsIo)
+    implementation(libs.inject)
+    implementation(libs.asm)
+    implementation(libs.nativePlatform)
 
-    testImplementation(project(":native"))
     testImplementation(project(":snapshots"))
-    testImplementation(library("ant"))
+    testImplementation(libs.ant)
     testImplementation(testFixtures(project(":core")))
     testImplementation(testFixtures(project(":diagnostics")))
-    testImplementation(testFixtures(project(":platformBase")))
-    testImplementation(testFixtures(project(":platformNative")))
+    testImplementation(testFixtures(project(":logging")))
+    testImplementation(testFixtures(project(":platform-base")))
+    testImplementation(testFixtures(project(":platform-native")))
 
-    testRuntimeOnly(project(":runtimeApiInfo"))
+    integTestImplementation(libs.slf4jApi)
 
-    integTestImplementation(library("slf4j_api"))
+    testRuntimeOnly(project(":distributions-core")) {
+        because("Tests instantiate DefaultClassLoaderRegistry which requires a 'gradle-plugins.properties' through DefaultPluginModuleRegistry")
+    }
+    integTestDistributionRuntimeOnly(project(":distributions-core"))
 }
 
-gradlebuildJava {
-    moduleType = ModuleType.CORE
+strictCompile {
+    ignoreDeprecations() // most of this project has been deprecated
 }
 
+integrationTestUsesSampleDir("subprojects/platform-jvm/src/main")

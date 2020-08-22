@@ -16,8 +16,10 @@
 
 package org.gradle.internal.service.scopes;
 
+import org.gradle.api.file.ArchiveOperations;
 import org.gradle.api.file.FileSystemOperations;
 import org.gradle.api.internal.collections.DomainObjectCollectionFactory;
+import org.gradle.api.internal.file.DefaultArchiveOperations;
 import org.gradle.api.internal.file.DefaultFileCollectionFactory;
 import org.gradle.api.internal.file.DefaultFileOperations;
 import org.gradle.api.internal.file.DefaultFilePropertyFactory;
@@ -33,6 +35,8 @@ import org.gradle.api.internal.file.TemporaryFileProvider;
 import org.gradle.api.internal.file.collections.DirectoryFileTreeFactory;
 import org.gradle.api.internal.model.DefaultObjectFactory;
 import org.gradle.api.internal.model.NamedObjectInstantiator;
+import org.gradle.api.internal.provider.DefaultPropertyFactory;
+import org.gradle.api.internal.provider.PropertyFactory;
 import org.gradle.api.internal.provider.PropertyHost;
 import org.gradle.api.internal.resources.DefaultResourceHandler;
 import org.gradle.api.internal.tasks.TaskDependencyFactory;
@@ -40,12 +44,12 @@ import org.gradle.api.model.ObjectFactory;
 import org.gradle.api.tasks.util.PatternSet;
 import org.gradle.internal.Factory;
 import org.gradle.internal.file.Deleter;
-import org.gradle.internal.file.PathToFileResolver;
 import org.gradle.internal.hash.FileHasher;
 import org.gradle.internal.hash.StreamHasher;
 import org.gradle.internal.instantiation.InstantiatorFactory;
 import org.gradle.internal.nativeintegration.filesystem.FileSystem;
 import org.gradle.internal.reflect.Instantiator;
+import org.gradle.internal.service.ServiceRegistration;
 import org.gradle.internal.service.ServiceRegistry;
 import org.gradle.process.ExecOperations;
 import org.gradle.process.internal.DefaultExecOperations;
@@ -63,6 +67,12 @@ public class WorkerSharedProjectScopeServices {
         this.projectDir = projectDir;
     }
 
+    void configure(ServiceRegistration registration) {
+        registration.add(DefaultPropertyFactory.class);
+        registration.add(DefaultFilePropertyFactory.class);
+        registration.add(DefaultFileCollectionFactory.class);
+    }
+
     protected FileResolver createFileResolver(FileLookup lookup) {
         return lookup.getFileResolver(projectDir);
     }
@@ -77,6 +87,7 @@ public class WorkerSharedProjectScopeServices {
             DefaultResourceHandler.Factory resourceHandlerFactory,
             FileCollectionFactory fileCollectionFactory,
             FileSystem fileSystem,
+            Factory<PatternSet> patternSetFactory,
             Deleter deleter
     ) {
         return new DefaultFileOperations(
@@ -89,6 +100,7 @@ public class WorkerSharedProjectScopeServices {
                 resourceHandlerFactory,
                 fileCollectionFactory,
                 fileSystem,
+                patternSetFactory,
                 deleter
         );
     }
@@ -97,33 +109,30 @@ public class WorkerSharedProjectScopeServices {
         return instantiator.newInstance(DefaultFileSystemOperations.class, fileOperations);
     }
 
+    protected ArchiveOperations createArchiveOperations(Instantiator instantiator, FileOperations fileOperations) {
+        return instantiator.newInstance(DefaultArchiveOperations.class, fileOperations);
+    }
+
     protected ExecOperations createExecOperations(Instantiator instantiator, ExecFactory execFactory) {
         return instantiator.newInstance(DefaultExecOperations.class, execFactory);
     }
 
-    FileCollectionFactory createFileCollectionFactory(PathToFileResolver fileResolver, TaskDependencyFactory taskDependencyFactory, Factory<PatternSet> patternSetFactory, DirectoryFileTreeFactory directoryFileTreeFactory, PropertyHost propertyHost, FileSystem fileSystem) {
-        return new DefaultFileCollectionFactory(fileResolver, taskDependencyFactory, directoryFileTreeFactory, patternSetFactory, propertyHost, fileSystem);
-    }
-
-    DefaultFilePropertyFactory createProjectFilePropertyFactory(PropertyHost host, FileResolver fileResolver, FileCollectionFactory fileCollectionFactory) {
-        return new DefaultFilePropertyFactory(host, fileResolver, fileCollectionFactory);
-    }
-
-    ObjectFactory createObjectFactory(InstantiatorFactory instantiatorFactory, ServiceRegistry services, FileResolver fileResolver, DirectoryFileTreeFactory directoryFileTreeFactory,
-                                      PropertyHost propertyHost, FilePropertyFactory filePropertyFactory, FileCollectionFactory fileCollectionFactory,
+    ObjectFactory createObjectFactory(InstantiatorFactory instantiatorFactory, ServiceRegistry services, Factory<PatternSet> patternSetFactory, DirectoryFileTreeFactory directoryFileTreeFactory,
+                                      PropertyFactory propertyFactory, FilePropertyFactory filePropertyFactory, FileCollectionFactory fileCollectionFactory,
                                       DomainObjectCollectionFactory domainObjectCollectionFactory, NamedObjectInstantiator namedObjectInstantiator) {
         return new DefaultObjectFactory(
                 instantiatorFactory.decorate(services),
                 namedObjectInstantiator,
-                fileResolver,
                 directoryFileTreeFactory,
-                propertyHost,
+                patternSetFactory,
+                propertyFactory,
                 filePropertyFactory,
                 fileCollectionFactory,
                 domainObjectCollectionFactory);
     }
 
-    DefaultProjectLayout createProjectLayout(FileResolver fileResolver, FileCollectionFactory fileCollectionFactory, TaskDependencyFactory taskDependencyFactory, FilePropertyFactory filePropertyFactory, PropertyHost propertyHost, FileFactory fileFactory) {
-        return new DefaultProjectLayout(projectDir, fileResolver, taskDependencyFactory, propertyHost, fileCollectionFactory, filePropertyFactory, fileFactory);
+    DefaultProjectLayout createProjectLayout(FileResolver fileResolver, FileCollectionFactory fileCollectionFactory, TaskDependencyFactory taskDependencyFactory,
+                                             FilePropertyFactory filePropertyFactory, Factory<PatternSet> patternSetFactory, PropertyHost propertyHost, FileFactory fileFactory) {
+        return new DefaultProjectLayout(projectDir, fileResolver, taskDependencyFactory, patternSetFactory, propertyHost, fileCollectionFactory, filePropertyFactory, fileFactory);
     }
 }

@@ -1,5 +1,6 @@
 package configurations
 
+import Gradle_Check.configurations.allBranchesFilter
 import common.Os
 import common.applyDefaultSettings
 import common.buildToolGradleParameters
@@ -13,7 +14,9 @@ import jetbrains.buildServer.configs.kotlin.v2019_2.BuildSteps
 import jetbrains.buildServer.configs.kotlin.v2019_2.BuildType
 import jetbrains.buildServer.configs.kotlin.v2019_2.FailureAction
 import jetbrains.buildServer.configs.kotlin.v2019_2.ProjectFeatures
+import jetbrains.buildServer.configs.kotlin.v2019_2.buildFeatures.PullRequests
 import jetbrains.buildServer.configs.kotlin.v2019_2.buildFeatures.commitStatusPublisher
+import jetbrains.buildServer.configs.kotlin.v2019_2.buildFeatures.pullRequests
 import jetbrains.buildServer.configs.kotlin.v2019_2.buildSteps.script
 import model.CIBuildModel
 import model.StageNames
@@ -52,13 +55,26 @@ fun BuildFeatures.publishBuildStatusToGithub(model: CIBuildModel) {
     }
 }
 
+fun BuildFeatures.triggeredOnPullRequests() {
+    pullRequests {
+        vcsRootExtId = "Gradle_Branches_GradlePersonalBranches"
+        provider = github {
+            authType = token {
+                token = "%github.bot-gradle.token%"
+            }
+            filterAuthorRole = PullRequests.GitHubRoleFilter.MEMBER
+            filterTargetBranch = allBranchesFilter
+        }
+    }
+}
+
 fun BuildFeatures.publishBuildStatusToGithub() {
     commitStatusPublisher {
         vcsRootExtId = "Gradle_Branches_GradlePersonalBranches"
         publisher = github {
             githubUrl = "https://api.github.com"
             authType = personalToken {
-                token = "credentialsJSON:5306bfc7-041e-46e8-8d61-1d49424e7b04"
+                token = "%github.bot-gradle.token%"
             }
         }
     }
@@ -128,15 +144,13 @@ fun BuildType.dumpOpenFiles() {
 }
 
 private
-fun BaseGradleBuildType.killProcessStepIfNecessary(stepName: String, os: Os = Os.linux, daemon: Boolean = true) {
-    if (os == Os.windows) {
-        steps {
-            gradleWrapper {
-                name = stepName
-                executionMode = BuildStep.ExecutionMode.ALWAYS
-                tasks = "killExistingProcessesStartedByGradle"
-                gradleParams = buildToolParametersString(daemon)
-            }
+fun BaseGradleBuildType.killProcessStep(stepName: String, daemon: Boolean = true) {
+    steps {
+        gradleWrapper {
+            name = stepName
+            executionMode = BuildStep.ExecutionMode.ALWAYS
+            tasks = "killExistingProcessesStartedByGradle"
+            gradleParams = buildToolParametersString(daemon) + " -DpublishStrategy=publishOnFailure" // https://github.com/gradle/gradle-enterprise-conventions-plugin/pull/8
         }
     }
 }
@@ -180,12 +194,14 @@ fun applyTestDefaults(
         buildType.attachFileLeakDetector()
     }
 
+    buildType.killProcessStep("KILL_LEAKED_PROCESSES_FROM_PREVIOUS_BUILDS")
+
     buildType.gradleRunnerStep(model, gradleTasks, os, extraParameters, daemon)
 
     if (os == Os.windows) {
         buildType.dumpOpenFiles()
     }
-    buildType.killProcessStepIfNecessary("KILL_PROCESSES_STARTED_BY_GRADLE", os)
+    buildType.killProcessStep("KILL_PROCESSES_STARTED_BY_GRADLE")
 
     buildType.steps {
         extraSteps()

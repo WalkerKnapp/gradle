@@ -56,10 +56,10 @@ public class BuildOperatingFiringProjectsPreparer implements ProjectsPreparer {
         @Override
         public BuildOperationDescriptor.Builder description() {
             BuildOperationDescriptor.Builder builder = BuildOperationDescriptor.displayName(gradle.contextualize("Configure build"));
-            if (gradle.getParent() == null) {
-                builder.operationType(BuildOperationCategory.CONFIGURE_ROOT_BUILD);
+            if (gradle.isRootBuild()) {
+                builder.metadata(BuildOperationCategory.CONFIGURE_ROOT_BUILD);
             } else {
-                builder.operationType(BuildOperationCategory.CONFIGURE_BUILD);
+                builder.metadata(BuildOperationCategory.CONFIGURE_BUILD);
             }
             builder.totalProgress(gradle.getSettings().getProjectRegistry().size());
             return builder.details(new ConfigureBuildBuildOperationType.Details() {

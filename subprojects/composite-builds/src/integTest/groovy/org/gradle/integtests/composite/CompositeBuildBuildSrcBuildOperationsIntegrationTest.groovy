@@ -20,7 +20,7 @@ import org.gradle.execution.taskgraph.NotifyTaskGraphWhenReadyBuildOperationType
 import org.gradle.initialization.ConfigureBuildBuildOperationType
 import org.gradle.initialization.LoadBuildBuildOperationType
 import org.gradle.initialization.buildsrc.BuildBuildSrcBuildOperationType
-import org.gradle.integtests.fixtures.ToBeFixedForInstantExecution
+import org.gradle.integtests.fixtures.ToBeFixedForConfigurationCache
 import org.gradle.integtests.fixtures.build.BuildTestFile
 import org.gradle.internal.taskgraph.CalculateTaskGraphBuildOperationType
 import org.gradle.launcher.exec.RunBuildBuildOperationType
@@ -44,7 +44,7 @@ class CompositeBuildBuildSrcBuildOperationsIntegrationTest extends AbstractCompo
     }
 
     @Unroll
-    @ToBeFixedForInstantExecution
+    @ToBeFixedForConfigurationCache
     def "generates configure, task graph and run tasks operations for buildSrc of included builds with #display"() {
         given:
         dependency 'org.test:buildB:1.0'
@@ -117,13 +117,13 @@ class CompositeBuildBuildSrcBuildOperationsIntegrationTest extends AbstractCompo
         graphNotifyOps.size() == 3
         graphNotifyOps[0].displayName == 'Notify task graph whenReady listeners (:buildB:buildSrc)'
         graphNotifyOps[0].details.buildPath == ':buildB:buildSrc'
-        graphNotifyOps[0].parentId == runTasksOps[0].id
+        graphNotifyOps[0].parentId == taskGraphOps[0].id
         graphNotifyOps[1].displayName == "Notify task graph whenReady listeners"
         graphNotifyOps[1].details.buildPath == ":"
-        graphNotifyOps[1].parentId == runTasksOps[1].id
+        graphNotifyOps[1].parentId == taskGraphOps[1].id
         graphNotifyOps[2].displayName == "Notify task graph whenReady listeners (:buildB)"
         graphNotifyOps[2].details.buildPath == ":buildB"
-        graphNotifyOps[2].parentId == runTasksOps[2].id
+        graphNotifyOps[2].parentId == taskGraphOps[2].id
 
         where:
         settings                     | display
@@ -132,7 +132,7 @@ class CompositeBuildBuildSrcBuildOperationsIntegrationTest extends AbstractCompo
     }
 
     @Unroll
-    @ToBeFixedForInstantExecution
+    @ToBeFixedForConfigurationCache
     def "generates configure, task graph and run tasks operations when all builds have buildSrc with #display"() {
         given:
         dependency 'org.test:buildB:1.0'
@@ -221,16 +221,16 @@ class CompositeBuildBuildSrcBuildOperationsIntegrationTest extends AbstractCompo
         graphNotifyOps.size() == 4
         graphNotifyOps[0].displayName == 'Notify task graph whenReady listeners (:buildSrc)'
         graphNotifyOps[0].details.buildPath == ':buildSrc'
-        graphNotifyOps[0].parentId == runTasksOps[0].id
+        graphNotifyOps[0].parentId == taskGraphOps[0].id
         graphNotifyOps[1].displayName == "Notify task graph whenReady listeners (:buildB:buildSrc)"
         graphNotifyOps[1].details.buildPath == ":buildB:buildSrc"
-        graphNotifyOps[1].parentId == runTasksOps[1].id
+        graphNotifyOps[1].parentId == taskGraphOps[1].id
         graphNotifyOps[2].displayName == "Notify task graph whenReady listeners"
         graphNotifyOps[2].details.buildPath == ":"
-        graphNotifyOps[2].parentId == runTasksOps[2].id
+        graphNotifyOps[2].parentId == taskGraphOps[2].id
         graphNotifyOps[3].displayName == "Notify task graph whenReady listeners (:buildB)"
         graphNotifyOps[3].details.buildPath == ":buildB"
-        graphNotifyOps[3].parentId == runTasksOps[3].id
+        graphNotifyOps[3].parentId == taskGraphOps[3].id
 
         where:
         settings                     | display

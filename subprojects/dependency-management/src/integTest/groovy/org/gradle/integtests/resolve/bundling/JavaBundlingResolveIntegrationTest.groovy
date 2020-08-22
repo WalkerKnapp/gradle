@@ -21,6 +21,7 @@ import org.gradle.api.attributes.LibraryElements
 import org.gradle.api.attributes.Usage
 import org.gradle.integtests.fixtures.GradleMetadataResolveRunner
 import org.gradle.integtests.fixtures.RequiredFeature
+import org.gradle.integtests.fixtures.ToBeFixedForConfigurationCache
 import org.gradle.integtests.resolve.AbstractModuleDependencyResolveTest
 import spock.lang.Ignore
 import spock.lang.Unroll
@@ -109,6 +110,7 @@ class JavaBundlingResolveIntegrationTest extends AbstractModuleDependencyResolve
         bundling << [Bundling.EMBEDDED, Bundling.SHADOWED]
     }
 
+    @ToBeFixedForConfigurationCache(iterationMatchers = [".*selected=null.*"])
     @Unroll
     def "selects the appropriate variant (producer=#bundling, requested=#requested, selected=#selected)"() {
         given:
@@ -165,7 +167,7 @@ class JavaBundlingResolveIntegrationTest extends AbstractModuleDependencyResolve
 
         then:
         if (shouldFail) {
-            failure.assertHasCause("Unable to find a matching variant of org:producer:1.0")
+            failure.assertHasCause("No matching variant of org:producer:1.0 was found. The consumer was configured to find an API of a component, and its dependencies repackaged (shadow jar) but:")
         } else {
             resolve.expectGraph {
                 root(":", ":test:") {

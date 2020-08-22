@@ -18,9 +18,9 @@ package org.gradle.tooling.internal.provider;
 
 import org.gradle.initialization.BuildEventConsumer;
 import org.gradle.initialization.BuildRequestContext;
-import org.gradle.internal.event.ListenerManager;
-import org.gradle.internal.build.event.BuildEventSubscriptions;
 import org.gradle.internal.build.event.BuildEventListenerFactory;
+import org.gradle.internal.build.event.BuildEventSubscriptions;
+import org.gradle.internal.event.ListenerManager;
 import org.gradle.internal.invocation.BuildAction;
 import org.gradle.internal.operations.BuildOperationListener;
 import org.gradle.internal.operations.BuildOperationListenerManager;
@@ -39,14 +39,14 @@ public class SubscribableBuildActionExecuter implements BuildActionExecuter<Buil
     private final BuildActionExecuter<BuildActionParameters> delegate;
     private final ListenerManager listenerManager;
     private final BuildOperationListenerManager buildOperationListenerManager;
-    private final List<Object> listeners = new ArrayList<Object>();
-    private final List<? extends BuildEventListenerFactory> registrations;
+    private final List<Object> listeners = new ArrayList<>();
+    private final BuildEventListenerFactory factory;
 
-    public SubscribableBuildActionExecuter(BuildActionExecuter<BuildActionParameters> delegate, ListenerManager listenerManager, BuildOperationListenerManager buildOperationListenerManager, List<? extends BuildEventListenerFactory> registrations) {
-        this.delegate = delegate;
+    public SubscribableBuildActionExecuter(ListenerManager listenerManager, BuildOperationListenerManager buildOperationListenerManager, BuildEventListenerFactory factory, BuildActionExecuter<BuildActionParameters> delegate) {
         this.listenerManager = listenerManager;
         this.buildOperationListenerManager = buildOperationListenerManager;
-        this.registrations = registrations;
+        this.factory = factory;
+        this.delegate = delegate;
     }
 
     @Override
@@ -70,10 +70,8 @@ public class SubscribableBuildActionExecuter implements BuildActionExecuter<Buil
     }
 
     private void registerListenersForClientSubscriptions(BuildEventSubscriptions clientSubscriptions, BuildEventConsumer eventConsumer) {
-        for (BuildEventListenerFactory registration : registrations) {
-            for (Object listener : registration.createListeners(clientSubscriptions, eventConsumer)) {
-                registerListener(listener);
-            }
+        for (Object listener : factory.createListeners(clientSubscriptions, eventConsumer)) {
+            registerListener(listener);
         }
     }
 

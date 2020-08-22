@@ -1,27 +1,18 @@
-import org.gradle.gradlebuild.unittestandcompile.ModuleType
-
-/**
- * JVM invocation and inspection abstractions.
- */
 plugins {
-    `java-library`
-    gradlebuild.classycle
+    id("gradlebuild.distribution.api-java")
 }
+
+description = "JVM invocation and inspection abstractions"
 
 dependencies {
-    implementation(project(":baseServices"))
-    implementation(project(":processServices"))
+    implementation(project(":base-services"))
+    implementation(project(":process-services"))
 
     testImplementation(project(":native"))
-    testImplementation(project(":coreApi"))
-    testImplementation(project(":fileCollections"))
+    testImplementation(project(":core-api"))
+    testImplementation(project(":file-collections"))
     testImplementation(project(":snapshots"))
     testImplementation(project(":resources"))
-    testImplementation(library("slf4j_api"))
+    testImplementation(libs.slf4jApi)
     testImplementation(testFixtures(project(":core")))
 }
-
-gradlebuildJava {
-    moduleType = ModuleType.CORE
-}
-

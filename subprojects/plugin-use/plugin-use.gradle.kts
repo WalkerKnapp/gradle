@@ -1,5 +1,4 @@
-import org.gradle.gradlebuild.unittestandcompile.ModuleType
-import org.gradle.gradlebuild.testing.integrationtests.cleanup.WhenNotEmpty
+import gradlebuild.cleanup.WhenNotEmpty
 
 /*
  * Copyright 2014 the original author or authors.
@@ -17,43 +16,30 @@ import org.gradle.gradlebuild.testing.integrationtests.cleanup.WhenNotEmpty
  * limitations under the License.
  */
 plugins {
-    `java-library`
-    gradlebuild.classycle
+    id("gradlebuild.distribution.api-java")
 }
 
 dependencies {
-    implementation(project(":baseServices"))
+    implementation(project(":base-services"))
     implementation(project(":logging"))
     implementation(project(":messaging"))
-    implementation(project(":fileCollections"))
-    implementation(project(":coreApi"))
+    implementation(project(":file-collections"))
+    implementation(project(":core-api"))
     implementation(project(":core"))
-    implementation(project(":dependencyManagement"))
+    implementation(project(":dependency-management"))
+    implementation(project(":build-option"))
 
-    runtimeOnly(project(":resourcesHttp"))
+    implementation(libs.groovy)
+    implementation(libs.guava)
 
-    implementation(library("groovy"))
-    implementation(library("guava"))
+    testImplementation(testFixtures(project(":resources-http")))
 
-    testImplementation(testFixtures(project(":resourcesHttp")))
+    integTestImplementation(project(":base-services-groovy"))
+    integTestImplementation(libs.jetbrainsAnnotations)
 
-    integTestImplementation(project(":baseServicesGroovy"))
-    integTestImplementation(library("jetbrains_annotations"))
-
-    integTestRuntimeOnly(project(":plugins"))
-    integTestRuntimeOnly(project(":pluginDevelopment"))
-    integTestRuntimeOnly(project(":testKit"))
-    integTestRuntimeOnly(project(":toolingApiBuilders"))
-    integTestRuntimeOnly(project(":runtimeApiInfo"))
-    integTestRuntimeOnly(project(":testingJunitPlatform"))
-    integTestRuntimeOnly(project(":apiMetadata"))
-    integTestRuntimeOnly(project(":kotlinDsl"))
-    integTestRuntimeOnly(project(":kotlinDslProviderPlugins"))
-}
-
-
-gradlebuildJava {
-    moduleType = ModuleType.CORE
+    integTestDistributionRuntimeOnly(project(":distributions-basics")) {
+        because("Requires test-kit: 'java-gradle-plugin' is used in integration tests which always adds the test-kit dependency.")
+    }
 }
 
 testFilesCleanup {

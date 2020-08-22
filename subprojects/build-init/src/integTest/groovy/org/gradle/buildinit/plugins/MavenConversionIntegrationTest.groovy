@@ -19,7 +19,7 @@ package org.gradle.buildinit.plugins
 import org.gradle.buildinit.plugins.fixtures.WrapperTestFixture
 import org.gradle.integtests.fixtures.AbstractIntegrationSpec
 import org.gradle.integtests.fixtures.DefaultTestExecutionResult
-import org.gradle.integtests.fixtures.ToBeFixedForInstantExecution
+import org.gradle.integtests.fixtures.ToBeFixedForConfigurationCache
 import org.gradle.integtests.fixtures.TestResources
 import org.gradle.test.fixtures.file.TestFile
 import org.gradle.test.fixtures.server.http.HttpServer
@@ -56,7 +56,7 @@ class MavenConversionIntegrationTest extends AbstractIntegrationSpec {
         }
     }
 
-    @ToBeFixedForInstantExecution
+    @ToBeFixedForConfigurationCache(because = ":projects")
     def "multiModule"() {
         when:
         run 'init'
@@ -115,7 +115,7 @@ Root project 'webinar-parent'
         new DefaultTestExecutionResult(file("webinar-impl")).assertTestClassesExecuted('webinar.WebinarTest')
     }
 
-    @ToBeFixedForInstantExecution
+    @ToBeFixedForConfigurationCache(because = ":projects")
     def "flatmultimodule"() {
         when:
         executer.inDirectory(file("webinar-parent"))
@@ -148,7 +148,6 @@ Root project 'webinar-parent'
 """
     }
 
-    @ToBeFixedForInstantExecution
     def "singleModule"() {
         when:
         run 'init'
@@ -184,7 +183,6 @@ ${TextUtil.indent(configLines.join("\n"), "                        ")}
         assert text.contains(publishingBlock)
     }
 
-    @ToBeFixedForInstantExecution
     def "singleModule with explicit project dir"() {
         setup:
         resources.maybeCopy('MavenConversionIntegrationTest/singleModule')
@@ -205,7 +203,6 @@ ${TextUtil.indent(configLines.join("\n"), "                        ")}
         failure.assertHasCause("There were failing tests.")
     }
 
-    @ToBeFixedForInstantExecution
     def 'sourcesJar'() {
         when: 'build is initialized'
         run 'init'
@@ -232,7 +229,7 @@ ${TextUtil.indent(configLines.join("\n"), "                        ")}
 
         then: 'testsJar task configuration is generated'
         buildFile.text.contains(TextUtil.toPlatformLineSeparators('''
-            task testsJar(type: Jar) {
+            tasks.register('testsJar', Jar) {
                 archiveClassifier = 'tests'
                 from(sourceSets.test.output)
             }
@@ -247,7 +244,6 @@ ${TextUtil.indent(configLines.join("\n"), "                        ")}
         file('build/libs/util-2.5-tests.jar').exists()
     }
 
-    @ToBeFixedForInstantExecution
     def 'javadocJar'() {
         when: 'build is initialized'
         run 'init'
@@ -368,11 +364,11 @@ ${TextUtil.indent(configLines.join("\n"), "                        ")}
         run('clean', 'build')
 
         then:
-        file("build/libs/util-3.2.1.jar").exists()
+        file("build/libs/util-3.2.2.jar").exists()
     }
 
     @Issue("GRADLE-2819")
-    @ToBeFixedForInstantExecution
+    @ToBeFixedForConfigurationCache(because = ":projects")
     def "multiModuleWithRemoteParent"() {
         setup:
         withSharedResources()

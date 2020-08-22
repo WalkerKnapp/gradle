@@ -17,7 +17,7 @@
 package org.gradle.api.plugins.quality.pmd
 
 import org.gradle.integtests.fixtures.AbstractIntegrationSpec
-import org.gradle.integtests.fixtures.ToBeFixedForInstantExecution
+import org.gradle.integtests.fixtures.ToBeFixedForConfigurationCache
 
 class PmdPluginDependenciesIntegrationTest extends AbstractIntegrationSpec {
 
@@ -36,7 +36,7 @@ class PmdPluginDependenciesIntegrationTest extends AbstractIntegrationSpec {
         badCode()
     }
 
-    @ToBeFixedForInstantExecution
+    @ToBeFixedForConfigurationCache
     def "allows configuring tool dependencies explicitly"() {
         def testDependency = 'net.sourceforge.pmd:pmd:5.1.1'
         expect: //defaults exist and can be inspected
@@ -49,6 +49,10 @@ class PmdPluginDependenciesIntegrationTest extends AbstractIntegrationSpec {
                 //downgrade version:
                 pmd "$testDependency"
             }
+
+            pmd {
+                incrementalAnalysis = false
+            }
         """.stripIndent()
 
         then:
@@ -58,6 +62,22 @@ class PmdPluginDependenciesIntegrationTest extends AbstractIntegrationSpec {
         succeeds("dependencies", "--configuration", "pmd")
         output.contains "$testDependency"
     }
+
+    @ToBeFixedForConfigurationCache
+    def "fails properly using older version of PMD without incremental analysis support"() {
+        given:
+        buildFile << """
+            dependencies {
+                //downgrade version:
+                pmd "net.sourceforge.pmd:pmd:5.1.1"
+            }
+        """.stripIndent()
+
+        expect:
+        fails("check")
+        failure.assertHasCause("Incremental analysis only supports PMD 6.0.0 and newer. Please upgrade from PMD 5.1.1 or disable incremental analysis.")
+    }
+
 
     private badCode() {
         // No Warnings

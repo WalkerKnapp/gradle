@@ -17,14 +17,13 @@
 package org.gradle.kotlin.dsl.provider.plugins.precompiled.tasks
 
 import org.gradle.api.DefaultTask
-import org.gradle.api.Project
 import org.gradle.api.file.DirectoryProperty
 import org.gradle.api.tasks.Internal
 import org.gradle.api.tasks.TaskAction
 
 import org.gradle.kotlin.dsl.precompile.PrecompiledScriptDependenciesResolver.EnvironmentProperties.kotlinDslImplicitImports
 import org.gradle.kotlin.dsl.support.ImplicitImports
-import org.gradle.kotlin.dsl.support.serviceOf
+import org.gradle.kotlin.dsl.support.listFilesOrdered
 
 import javax.inject.Inject
 
@@ -48,7 +47,6 @@ abstract class ConfigurePrecompiledScriptDependenciesResolver @Inject constructo
 
     @TaskAction
     fun configureImports() {
-
         val precompiledScriptPluginImports = precompiledScriptPluginImports()
 
         val resolverEnvironment = resolverEnvironmentStringFor(
@@ -64,7 +62,7 @@ abstract class ConfigurePrecompiledScriptDependenciesResolver @Inject constructo
     fun precompiledScriptPluginImports(): List<Pair<String, List<String>>> =
         metadataDirFile().run {
             require(isDirectory)
-            listFiles().map {
+            listFilesOrdered().map {
                 it.name to it.readLines()
             }
         }
@@ -78,7 +76,3 @@ abstract class ConfigurePrecompiledScriptDependenciesResolver @Inject constructo
             "$key=\"${values.joinToString(":")}\""
         }
 }
-
-
-internal
-fun Project.implicitImports() = serviceOf<ImplicitImports>().list

@@ -1,5 +1,3 @@
-import org.gradle.gradlebuild.unittestandcompile.ModuleType
-
 /*
  * Copyright 2012 the original author or authors.
  *
@@ -16,35 +14,38 @@ import org.gradle.gradlebuild.unittestandcompile.ModuleType
  * limitations under the License.
  */
 plugins {
-    `java-library`
+    id("gradlebuild.distribution.api-java")
 }
 
 dependencies {
-    implementation(project(":baseServices"))
+    implementation(project(":base-services"))
     implementation(project(":logging"))
-    implementation(project(":processServices"))
-    implementation(project(":coreApi"))
-    implementation(project(":modelCore"))
+    implementation(project(":process-services"))
+    implementation(project(":core-api"))
+    implementation(project(":model-core"))
     implementation(project(":core"))
     implementation(project(":reporting"))
     implementation(project(":plugins"))
     implementation(project(":workers"))
-    implementation(project(":dependencyManagement")) // Required by JavaScriptExtension#getGoogleApisRepository()
+    implementation(project(":dependency-management")) // Required by JavaScriptExtension#getGoogleApisRepository()
+    implementation(project(":language-java")) // Required by RhinoShellExec
 
-    implementation(library("groovy"))
-    implementation(library("slf4j_api"))
-    implementation(library("commons_io"))
-    implementation(library("inject"))
-    implementation(library("rhino"))
-    implementation(library("gson")) // used by JsHint.coordinates
-    implementation(library("simple")) // used by http package in envjs.coordinates
-    
+    implementation(libs.groovy)
+    implementation(libs.slf4jApi)
+    implementation(libs.commonsIo)
+    implementation(libs.inject)
+    implementation(libs.rhino)
+    implementation(libs.gson) // used by JsHint.coordinates
+    implementation(libs.simple) // used by http package in envjs.coordinates
+
     testImplementation(testFixtures(project(":core")))
 
-    testRuntimeOnly(project(":runtimeApiInfo"))
+    testRuntimeOnly(project(":distributions-core")) {
+        because("ProjectBuilder tests load services from a Gradle distribution.")
+    }
+    integTestDistributionRuntimeOnly(project(":distributions-full"))
 }
 
-gradlebuildJava {
-    moduleType = ModuleType.CORE
+classycle {
+    excludePatterns.set(listOf("org/gradle/plugins/javascript/coffeescript/**"))
 }
-

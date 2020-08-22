@@ -1,0 +1,4 @@
+rootProject.name = 'incrementalAnnotationProcessing'
+include "library"
+include "processor"
+include "user"

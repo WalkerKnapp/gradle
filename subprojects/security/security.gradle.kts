@@ -13,42 +13,40 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import org.gradle.gradlebuild.unittestandcompile.ModuleType
-
 plugins {
-    `java-library`
+    id("gradlebuild.distribution.api-java")
 }
 
 description = "Shared classes for projects requiring GPG support"
 
 dependencies {
-    api(project(":coreApi"))
+    api(project(":core-api"))
     api(project(":resources"))
-    implementation(project(":baseServices"))
+    implementation(project(":base-services"))
     implementation(project(":logging"))
-    implementation(project(":processServices"))
-    implementation(project(":resourcesHttp"))
-    implementation(library("guava"))
+    implementation(project(":process-services"))
+    implementation(project(":resources-http"))
+    implementation(libs.guava)
 
-    api(library("bouncycastle_pgp"))
+    api(libs.bouncycastlePgp)
 
-    implementation(library("groovy")) {
+    implementation(libs.groovy) {
         because("Project.exec() depends on Groovy")
     }
 
     testImplementation(testFixtures(project(":core")))
-    testRuntimeOnly(project(":dependencyManagement"))
-    testRuntimeOnly(project(":workers"))
-    testRuntimeOnly(project(":runtimeApiInfo"))
 
-    testFixturesImplementation(project(":baseServices"))
-    testFixturesImplementation(library("slf4j_api"))
-    testFixturesImplementation(testLibrary("jetty"))
+    testFixturesImplementation(project(":base-services"))
+    testFixturesImplementation(libs.slf4jApi)
+    testFixturesImplementation(libs.jetty)
     testFixturesImplementation(testFixtures(project(":core")))
-    testFixturesImplementation(project(":internalIntegTesting"))
+    testFixturesImplementation(project(":internal-integ-testing"))
 
+    testRuntimeOnly(project(":distributions-core")) {
+        because("Tests instantiate DefaultClassLoaderRegistry which requires a 'gradle-plugins.properties' through DefaultPluginModuleRegistry")
+    }
 }
 
-gradlebuildJava {
-    moduleType = ModuleType.CORE
+classycle {
+    excludePatterns.set(listOf("org/gradle/plugins/signing/type/pgp/**"))
 }

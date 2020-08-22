@@ -18,7 +18,7 @@ package org.gradle.integtests.resolve.suppliers
 import org.gradle.api.internal.artifacts.ivyservice.CacheLayout
 import org.gradle.integtests.fixtures.GradleMetadataResolveRunner
 import org.gradle.integtests.fixtures.RequiredFeature
-import org.gradle.integtests.fixtures.ToBeFixedForInstantExecution
+import org.gradle.integtests.fixtures.ToBeFixedForConfigurationCache
 import org.gradle.integtests.fixtures.cache.CachingIntegrationFixture
 import org.gradle.integtests.resolve.AbstractModuleDependencyResolveTest
 import org.gradle.test.fixtures.HttpModule
@@ -85,7 +85,7 @@ class DynamicRevisionRemoteResolveWithMetadataSupplierIntegrationTest extends Ab
         !output.contains('Metadata rule call count: 2')
     }
 
-    @ToBeFixedForInstantExecution
+    @ToBeFixedForConfigurationCache
     def "re-executing in subsequent build requires no GET request"() {
         given:
         def supplierInteractions = withPerVersionStatusSupplier()
@@ -124,7 +124,7 @@ class DynamicRevisionRemoteResolveWithMetadataSupplierIntegrationTest extends Ab
 
     }
 
-    @ToBeFixedForInstantExecution
+    @ToBeFixedForConfigurationCache
     def "publishing new integration version incurs get status file of new integration version only"() {
         given:
         def supplierInteractions = withPerVersionStatusSupplier()
@@ -154,7 +154,7 @@ class DynamicRevisionRemoteResolveWithMetadataSupplierIntegrationTest extends Ab
         }
 
         then:
-        checkResolve "group:projectA:1.+":  ["group:projectA:1.2", "didn't match version 2.0"], "group:projectB:latest.release": ["group:projectB:1.1", "didn't match version 2.2"]
+        checkResolve "group:projectA:1.+": ["group:projectA:1.2", "didn't match version 2.0"], "group:projectB:latest.release": ["group:projectB:1.1", "didn't match version 2.2"]
 
         when: "publish a new integration version"
         resetExpectations()
@@ -181,10 +181,10 @@ class DynamicRevisionRemoteResolveWithMetadataSupplierIntegrationTest extends Ab
             }
         }
         supplierInteractions.refresh('group:projectB:2.2', 'group:projectB:1.1')
-        checkResolve "group:projectA:1.+":  ["group:projectA:1.2", "didn't match version 2.0"], "group:projectB:latest.release": ["group:projectB:1.1", "didn't match versions 2.3, 2.2"]
+        checkResolve "group:projectA:1.+": ["group:projectA:1.2", "didn't match version 2.0"], "group:projectB:latest.release": ["group:projectB:1.1", "didn't match versions 2.3, 2.2"]
     }
 
-    @ToBeFixedForInstantExecution
+    @ToBeFixedForConfigurationCache
     def "publishing new release version incurs get status file of new release version only"() {
         given:
         def supplierInteractions = withPerVersionStatusSupplier()
@@ -214,7 +214,7 @@ class DynamicRevisionRemoteResolveWithMetadataSupplierIntegrationTest extends Ab
         }
 
         then:
-        checkResolve "group:projectA:1.+":  ["group:projectA:1.2", "didn't match version 2.0"], "group:projectB:latest.release": ["group:projectB:1.1", "didn't match version 2.2"]
+        checkResolve "group:projectA:1.+": ["group:projectA:1.2", "didn't match version 2.0"], "group:projectB:latest.release": ["group:projectB:1.1", "didn't match version 2.2"]
 
         when: "publish a new integration version"
         resetExpectations()
@@ -244,7 +244,7 @@ class DynamicRevisionRemoteResolveWithMetadataSupplierIntegrationTest extends Ab
         checkResolve "group:projectA:1.+": ["group:projectA:1.2", "didn't match version 2.0"], "group:projectB:latest.release": "group:projectB:2.3"
     }
 
-    @ToBeFixedForInstantExecution
+    @ToBeFixedForConfigurationCache
     def "can use --offline to use cached result after remote failure"() {
         given:
         def supplierInteractions = withPerVersionStatusSupplier(buildFile, false)
@@ -293,7 +293,7 @@ class DynamicRevisionRemoteResolveWithMetadataSupplierIntegrationTest extends Ab
         checkResolve "group:projectA:1.+": ["group:projectA:1.2", "didn't match version 2.0"], "group:projectB:latest.release": ["group:projectB:1.1", "didn't match version 2.2"]
     }
 
-    @ToBeFixedForInstantExecution
+    @ToBeFixedForConfigurationCache
     def "can recover from --offline mode"() {
         given:
         def supplierInteractions = withPerVersionStatusSupplier()
@@ -333,10 +333,10 @@ class DynamicRevisionRemoteResolveWithMetadataSupplierIntegrationTest extends Ab
         }
 
         then: "recovers from previous --offline mode"
-        checkResolve "group:projectA:1.+":  ["group:projectA:1.2", "didn't match version 2.0"], "group:projectB:latest.release": ["group:projectB:1.1", "didn't match version 2.2"]
+        checkResolve "group:projectA:1.+": ["group:projectA:1.2", "didn't match version 2.0"], "group:projectB:latest.release": ["group:projectB:1.1", "didn't match version 2.2"]
     }
 
-    @ToBeFixedForInstantExecution
+    @ToBeFixedForConfigurationCache
     def "will not make network requests when run with --offline"() {
         given:
         buildFile << """
@@ -400,7 +400,7 @@ class DynamicRevisionRemoteResolveWithMetadataSupplierIntegrationTest extends Ab
         failure.assertHasCause("No cached resource '${server.uri}/repo/group/projectB/2.2/status-offline.txt' available for offline mode.")
     }
 
-    @ToBeFixedForInstantExecution
+    @ToBeFixedForConfigurationCache
     def "reports and recovers from remote failure"() {
         given:
         def supplierInteractions = withPerVersionStatusSupplier()
@@ -453,7 +453,7 @@ class DynamicRevisionRemoteResolveWithMetadataSupplierIntegrationTest extends Ab
         checkResolve "group:projectA:1.+": ["group:projectA:1.2", "didn't match version 2.0"], "group:projectB:latest.release": ["group:projectB:1.1", "didn't match version 2.2"]
     }
 
-    @ToBeFixedForInstantExecution
+    @ToBeFixedForConfigurationCache
     def "can inject configuration into metadata provider"() {
         given:
         buildFile << """
@@ -507,7 +507,7 @@ class DynamicRevisionRemoteResolveWithMetadataSupplierIntegrationTest extends Ab
         succeeds 'checkDeps'
     }
 
-    @ToBeFixedForInstantExecution
+    @ToBeFixedForConfigurationCache
     def "handles and recovers from errors in a custom metadata provider"() {
         given:
         buildFile << """
@@ -557,6 +557,7 @@ class DynamicRevisionRemoteResolveWithMetadataSupplierIntegrationTest extends Ab
         succeeds 'checkDeps'
     }
 
+    @ToBeFixedForConfigurationCache
     def "handles failure to create custom metadata provider"() {
         given:
         buildFile << """
@@ -594,7 +595,7 @@ class DynamicRevisionRemoteResolveWithMetadataSupplierIntegrationTest extends Ab
     }
 
 
-    @RequiredFeature(feature=GradleMetadataResolveRunner.REPOSITORY_TYPE, value="ivy")
+    @RequiredFeature(feature = GradleMetadataResolveRunner.REPOSITORY_TYPE, value = "ivy")
     def "custom metadata provider doesn't have to do something"() {
         given:
         buildFile << """
@@ -635,7 +636,7 @@ class DynamicRevisionRemoteResolveWithMetadataSupplierIntegrationTest extends Ab
             "group:projectB:latest.release": "group:projectB:3.3"
     }
 
-    @ToBeFixedForInstantExecution
+    @ToBeFixedForConfigurationCache
     def "can use a single remote request to get status of multiple components"() {
         given:
         buildFile << """import org.gradle.api.artifacts.CacheableRule
@@ -698,7 +699,7 @@ group:projectB:2.2;integration
         }
 
         then: "custom metadata rule prevented parsing of ivy descriptor"
-        checkResolve "group:projectA:1.+":  ["group:projectA:1.2", "didn't match version 2.0"], "group:projectB:latest.release": ["group:projectB:1.1", "didn't match version 2.2"]
+        checkResolve "group:projectA:1.+": ["group:projectA:1.2", "didn't match version 2.0"], "group:projectB:latest.release": ["group:projectB:1.1", "didn't match version 2.2"]
         outputContains 'Providing metadata for group:projectB:2.2'
         outputContains 'Providing metadata for group:projectB:1.1'
         outputDoesNotContain('Providing metadata for group:projectA:1.1')
@@ -709,7 +710,7 @@ group:projectB:2.2;integration
 
         when: "resolving the same dependencies"
         server.expectHead("/repo/status.txt", statusFile)
-        checkResolve "group:projectA:1.+":  ["group:projectA:1.2", "didn't match version 2.0"], "group:projectB:latest.release": ["group:projectB:1.1", "didn't match version 2.2"]
+        checkResolve "group:projectA:1.+": ["group:projectA:1.2", "didn't match version 2.0"], "group:projectB:latest.release": ["group:projectB:1.1", "didn't match version 2.2"]
 
         then: "should get the result from cache"
         outputDoesNotContain('Parsing status file call count')
@@ -780,7 +781,7 @@ group:projectB:2.2;release
         }
 
         then: "custom metadata rule prevented parsing of ivy descriptor"
-        checkResolve "group:projectA:1.+":  ["group:projectA:1.2", "didn't match version 2.0"], "group:projectB:latest.release": ["group:projectB:1.1", "didn't match version 2.2"]
+        checkResolve "group:projectA:1.+": ["group:projectA:1.2", "didn't match version 2.0"], "group:projectB:latest.release": ["group:projectB:1.1", "didn't match version 2.2"]
 
         when:
         executer.withArgument('--refresh-dependencies')
@@ -804,7 +805,7 @@ group:projectB:2.2;release
             }
         }
         supplierInteractions.refresh('group:projectB:2.2', 'group:projectB:1.1')
-        checkResolve "group:projectA:1.+":  ["group:projectA:1.2", "didn't match version 2.0"], "group:projectB:latest.release": ["group:projectB:1.1", "didn't match version 2.2"]
+        checkResolve "group:projectA:1.+": ["group:projectA:1.2", "didn't match version 2.0"], "group:projectB:latest.release": ["group:projectB:1.1", "didn't match version 2.2"]
     }
 
     def "component metadata rules are executed after metadata supplier is called"() {
@@ -863,15 +864,15 @@ group:projectB:2.2;release
         outputContains "Changing status for group:projectB:1.1 from 'should be overridden by rule' to 'release'"
 
         // second one comes from the rule executed on "real" metadata, after parsing the module
-        outputContains "Changing status for group:projectB:1.1 from '${GradleMetadataResolveRunner.useIvy()?'integration':'release'}' to 'release'"
+        outputContains "Changing status for group:projectB:1.1 from '${GradleMetadataResolveRunner.useIvy() ? 'integration' : 'release'}' to 'release'"
     }
 
     def "can use a custom metadata provider to expose components with custom attributes"() {
         given:
         withSupplierWithAttributes([
-                'projectA:1.2': [:],
-                'projectB:2.2': ['ProjectInternal.STATUS_ATTRIBUTE': '"integration"'],
-                'projectB:1.1': ['ProjectInternal.STATUS_ATTRIBUTE': '"release"']
+            'projectA:1.2': [:],
+            'projectB:2.2': ['ProjectInternal.STATUS_ATTRIBUTE': '"integration"'],
+            'projectB:1.1': ['ProjectInternal.STATUS_ATTRIBUTE': '"release"']
         ])
 
         when:
@@ -900,9 +901,9 @@ group:projectB:2.2;release
     def "can use a custom metadata provider to perform selection using attributes without fetching component metadata"() {
         given:
         withSupplierWithAttributes([
-                'projectA:1.2': [:],
-                'projectB:2.2': ['ProjectInternal.STATUS_ATTRIBUTE': '"release"', 'MyAttributes.CUSTOM_STR': '"v1"'],
-                'projectB:1.1': ['ProjectInternal.STATUS_ATTRIBUTE': '"release"', 'MyAttributes.CUSTOM_STR': '"v2"']
+            'projectA:1.2': [:],
+            'projectB:2.2': ['ProjectInternal.STATUS_ATTRIBUTE': '"release"', 'MyAttributes.CUSTOM_STR': '"v1"'],
+            'projectB:1.1': ['ProjectInternal.STATUS_ATTRIBUTE': '"release"', 'MyAttributes.CUSTOM_STR': '"v2"']
         ])
 
         buildFile << """
@@ -933,7 +934,7 @@ group:projectB:2.2;release
         }
 
         then: "custom metadata rule prevented parsing of ivy descriptor"
-        checkResolve "group:projectA:1.+":["group:projectA:1.2", "didn't match version 2.0"], "group:projectB:latest.release": ["group:projectB:1.1", "rejection: version 2.2:   - Attribute 'custom string' didn't match. Requested 'v2', was: 'v1'"]
+        checkResolve "group:projectA:1.+": ["group:projectA:1.2", "didn't match version 2.0"], "group:projectB:latest.release": ["group:projectB:1.1", "rejection: version 2.2:   - Attribute 'custom string' didn't match. Requested 'v2', was: 'v1'"]
         outputContains 'Providing metadata for group:projectB:2.2'
         outputContains 'Providing metadata for group:projectB:1.1'
 
@@ -950,9 +951,9 @@ group:projectB:2.2;release
     def "user provided attributes are properly coerced to typed attributes"() {
         given:
         withSupplierWithAttributes([
-                'projectA:1.2': [:],
-                'projectB:2.2': ['ProjectInternal.STATUS_ATTRIBUTE': '"release"', 'MyAttributes.CUSTOM_STR': '"v1"'],
-                'projectB:1.1': ['ProjectInternal.STATUS_ATTRIBUTE': '"release"', 'MyAttributes.CUSTOM_STR': '"v2"']
+            'projectA:1.2': [:],
+            'projectB:2.2': ['ProjectInternal.STATUS_ATTRIBUTE': '"release"', 'MyAttributes.CUSTOM_STR': '"v1"'],
+            'projectB:1.1': ['ProjectInternal.STATUS_ATTRIBUTE': '"release"', 'MyAttributes.CUSTOM_STR': '"v2"']
         ])
 
         buildFile << """
@@ -1048,7 +1049,7 @@ group:projectB:2.2;release
         outputContains "Found result for rule [DefaultConfigurableRule{rule=class MP, ruleParams=[]}] and key group:projectB:1.1"
     }
 
-    @ToBeFixedForInstantExecution
+    @ToBeFixedForConfigurationCache
     def "changing the implementation of a rule invalidates the cache"() {
         def metadataFile = file("buildSrc/src/main/groovy/MP.groovy")
 
@@ -1107,7 +1108,7 @@ group:projectB:2.2;release
 
     }
 
-    @ToBeFixedForInstantExecution
+    @ToBeFixedForConfigurationCache
     def "caching is repository aware"() {
         def metadataFile = file("buildSrc/src/main/groovy/MP.groovy")
         executer.requireIsolatedDaemons() // because we're going to --stop
@@ -1196,7 +1197,7 @@ group:projectB:2.2;release
 
     }
 
-    @ToBeFixedForInstantExecution
+    @ToBeFixedForConfigurationCache
     def "cross-build caching is resilient to failure"() {
         def metadataFile = file("buildSrc/src/main/groovy/MP.groovy")
         executer.requireIsolatedDaemons() // because we're going to --stop
@@ -1271,7 +1272,7 @@ group:projectB:2.2;release
           import javax.inject.Inject
           import org.gradle.api.artifacts.CacheableRule
 
-          ${cacheable?'@CacheableRule':''}
+          ${cacheable ? '@CacheableRule' : ''}
           class MP implements ComponentMetadataSupplier {
 
             final RepositoryResourceAccessor repositoryResourceAccessor
@@ -1361,6 +1362,7 @@ group:projectB:2.2;release
 
     interface SupplierInteractions {
         void expectGetStatus(HttpModule module, String status, boolean broken)
+
         void refresh(String... modules)
     }
 

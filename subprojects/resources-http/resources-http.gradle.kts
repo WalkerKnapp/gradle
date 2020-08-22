@@ -1,5 +1,3 @@
-import org.gradle.gradlebuild.unittestandcompile.ModuleType
-
 /*
  * Copyright 2014 the original author or authors.
  *
@@ -16,45 +14,36 @@ import org.gradle.gradlebuild.unittestandcompile.ModuleType
  * limitations under the License.
  */
 plugins {
-    `java-library`
-    // Cannot use strict compile because JDK 7 doesn't recognize
-    // @SuppressWarnings("deprecation"), used in org.gradle.internal.resource.transport.http.HttpClientHelper.AutoClosedHttpResponse
-    // in the context of a delegation pattern
-    // gradlebuild.`strict-compile`
-    gradlebuild.classycle
+    id("gradlebuild.distribution.api-java")
 }
 
 dependencies {
     api(project(":resources"))
-    implementation(project(":baseServices"))
-    implementation(project(":coreApi"))
+    implementation(project(":base-services"))
+    implementation(project(":core-api"))
     implementation(project(":core"))
+    implementation(project(":model-core"))
     implementation(project(":logging"))
 
-    implementation(library("commons_httpclient"))
-    implementation(library("slf4j_api"))
-    implementation(library("jcl_to_slf4j"))
-    implementation(library("jcifs"))
-    implementation(library("guava"))
-    implementation(library("commons_lang"))
-    implementation(library("commons_io"))
-    implementation(library("xerces"))
-    implementation(library("nekohtml"))
+    implementation(libs.commonsHttpclient)
+    implementation(libs.slf4jApi)
+    implementation(libs.jclToSlf4j)
+    implementation(libs.jcifs)
+    implementation(libs.guava)
+    implementation(libs.commonsLang)
+    implementation(libs.commonsIo)
+    implementation(libs.xerces)
+    implementation(libs.nekohtml)
 
-    testImplementation(project(":internalIntegTesting"))
-    testImplementation(testLibrary("jetty"))
+    testImplementation(project(":internal-integ-testing"))
+    testImplementation(libs.jetty)
     testImplementation(testFixtures(project(":core")))
     testImplementation(testFixtures(project(":logging")))
 
-    testFixturesImplementation(project(":baseServices"))
+    testFixturesImplementation(project(":base-services"))
     testFixturesImplementation(project(":logging"))
-    testFixturesImplementation(project(":internalTesting"))
-    testFixturesImplementation(project(":internalIntegTesting"))
-    testFixturesImplementation(library("slf4j_api"))
-    integTestRuntimeOnly(project(":runtimeApiInfo"))
-}
+    testFixturesImplementation(project(":internal-integ-testing"))
+    testFixturesImplementation(libs.slf4jApi)
 
-gradlebuildJava {
-    moduleType = ModuleType.CORE
+    integTestDistributionRuntimeOnly(project(":distributions-core"))
 }
-

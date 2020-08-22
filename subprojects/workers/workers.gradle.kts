@@ -1,54 +1,46 @@
-import org.gradle.gradlebuild.unittestandcompile.ModuleType
-
 plugins {
-    `java-library`
-    gradlebuild.classycle
+    id("gradlebuild.distribution.api-java")
 }
 
 dependencies {
-    implementation(project(":baseServices"))
+    implementation(project(":base-services"))
     implementation(project(":messaging"))
     implementation(project(":logging"))
-    implementation(project(":processServices"))
-    implementation(project(":workerProcesses"))
-    implementation(project(":persistentCache"))
-    implementation(project(":coreApi"))
-    implementation(project(":modelCore"))
+    implementation(project(":process-services"))
+    implementation(project(":worker-processes"))
+    implementation(project(":persistent-cache"))
+    implementation(project(":core-api"))
+    implementation(project(":model-core"))
     implementation(project(":core"))
     implementation(project(":snapshots"))
-    implementation(project(":fileCollections"))
+    implementation(project(":file-collections"))
     implementation(project(":files"))
     implementation(project(":native"))
     implementation(project(":resources"))
 
-    implementation(library("slf4j_api"))
-    implementation(library("guava"))
-    implementation(library("inject"))
+    implementation(libs.slf4jApi)
+    implementation(libs.guava)
+    implementation(libs.inject)
 
     testImplementation(project(":native"))
-    testImplementation(project(":fileCollections"))
+    testImplementation(project(":file-collections"))
     testImplementation(project(":resources"))
     testImplementation(project(":snapshots"))
     testImplementation(testFixtures(project(":core")))
     testImplementation(testFixtures(project(":logging")))
 
-    testRuntimeOnly(project(":runtimeApiInfo"))
-    testRuntimeOnly(project(":dependencyManagement"))
+    integTestRuntimeOnly(project(":kotlin-dsl"))
+    integTestRuntimeOnly(project(":kotlin-dsl-provider-plugins"))
+    integTestRuntimeOnly(project(":api-metadata"))
+    integTestRuntimeOnly(project(":test-kit"))
 
-    integTestRuntimeOnly(project(":kotlinDsl"))
-    integTestRuntimeOnly(project(":kotlinDslProviderPlugins"))
-    integTestRuntimeOnly(project(":apiMetadata"))
-    integTestRuntimeOnly(project(":testKit"))
+    integTestImplementation(project(":jvm-services"))
 
-    integTestImplementation(project(":jvmServices"))
-    integTestImplementation(project(":internalIntegTesting"))
+    testFixturesImplementation(libs.inject)
+    testFixturesImplementation(project(":base-services"))
 
-    testFixturesImplementation(library("inject"))
-    testFixturesImplementation(project(":baseServices"))
-    testFixturesImplementation(project(":internalTesting"))
+    testRuntimeOnly(project(":distributions-core")) {
+        because("Tests instantiate DefaultClassLoaderRegistry which requires a 'gradle-plugins.properties' through DefaultPluginModuleRegistry")
+    }
+    integTestDistributionRuntimeOnly(project(":distributions-core"))
 }
-
-gradlebuildJava {
-    moduleType = ModuleType.CORE
-}
-

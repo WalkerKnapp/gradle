@@ -13,27 +13,25 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import org.gradle.gradlebuild.unittestandcompile.ModuleType
+
+plugins {
+    id("gradlebuild.distribution.api-java")
+    id("gradlebuild.publish-public-libraries")
+}
 
 description = "API extraction for Java"
 
-plugins {
-    `java-library`
-    gradlebuild.classycle
-    gradlebuild.`publish-public-libraries`
-    gradlebuild.`strict-compile`
-}
-
 dependencies {
-    implementation(project(":baseAnnotations"))
+    implementation(project(":base-annotations"))
+    implementation(project(":hashing"))
+    implementation(project(":files"))
+    implementation(project(":snapshots"))
 
-    implementation(library("asm")) { version { require(libraryVersion("asm")) } }
-    implementation(library("guava")) { version { require(libraryVersion("guava")) } }
+    implementation(libs.asm)
+    implementation(libs.guava)
+    implementation(libs.slf4jApi)
+    implementation(libs.commonsIo)
 
-    testImplementation(project(":baseServices"))
-    testImplementation(project(":internalTesting"))
-}
-
-gradlebuildJava {
-    moduleType = ModuleType.CORE
+    testImplementation(project(":base-services"))
+    testImplementation(project(":internal-testing"))
 }

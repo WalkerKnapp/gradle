@@ -20,22 +20,20 @@ import org.gradle.api.file.FileTree;
 import org.gradle.api.file.FileVisitor;
 import org.gradle.api.internal.file.AbstractFileTree;
 import org.gradle.api.internal.file.FileCollectionStructureVisitor;
+import org.gradle.api.internal.file.FileTreeInternal;
 import org.gradle.api.internal.tasks.TaskDependencyResolveContext;
 import org.gradle.api.tasks.util.PatternFilterable;
 import org.gradle.api.tasks.util.PatternSet;
 import org.gradle.internal.Factory;
 
 import java.io.File;
+import java.util.function.Consumer;
 
 /**
  * Adapts a {@link MinimalFileTree} into a full {@link FileTree} implementation.
  */
-public class FileTreeAdapter extends AbstractFileTree implements FileCollectionContainer {
+public class FileTreeAdapter extends AbstractFileTree {
     private final MinimalFileTree tree;
-
-    public FileTreeAdapter(MinimalFileTree tree) {
-        this.tree = tree;
-    }
 
     public FileTreeAdapter(MinimalFileTree tree, Factory<PatternSet> patternSetFactory) {
         super(patternSetFactory);
@@ -49,11 +47,6 @@ public class FileTreeAdapter extends AbstractFileTree implements FileCollectionC
     @Override
     public String getDisplayName() {
         return tree.getDisplayName();
-    }
-
-    @Override
-    public void visitContents(FileCollectionResolveContext context) {
-        context.add(tree);
     }
 
     @Override
@@ -79,7 +72,7 @@ public class FileTreeAdapter extends AbstractFileTree implements FileCollectionC
     }
 
     @Override
-    public FileTree matching(PatternFilterable patterns) {
+    public FileTreeInternal matching(PatternFilterable patterns) {
         if (tree instanceof PatternFilterableFileTree) {
             PatternFilterableFileTree filterableTree = (PatternFilterableFileTree) tree;
             return new FileTreeAdapter(filterableTree.filter(patterns), patternSetFactory);
@@ -96,7 +89,12 @@ public class FileTreeAdapter extends AbstractFileTree implements FileCollectionC
     }
 
     @Override
-    public void visitStructure(FileCollectionStructureVisitor visitor) {
+    public void visitContentsAsFileTrees(Consumer<FileTreeInternal> visitor) {
+        visitor.accept(this);
+    }
+
+    @Override
+    protected void visitContents(FileCollectionStructureVisitor visitor) {
         tree.visitStructure(visitor, this);
     }
 }

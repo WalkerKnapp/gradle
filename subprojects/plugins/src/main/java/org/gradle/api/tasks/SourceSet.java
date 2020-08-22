@@ -34,7 +34,9 @@ import javax.annotation.Nullable;
  * compilation of the source files in the 'java' {@link SourceDirectorySet}:
  *
  * <pre class='autoTested'>
- * apply plugin: 'java'
+ * plugins {
+ *     id 'java'
+ * }
  *
  * sourceSets {
  *   main {
@@ -400,4 +402,14 @@ public interface SourceSet extends ExtensionAware {
      */
     @Incubating
     String getSourcesElementsConfigurationName();
+
+    /**
+     * Determines if this source set is the main source set
+     *
+     * @since 6.7
+     */
+    @Incubating
+    static boolean isMain(SourceSet sourceSet) {
+        return MAIN_SOURCE_SET_NAME.equals(sourceSet.getName());
+    }
 }

@@ -1,17 +1,12 @@
-import org.gradle.gradlebuild.unittestandcompile.ModuleType
-
 plugins {
-    `java-library`
-    gradlebuild.classycle
+    id("gradlebuild.distribution.api-java")
 }
+
+gradlebuildJava.usedInWorkers()
 
 dependencies {
     implementation(project(":cli"))
 
-    implementation(project(":baseAnnotations"))
-    implementation(library("commons_lang"))
-}
-
-gradlebuildJava {
-    moduleType = ModuleType.WORKER
+    implementation(project(":base-annotations"))
+    implementation(libs.commonsLang)
 }

@@ -17,12 +17,11 @@
 package org.gradle.integtests.composite
 
 import org.gradle.integtests.fixtures.AbstractIntegrationSpec
-import org.gradle.integtests.fixtures.executer.GradleContextualExecuter
-import spock.lang.IgnoreIf
+import org.gradle.integtests.fixtures.ToBeFixedForConfigurationCache
 
-@IgnoreIf({ GradleContextualExecuter.isInstant() })
 class CompositeBuildPropertiesIntegrationTest extends AbstractIntegrationSpec {
 
+    @ToBeFixedForConfigurationCache(because = "composite builds")
     def "included build properties take precedence over root build properties"() {
         given:
         def createBuild = { String buildName, String dir ->

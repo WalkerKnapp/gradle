@@ -18,12 +18,12 @@ package org.gradle.language.base
 
 import org.gradle.integtests.fixtures.AbstractIntegrationSpec
 import org.gradle.integtests.fixtures.Sample
-import org.gradle.integtests.fixtures.UnsupportedWithInstantExecution
+import org.gradle.integtests.fixtures.UnsupportedWithConfigurationCache
 import org.junit.Rule
 
-@UnsupportedWithInstantExecution(because = "software model")
+@UnsupportedWithConfigurationCache(because = "software model")
 class ComponentTypeSampleIntegTest extends AbstractIntegrationSpec {
-    @Rule Sample componentTypeSample = new Sample(temporaryFolder, "customModel/componentType")
+    @Rule Sample componentTypeSample = new Sample(temporaryFolder, "customModel/componentType/groovy")
 
     def "can create custom component with binaries"() {
         given:

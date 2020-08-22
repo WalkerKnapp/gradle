@@ -17,9 +17,9 @@ package org.gradle.internal.deprecation;
 
 import org.gradle.api.logging.configuration.WarningMode;
 import org.gradle.internal.Factory;
-import org.gradle.internal.featurelifecycle.DeprecatedUsageBuildOperationProgressBroadcaster;
 import org.gradle.internal.featurelifecycle.LoggingDeprecatedFeatureHandler;
 import org.gradle.internal.featurelifecycle.UsageLocationReporter;
+import org.gradle.internal.operations.BuildOperationProgressEventEmitter;
 
 import javax.annotation.CheckReturnValue;
 import javax.annotation.Nullable;
@@ -56,8 +56,8 @@ public class DeprecationLogger {
 
     private static final LoggingDeprecatedFeatureHandler DEPRECATED_FEATURE_HANDLER = new LoggingDeprecatedFeatureHandler();
 
-    public synchronized static void init(UsageLocationReporter reporter, WarningMode warningMode, DeprecatedUsageBuildOperationProgressBroadcaster buildOperationProgressBroadcaster) {
-        DEPRECATED_FEATURE_HANDLER.init(reporter, warningMode, buildOperationProgressBroadcaster);
+    public synchronized static void init(UsageLocationReporter reporter, WarningMode warningMode, BuildOperationProgressEventEmitter buildOperationProgressEventEmitter) {
+        DEPRECATED_FEATURE_HANDLER.init(reporter, warningMode, buildOperationProgressEventEmitter);
     }
 
     public synchronized static void reset() {
@@ -79,6 +79,7 @@ public class DeprecationLogger {
      * Output: ${feature} has been deprecated.
      */
     @CheckReturnValue
+    @SuppressWarnings("rawtypes")
     public static DeprecationMessageBuilder<?> deprecate(final String feature) {
         return new DeprecationMessageBuilder() {
             @Override
@@ -124,6 +125,7 @@ public class DeprecationLogger {
      * Output: ${behaviour} ${advice}
      */
     @CheckReturnValue
+    @SuppressWarnings("rawtypes")
     public static DeprecationMessageBuilder.WithDeprecationTimeline warnOfChangedBehaviour(final String behaviour, final String advice) {
         return new DeprecationMessageBuilder.WithDeprecationTimeline(new DeprecationMessageBuilder() {
             @Override
@@ -137,6 +139,7 @@ public class DeprecationLogger {
      * Output: ${action} has been deprecated.
      */
     @CheckReturnValue
+    @SuppressWarnings("rawtypes")
     public static DeprecationMessageBuilder<?> deprecateAction(final String action) {
         return new DeprecationMessageBuilder() {
             @Override

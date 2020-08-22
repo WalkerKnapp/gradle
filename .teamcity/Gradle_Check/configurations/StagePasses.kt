@@ -1,5 +1,7 @@
 package configurations
 
+import Gradle_Check.configurations.masterReleaseBranchFilter
+import Gradle_Check.configurations.triggerExcludes
 import common.Os
 import common.applyDefaultSettings
 import common.buildToolGradleParameters
@@ -27,16 +29,7 @@ class StagePasses(model: CIBuildModel, stage: Stage, prevStage: Stage?, stagePro
     name = stage.stageName.stageName + " (Trigger)"
 
     applyDefaultSettings()
-    artifactRules = "build/build-receipt.properties"
-
-    val triggerExcludes = """
-        -:.idea
-        -:.github
-        -:.teamcity
-        -:.teamcityTest
-        -:subprojects/docs/src/docs/release
-    """.trimIndent()
-    val masterReleaseFilter = model.masterAndReleaseBranches.joinToString(prefix = "+:", separator = "\n+:")
+    artifactRules = "subprojects/base-services/build/generated-resources/build-receipt/org/gradle/build-receipt.properties"
 
     features {
         publishBuildStatusToGithub(model)
@@ -47,7 +40,7 @@ class StagePasses(model: CIBuildModel, stage: Stage, prevStage: Stage?, stagePro
             quietPeriodMode = VcsTrigger.QuietPeriodMode.USE_CUSTOM
             quietPeriod = 90
             triggerRules = triggerExcludes
-            branchFilter = masterReleaseFilter
+            branchFilter = masterReleaseBranchFilter
         }
     } else if (stage.trigger != Trigger.never) {
         triggers.schedule {
@@ -65,7 +58,7 @@ class StagePasses(model: CIBuildModel, stage: Stage, prevStage: Stage?, stagePro
             triggerBuild = always()
             withPendingChangesOnly = true
             param("revisionRule", "lastFinished")
-            param("branchFilter", masterReleaseFilter)
+            param("branchFilter", masterReleaseBranchFilter)
         }
     }
 
@@ -84,7 +77,7 @@ class StagePasses(model: CIBuildModel, stage: Stage, prevStage: Stage?, stagePro
     steps {
         gradleWrapper {
             name = "GRADLE_RUNNER"
-            tasks = "createBuildReceipt" + if (stage.stageName == StageNames.READY_FOR_NIGHTLY) " updateBranchStatus" else ""
+            tasks = ":base-services:createBuildReceipt" + if (stage.stageName == StageNames.READY_FOR_NIGHTLY) " updateBranchStatus -PgithubToken=%github.bot-teamcity.token%" else ""
             gradleParams = defaultGradleParameters
         }
         script {

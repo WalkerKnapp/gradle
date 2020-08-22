@@ -18,19 +18,19 @@ package org.gradle.language.base
 
 import org.gradle.integtests.fixtures.AbstractIntegrationSpec
 import org.gradle.integtests.fixtures.Sample
-import org.gradle.integtests.fixtures.UnsupportedWithInstantExecution
+import org.gradle.integtests.fixtures.UnsupportedWithConfigurationCache
 import org.gradle.util.Requires
 import org.gradle.util.TestPrecondition
 import org.junit.Rule
 
 @Requires(TestPrecondition.ONLINE)
-@UnsupportedWithInstantExecution(because = "software model")
+@UnsupportedWithConfigurationCache(because = "software model")
 class LanguageTypeSampleIntegrationTest extends AbstractIntegrationSpec {
     @Rule
-    Sample languageTypeSample = new Sample(temporaryFolder, "customModel/languageType")
+    Sample languageTypeSample = new Sample(temporaryFolder, "customModel/languageType/groovy")
 
     def setup() {
-        //  customModel/languageType sample contains buildSrc, which needs global init script to make mirror work
+        //  customModel/languageType/groovy sample contains buildSrc, which needs global init script to make mirror work
         executer.withGlobalRepositoryMirrors()
     }
 

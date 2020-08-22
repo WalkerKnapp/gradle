@@ -18,7 +18,7 @@ package org.gradle.integtests.resolve.attributes
 
 import org.gradle.integtests.fixtures.GradleMetadataResolveRunner
 import org.gradle.integtests.fixtures.RequiredFeature
-import org.gradle.integtests.fixtures.ToBeFixedForInstantExecution
+import org.gradle.integtests.fixtures.ToBeFixedForConfigurationCache
 import org.gradle.integtests.resolve.AbstractModuleDependencyResolveTest
 import org.gradle.test.fixtures.file.TestFile
 import org.gradle.test.fixtures.plugin.PluginBuilder
@@ -30,10 +30,8 @@ class ClasspathDependenciesAttributesIntegrationTest extends AbstractModuleDepen
 
     def pluginBuilder = new PluginBuilder(file('plugin'))
 
-
     @RequiredFeature(feature = GradleMetadataResolveRunner.GRADLE_METADATA, value = "false")
     @RequiredFeature(feature = GradleMetadataResolveRunner.REPOSITORY_TYPE, value = "maven")
-    @ToBeFixedForInstantExecution
     def 'module metadata fetched through a settings useModule properly derives variants and subsequent project use of the dependency has access to derived variants'() {
         given:
         def module = mavenRepo.module('test', 'dep', '1.0').publish()
@@ -102,7 +100,6 @@ task printDeps {
 
     @RequiredFeature(feature = GradleMetadataResolveRunner.GRADLE_METADATA, value = "true")
     @RequiredFeature(feature = GradleMetadataResolveRunner.REPOSITORY_TYPE, value = "maven")
-    @ToBeFixedForInstantExecution
     def 'module metadata fetched through a settings useModule properly uses Java ecosystem'() {
         given:
 
@@ -163,7 +160,7 @@ repositories {
         outputContains 'test-plugin applied'
     }
 
-    @ToBeFixedForInstantExecution(because = "composite builds")
+    @ToBeFixedForConfigurationCache(because = "composite builds")
     def 'buildscript classpath resolves java-runtime variant'() {
         def otherSettings = file('other/settings.gradle')
         def otherBuild = file('other/build.gradle')

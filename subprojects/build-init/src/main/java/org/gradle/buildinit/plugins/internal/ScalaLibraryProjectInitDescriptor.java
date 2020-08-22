@@ -57,7 +57,7 @@ public class ScalaLibraryProjectInitDescriptor extends JvmProjectInitDescriptor 
         String scalaLibraryVersion = libraryVersionProvider.getVersion("scala-library");
         String scalaTestVersion = libraryVersionProvider.getVersion("scalatest");
         String scalaTestPlusJunitVersion = libraryVersionProvider.getVersion("scalatestplus-junit");
-        String junitVersion = libraryVersionProvider.getVersion("junit");
+        String junitVersion = libraryVersionProvider.getVersion("scala-junit");
         String scalaXmlVersion = libraryVersionProvider.getVersion("scala-xml");
 
         buildScriptBuilder
@@ -71,7 +71,7 @@ public class ScalaLibraryProjectInitDescriptor extends JvmProjectInitDescriptor 
             .testImplementationDependency("Use Scalatest for testing our library",
                     "junit:junit:" + junitVersion,
                     "org.scalatest:scalatest_" + scalaVersion + ":" + scalaTestVersion,
-                    "org.scalatestplus:junit-" + junitVersion.replace('.', '-') + "_" + scalaVersion + ":" + scalaTestPlusJunitVersion)
+                    "org.scalatestplus:junit-4-12_" + scalaVersion + ":" + scalaTestPlusJunitVersion)
             .testRuntimeOnlyDependency("Need scala-xml at test runtime",
                 "org.scala-lang.modules:scala-xml_" + scalaVersion + ":" + scalaXmlVersion);
 

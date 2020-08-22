@@ -1,6 +1,5 @@
-import org.gradle.gradlebuild.unittestandcompile.ModuleType
-
 plugins {
+    id("gradlebuild.internal.java")
     application
 }
 
@@ -12,17 +11,13 @@ repositories {
 }
 
 dependencies {
-    implementation(project(":baseServices"))
-    implementation(project(":toolingApi"))
+    implementation(project(":base-services"))
+    implementation(project(":tooling-api"))
     androidTools("com.android.tools.build:gradle:3.0.0")
 }
 
-gradlebuildJava {
-    moduleType = ModuleType.INTERNAL
-}
-
 application {
-    mainClassName = "org.gradle.performance.android.Main"
+    mainClass.set("org.gradle.performance.android.Main")
     applicationName = "android-test-app"
 }
 
@@ -43,7 +38,7 @@ tasks.register("buildDists") {
 
 open class BuildClassPath : DefaultTask() {
     @get:InputFiles
-    val classpath: ConfigurableFileCollection = project.files()
+    val classpath: ConfigurableFileCollection = project.objects.fileCollection()
 
     @get:OutputFile
     val outputFile: RegularFileProperty = project.objects.fileProperty()

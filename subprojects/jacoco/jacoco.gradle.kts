@@ -13,48 +13,54 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import org.gradle.gradlebuild.unittestandcompile.ModuleType
-
 plugins {
-    `java-library`
+    id("gradlebuild.distribution.api-java")
 }
 
 dependencies {
-    implementation(project(":baseServices"))
+    implementation(project(":base-services"))
     implementation(project(":logging"))
-    implementation(project(":processServices"))
-    implementation(project(":coreApi"))
-    implementation(project(":modelCore"))
+    implementation(project(":process-services"))
+    implementation(project(":core-api"))
+    implementation(project(":model-core"))
     implementation(project(":core"))
-    implementation(project(":platformBase"))
-    implementation(project(":testingBase"))
-    implementation(project(":testingJvm"))
+    implementation(project(":platform-base"))
+    implementation(project(":testing-base"))
+    implementation(project(":testing-jvm"))
     implementation(project(":plugins"))
     implementation(project(":reporting"))
+    implementation(project(":file-collections"))
 
-    implementation(library("groovy"))
-    implementation(library("slf4j_api"))
-    implementation(library("guava"))
-    implementation(library("commons_lang"))
-    implementation(library("inject"))
+    implementation(libs.groovy)
+    implementation(libs.slf4jApi)
+    implementation(libs.guava)
+    implementation(libs.commonsLang)
+    implementation(libs.inject)
 
-    testFixturesImplementation(project(":baseServices"))
-    testFixturesImplementation(project(":coreApi"))
+    testFixturesImplementation(project(":base-services"))
+    testFixturesImplementation(project(":core-api"))
     testFixturesImplementation(project(":core"))
-    testFixturesImplementation(project(":internalIntegTesting"))
-    testFixturesImplementation(testLibrary("jsoup"))
+    testFixturesImplementation(project(":internal-integ-testing"))
+    testFixturesImplementation(libs.jsoup)
 
-    testImplementation(project(":fileCollections"))
-    testImplementation(project(":internalTesting"))
+    testImplementation(project(":internal-testing"))
     testImplementation(project(":resources"))
-    testImplementation(project(":internalIntegTesting"))
+    testImplementation(project(":internal-integ-testing"))
+    testImplementation(project(":language-java"))
     testImplementation(testFixtures(project(":core")))
 
-    testRuntimeOnly(project(":runtimeApiInfo"))
-    integTestRuntimeOnly(project(":testingJunitPlatform"))
+    testRuntimeOnly(project(":distributions-core")) {
+        because("ProjectBuilder tests load services from a Gradle distribution.")
+    }
+    integTestDistributionRuntimeOnly(project(":distributions-jvm"))
 }
 
-gradlebuildJava {
-    moduleType = ModuleType.CORE
+strictCompile {
+    ignoreRawTypes()
 }
 
+classycle {
+    excludePatterns.set(listOf(
+        "org/gradle/internal/jacoco/*",
+        "org/gradle/testing/jacoco/plugins/*"))
+}

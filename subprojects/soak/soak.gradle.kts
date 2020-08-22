@@ -13,53 +13,31 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import org.gradle.gradlebuild.unittestandcompile.ModuleType
 
 plugins {
-    `kotlin-library`
-    gradlebuild.classycle
+    id("gradlebuild.internal.kotlin")
 }
 
 dependencies {
-    testFixturesImplementation(project(":baseServices"))
+    testFixturesImplementation(project(":base-services"))
     testFixturesImplementation(project(":core"))
-    testFixturesImplementation(project(":internalTesting"))
-    testFixturesImplementation(project(":internalIntegTesting"))
+    testFixturesImplementation(project(":internal-integ-testing"))
 
-    testImplementation(project(":kotlinDslTestFixtures"))
+    testImplementation(testFixtures(project(":kotlin-dsl")))
     testImplementation(testFixtures(project(":core")))
 
     integTestImplementation(project(":logging"))
-    integTestImplementation(project(":persistentCache"))
+    integTestImplementation(project(":persistent-cache"))
     integTestImplementation(project(":launcher"))
-    integTestImplementation(library("slf4j_api"))
-    integTestImplementation(testLibrary("jetty"))
+    integTestImplementation(project(":file-watching"))
+    integTestImplementation(libs.slf4jApi)
+    integTestImplementation(libs.jetty)
 
-    integTestRuntimeOnly(project(":runtimeApiInfo"))
+    integTestDistributionRuntimeOnly(project(":distributions-full"))
 }
 
-gradlebuildJava {
-    moduleType = ModuleType.INTERNAL
-}
-
-tasks.integTest {
-    options {
-        require(this is JUnitOptions)
-        excludeCategories("org.gradle.soak.categories.SoakTest")
-    }
-}
-
-tasks.register("soakIntegTest", org.gradle.gradlebuild.test.integrationtests.SoakTest::class) {
-    val integTestSourceSet = sourceSets.integTest.get()
-    testClassesDirs = integTestSourceSet.output.classesDirs
-    classpath = integTestSourceSet.runtimeClasspath
-    systemProperty("org.gradle.soaktest", "true")
-    options {
-        require(this is JUnitOptions)
-        includeCategories("org.gradle.soak.categories.SoakTest")
-    }
-}
-
-classycle {
-    excludePatterns.set(listOf("META-INF/*.kotlin_module"))
+tasks.register("soakTest") {
+    description = "Run all soak tests defined in the :soak subproject"
+    group = "CI Lifecycle"
+    dependsOn(":soak:embeddedIntegTest")
 }

@@ -18,6 +18,7 @@ package org.gradle.api.internal.provider
 
 import org.gradle.api.Transformer
 import org.gradle.internal.state.ManagedFactory
+import org.gradle.util.TestUtil
 
 class DefaultPropertyTest extends PropertySpec<String> {
     DefaultProperty<String> property() {
@@ -65,7 +66,7 @@ class DefaultPropertyTest extends PropertySpec<String> {
 
     @Override
     ManagedFactory managedFactory() {
-        return new ManagedFactories.PropertyManagedFactory()
+        return new ManagedFactories.PropertyManagedFactory(TestUtil.propertyFactory())
     }
 
     def "has no value by default"() {
@@ -91,8 +92,8 @@ class DefaultPropertyTest extends PropertySpec<String> {
         }))
 
         expect:
-        propertyWithBadValue.toString() == "property(class java.lang.String, map(provider(?)))"
-        providerWithNoValue().toString() == "property(class java.lang.String, undefined)"
+        propertyWithBadValue.toString() == "property(java.lang.String, map(java.lang.String provider(?) check-type()))"
+        providerWithNoValue().toString() == "property(java.lang.String, undefined)"
     }
 
     def "can set to null value to discard value"() {
@@ -138,17 +139,13 @@ class DefaultPropertyTest extends PropertySpec<String> {
     }
 
     def "can set value to a provider whose type is compatible"() {
-        def supplier = Mock(ProviderInternal)
-        def provider = Mock(ProviderInternal)
+        def supplier = supplierWithValues(1, 2, 3)
 
         given:
-        provider.asSupplier(_, _, _) >> supplier
-        supplier.calculateValue() >>> [1, 2, 3].collect { ValueSupplier.Value.ofNullable(it) }
-
         def property = propertyWithDefaultValue(Number)
 
         when:
-        property.set(provider)
+        property.set(supplier)
 
         then:
         property.get() == 1

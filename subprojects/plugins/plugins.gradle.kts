@@ -1,5 +1,5 @@
-import org.gradle.gradlebuild.testing.integrationtests.cleanup.WhenNotEmpty
-import org.gradle.gradlebuild.unittestandcompile.ModuleType
+import gradlebuild.cleanup.WhenNotEmpty
+import gradlebuild.integrationtests.integrationTestUsesSampleDir
 
 /*
  * Copyright 2010 the original author or authors.
@@ -17,92 +17,82 @@ import org.gradle.gradlebuild.unittestandcompile.ModuleType
  * limitations under the License.
  */
 plugins {
-    `java-library`
+    id("gradlebuild.distribution.api-java")
 }
 
 dependencies {
-    implementation(project(":baseServices"))
+    implementation(project(":base-services"))
     implementation(project(":logging"))
-    implementation(project(":processServices"))
-    implementation(project(":fileCollections"))
-    implementation(project(":persistentCache"))
-    implementation(project(":coreApi"))
-    implementation(project(":modelCore"))
+    implementation(project(":process-services"))
+    implementation(project(":file-collections"))
+    implementation(project(":persistent-cache"))
+    implementation(project(":core-api"))
+    implementation(project(":model-core"))
     implementation(project(":core"))
     implementation(project(":workers"))
-    implementation(project(":dependencyManagement"))
+    implementation(project(":dependency-management"))
     implementation(project(":reporting"))
-    implementation(project(":platformBase"))
-    implementation(project(":platformJvm"))
-    implementation(project(":languageJvm"))
-    implementation(project(":languageJava"))
-    implementation(project(":languageGroovy"))
+    implementation(project(":platform-base"))
+    implementation(project(":platform-jvm"))
+    implementation(project(":language-jvm"))
+    implementation(project(":language-java"))
+    implementation(project(":language-groovy"))
     implementation(project(":diagnostics"))
-    implementation(project(":testingBase"))
-    implementation(project(":testingJvm"))
+    implementation(project(":testing-base"))
+    implementation(project(":testing-jvm"))
     implementation(project(":snapshots"))
 
-    implementation(library("slf4j_api"))
-    implementation(library("groovy"))
-    implementation(library("ant"))
-    implementation(library("asm"))
-    implementation(library("guava"))
-    implementation(library("commons_io"))
-    implementation(library("commons_lang"))
-    implementation(library("inject"))
-
-    // This dependency makes the services provided by `:compositeBuilds` available at runtime for all integration tests in all subprojects
-    // Making this better would likely involve a separate `:gradleRuntime` module that brings in `:core`, `:dependencyManagement` and other key subprojects
-    runtimeOnly(project(":compositeBuilds"))
+    implementation(libs.slf4jApi)
+    implementation(libs.groovy)
+    implementation(libs.ant)
+    implementation(libs.asm)
+    implementation(libs.guava)
+    implementation(libs.commonsIo)
+    implementation(libs.commonsLang)
+    implementation(libs.inject)
 
     testImplementation(project(":messaging"))
     testImplementation(project(":native"))
     testImplementation(project(":resources"))
-    testImplementation(testFixtures(project(":core")))
-    testImplementation(testFixtures(project(":dependencyManagement")))
-    testImplementation(testFixtures(project(":resourcesHttp")))
-    testImplementation(testFixtures(project(":platformNative")))
-    testImplementation(testFixtures(project(":languageJvm")))
-    testImplementation(testFixtures(project(":languageJava")))
-    testImplementation(testFixtures(project(":languageGroovy")))
-    testImplementation(testFixtures(project(":diagnostics")))
-
-    testRuntimeOnly(project(":runtimeApiInfo"))
-
-    testFixturesImplementation(testFixtures(project(":core")))
-    testFixturesImplementation(project(":baseServicesGroovy"))
-    testFixturesImplementation(project(":fileCollections"))
-    testFixturesImplementation(project(":languageJvm"))
-    testFixturesImplementation(project(":internalIntegTesting"))
-    testFixturesImplementation(project(":processServices"))
-    testFixturesImplementation(project(":resources"))
-    testFixturesImplementation(library("guava"))
-
-    testImplementation(testLibrary("jsoup"))
-
-    integTestRuntimeOnly(project(":maven"))
-
-    testImplementation(library("gson")) {
+    testImplementation(libs.gson) {
         because("for unknown reason (bug in the Groovy/Spock compiler?) requires it to be present to use the Gradle Module Metadata test fixtures")
     }
-    integTestRuntimeOnly(project(":testingJunitPlatform"))
+    testImplementation(libs.jsoup)
+    testImplementation(testFixtures(project(":core")))
+    testImplementation(testFixtures(project(":dependency-management")))
+    testImplementation(testFixtures(project(":resources-http")))
+    testImplementation(testFixtures(project(":platform-native")))
+    testImplementation(testFixtures(project(":language-jvm")))
+    testImplementation(testFixtures(project(":language-java")))
+    testImplementation(testFixtures(project(":language-groovy")))
+    testImplementation(testFixtures(project(":diagnostics")))
+
+    testFixturesImplementation(testFixtures(project(":core")))
+    testFixturesImplementation(project(":base-services-groovy"))
+    testFixturesImplementation(project(":file-collections"))
+    testFixturesImplementation(project(":language-jvm"))
+    testFixturesImplementation(project(":internal-integ-testing"))
+    testFixturesImplementation(project(":process-services"))
+    testFixturesImplementation(project(":resources"))
+    testFixturesImplementation(libs.guava)
+
+    testRuntimeOnly(project(":distributions-core")) {
+        because("ProjectBuilder tests load services from a Gradle distribution.")
+    }
+    integTestDistributionRuntimeOnly(project(":distributions-jvm"))
 }
 
-
-gradlebuildJava {
-    moduleType = ModuleType.CORE
+strictCompile {
+    ignoreRawTypes() // raw types used in public API
+    ignoreDeprecations() // uses deprecated software model types
 }
 
-val wrapperJarDir = file("$buildDir/generated-resources/wrapper-jar")
-evaluationDependsOn(":wrapper")
-val wrapperJar by tasks.registering(Copy::class) {
-    from(project(":wrapper").tasks.named("executableJar"))
-    into(wrapperJarDir)
-}
-sourceSets.main {
-    output.dir(wrapperJarDir, "builtBy" to wrapperJar)
+classycle {
+    excludePatterns.set(listOf("org/gradle/**"))
 }
 
 testFilesCleanup {
     policy.set(WhenNotEmpty.REPORT)
 }
+
+integrationTestUsesSampleDir("subprojects/plugins/src/main")

@@ -13,24 +13,18 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import org.gradle.gradlebuild.unittestandcompile.ModuleType
-
 plugins {
-    `java-library`
+    id("gradlebuild.distribution.api-java")
 }
 
 dependencies {
-    implementation(project(":baseServices"))
+    implementation(project(":base-services"))
     implementation(project(":messaging"))
-    implementation(project(":platformJvm"))
-    implementation(project(":languageJava"))
-    implementation(project(":testingBase"))
-    implementation(project(":testingJvm"))
+    implementation(project(":platform-jvm"))
+    implementation(project(":language-java"))
+    implementation(project(":testing-base"))
+    implementation(project(":testing-jvm"))
 
-    implementation(library("junit"))
-    implementation(library("junit_platform"))
-}
-
-gradlebuildJava {
-    moduleType = ModuleType.CORE
+    implementation(libs.junit)
+    implementation(libs.junitPlatform)
 }

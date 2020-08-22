@@ -16,22 +16,29 @@
 
 package org.gradle.smoketests
 
-import org.gradle.integtests.fixtures.ToBeFixedForInstantExecution
+import org.gradle.integtests.fixtures.UnsupportedWithConfigurationCache
 import org.gradle.integtests.fixtures.android.AndroidHome
 import org.gradle.testkit.runner.BuildResult
-import org.gradle.util.GradleVersion
 import org.gradle.testkit.runner.GradleRunner
-import org.gradle.util.Requires
+import org.gradle.util.GradleVersion
 import spock.lang.Unroll
 
 import static org.gradle.testkit.runner.TaskOutcome.SUCCESS
-import static org.gradle.util.TestPrecondition.KOTLIN_SCRIPT
+import static org.gradle.testkit.runner.TaskOutcome.UP_TO_DATE
 
 class KotlinPluginSmokeTest extends AbstractSmokeTest {
 
+    private static final String NO_CONFIGURATION_CACHE_ITERATION_MATCHER = ".*kotlin=1\\.3\\.[2-6].*"
+
+    // TODO:configuration-cache remove once fixed upstream
+    @Override
+    protected int maxConfigurationCacheProblems() {
+        return 200
+    }
+
     @Unroll
-    @ToBeFixedForInstantExecution
-    def 'kotlin #version plugin, workers=#workers'() {
+    @UnsupportedWithConfigurationCache(iterationMatchers = NO_CONFIGURATION_CACHE_ITERATION_MATCHER)
+    def 'kotlin jvm (kotlin=#version, workers=#workers)'() {
         given:
         useSample("kotlin-example")
         replaceVariablesInBuildFile(kotlinVersion: version)
@@ -41,10 +48,18 @@ class KotlinPluginSmokeTest extends AbstractSmokeTest {
 
         then:
         result.task(':compileKotlin').outcome == SUCCESS
+        assert result.output.contains("Hello world!")
 
         if (version == TestedVersions.kotlin.latest()) {
             expectNoDeprecationWarnings(result)
         }
+
+        when:
+        result = build(workers, 'run')
+
+        then:
+        result.task(':compileKotlin').outcome == UP_TO_DATE
+        assert result.output.contains("Hello world!")
 
         where:
         [version, workers] << [
@@ -54,8 +69,8 @@ class KotlinPluginSmokeTest extends AbstractSmokeTest {
     }
 
     @Unroll
-    @ToBeFixedForInstantExecution
-    def '#sampleName kotlin #kotlinPluginVersion android #androidPluginVersion plugins, workers=#workers'() {
+    @UnsupportedWithConfigurationCache(iterationMatchers = [NO_CONFIGURATION_CACHE_ITERATION_MATCHER, AGP_3_ITERATION_MATCHER, AGP_4_0_ITERATION_MATCHER])
+    def "kotlin android on sample '#sampleName' (kotlin=#kotlinPluginVersion, agp=#androidPluginVersion, workers=#workers)"() {
         given:
         AndroidHome.assertIsSet()
         useSample(sampleName)
@@ -79,16 +94,17 @@ class KotlinPluginSmokeTest extends AbstractSmokeTest {
 
         if (kotlinPluginVersion == TestedVersions.kotlin.latest()
             && androidPluginVersion == TestedVersions.androidGradle.latest()) {
-            expectNoDeprecationWarnings(result)
+            // TODO: re-enable once the Kotlin plugin fixes how it extends configurations
+            // expectNoDeprecationWarnings(result)
         }
 
         where:
 // To run a specific combination, set the values here, uncomment the following four lines
 //  and comment out the lines coming after
-//        kotlinPluginVersion = '1.3.61'
-//        androidPluginVersion = '3.5.1'
+//        kotlinPluginVersion = TestedVersions.kotlin.versions.last()
+//        androidPluginVersion = TestedVersions.androidGradle.versions.last()
 //        workers = false
-//        sampleName = 'android-kotlin-example-kotlin-dsl'
+//        sampleName = 'android-kotlin-example'
 
         [kotlinPluginVersion, androidPluginVersion, workers, sampleName] << [
             TestedVersions.kotlin.versions,
@@ -99,9 +115,8 @@ class KotlinPluginSmokeTest extends AbstractSmokeTest {
     }
 
     @Unroll
-    @Requires(KOTLIN_SCRIPT)
-    @ToBeFixedForInstantExecution
-    def 'kotlin js #version plugin, workers=#workers'() {
+    @UnsupportedWithConfigurationCache(iterationMatchers = NO_CONFIGURATION_CACHE_ITERATION_MATCHER)
+    def 'kotlin javascript (kotlin=#version, workers=#workers)'() {
         given:
         useSample("kotlin-js-sample")
         withKotlinBuildFile()
@@ -129,9 +144,8 @@ class KotlinPluginSmokeTest extends AbstractSmokeTest {
     }
 
     @Unroll
-    @Requires(KOTLIN_SCRIPT)
-    @ToBeFixedForInstantExecution
-    def 'kotlin #kotlinVersion and groovy plugins combined'() {
+    @UnsupportedWithConfigurationCache(iterationMatchers = NO_CONFIGURATION_CACHE_ITERATION_MATCHER)
+    def 'kotlin jvm and groovy plugins combined (kotlin=#kotlinVersion)'() {
         given:
         buildFile << """
             buildscript {
@@ -161,8 +175,8 @@ class KotlinPluginSmokeTest extends AbstractSmokeTest {
             }
         """
         file("src/main/groovy/Groovy.groovy") << "class Groovy { }"
-        file("src/main/kotlin/Kotlin.kt")     << "class Kotlin { val groovy = Groovy() }"
-        file("src/main/java/Java.java")       << "class Java { private Kotlin kotlin = new Kotlin(); }" // dependency to compileJava->compileKotlin is added by Kotlin plugin
+        file("src/main/kotlin/Kotlin.kt") << "class Kotlin { val groovy = Groovy() }"
+        file("src/main/java/Java.java") << "class Java { private Kotlin kotlin = new Kotlin(); }" // dependency to compileJava->compileKotlin is added by Kotlin plugin
 
         when:
         def result = build(false, 'compileJava')

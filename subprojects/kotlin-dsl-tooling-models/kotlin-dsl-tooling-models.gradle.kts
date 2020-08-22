@@ -13,20 +13,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import org.gradle.gradlebuild.unittestandcompile.ModuleType
-
 plugins {
-    `java-library`
-    gradlebuild.classycle
-    gradlebuild.`strict-compile`
+    id("gradlebuild.distribution.api-kotlin")
 }
 
 description = "Kotlin DSL Tooling Models for IDEs"
 
-gradlebuildJava {
-    moduleType = ModuleType.CORE
-}
-
 dependencies {
-    api(project(":baseAnnotations"))
+    api(project(":base-annotations"))
 }

@@ -20,10 +20,10 @@ import org.gradle.api.JavaVersion
 import org.gradle.integtests.fixtures.ContextualMultiVersionTest
 import org.gradle.integtests.fixtures.MultiVersionSpecRunner
 import org.gradle.integtests.fixtures.TargetCoverage
+import org.gradle.integtests.fixtures.ToBeFixedForConfigurationCache
 import org.gradle.integtests.fixtures.daemon.DaemonIntegrationSpec
 import org.gradle.integtests.fixtures.daemon.JavaGarbageCollector
 import org.gradle.launcher.daemon.server.health.DaemonMemoryStatus
-import org.gradle.util.TestPrecondition
 import org.junit.experimental.categories.Category
 import org.junit.runner.RunWith
 
@@ -74,6 +74,7 @@ class GarbageCollectionMonitoringIntegrationTest extends DaemonIntegrationSpec {
         daemons.daemon.log.contains(DAEMON_STOPPING_IMMEDIATELY_MESSAGE)
     }
 
+    @ToBeFixedForConfigurationCache(because = "Gradle.buildFinished")
     def "expires daemon when heap leaks while daemon is idle"() {
         def initial = 256
         def max = 512
@@ -257,9 +258,7 @@ class GarbageCollectionMonitoringIntegrationTest extends DaemonIntegrationSpec {
     }
 
     static List<GarbageCollectorUnderTest> getGarbageCollectors() {
-        if (TestPrecondition.JDK_IBM.fulfilled) {
-            return [new GarbageCollectorUnderTest(JavaGarbageCollector.IBM_ALL, GarbageCollectorMonitoringStrategy.IBM_ALL)]
-        } else if (JavaVersion.current().isCompatibleWith(JavaVersion.VERSION_14)) {
+        if (JavaVersion.current().isCompatibleWith(JavaVersion.VERSION_14)) {
             return [
                 new GarbageCollectorUnderTest(JavaGarbageCollector.ORACLE_SERIAL9, GarbageCollectorMonitoringStrategy.ORACLE_SERIAL),
                 new GarbageCollectorUnderTest(JavaGarbageCollector.ORACLE_G1, GarbageCollectorMonitoringStrategy.ORACLE_G1)

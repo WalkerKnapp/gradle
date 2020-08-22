@@ -1,17 +1,12 @@
-import org.gradle.gradlebuild.unittestandcompile.ModuleType
-
 plugins {
-    `java-library`
-    gradlebuild.classycle
+    id("gradlebuild.distribution.api-java")
 }
+
+gradlebuildJava.usedForStartup()
 
 dependencies {
-    implementation(project(":baseServices"))
+    implementation(project(":base-services"))
     implementation(project(":core"))
-    implementation(project(":coreApi"))
+    implementation(project(":core-api"))
     implementation(project(":logging"))
-}
-
-gradlebuildJava {
-    moduleType = ModuleType.STARTUP
 }

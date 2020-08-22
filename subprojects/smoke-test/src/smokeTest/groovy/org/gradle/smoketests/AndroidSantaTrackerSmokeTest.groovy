@@ -16,7 +16,7 @@
 
 package org.gradle.smoketests
 
-import org.gradle.integtests.fixtures.UnsupportedWithInstantExecution
+import org.gradle.integtests.fixtures.UnsupportedWithConfigurationCache
 import org.gradle.profiler.Phase
 import org.gradle.profiler.ScenarioContext
 import org.gradle.profiler.mutations.ApplyNonAbiChangeToJavaSourceFileMutator
@@ -26,21 +26,20 @@ import org.gradle.util.TestPrecondition
 import spock.lang.Unroll
 
 import static org.gradle.testkit.runner.TaskOutcome.SUCCESS
-import static org.hamcrest.CoreMatchers.equalTo
-import static org.hamcrest.CoreMatchers.not
-import static org.junit.Assume.assumeThat
 
 
 @Requires(TestPrecondition.JDK11_OR_EARLIER)
 class AndroidSantaTrackerSmokeTest extends AbstractAndroidSantaTrackerSmokeTest {
 
-    @Unroll
-    @UnsupportedWithInstantExecution(iterationMatchers = [AGP_3_ITERATION_MATCHER, AGP_4_0_ITERATION_MATCHER])
-    def "check deprecation warnings produced by building Santa Tracker Java (agp=#agpVersion)"() {
+    // TODO:configuration-cache remove once fixed upstream
+    @Override
+    protected int maxConfigurationCacheProblems() {
+        return 100
+    }
 
-        // Skip versions broken for this test
-        // https://issuetracker.google.com/issues/150438232
-        assumeThat(agpVersion, not(equalTo("4.1.0-alpha01")))
+    @Unroll
+    @UnsupportedWithConfigurationCache(iterationMatchers = [AGP_3_ITERATION_MATCHER, AGP_4_0_ITERATION_MATCHER])
+    def "check deprecation warnings produced by building Santa Tracker Java (agp=#agpVersion)"() {
 
         given:
         def checkoutDir = temporaryFolder.createDir("checkout")
@@ -59,19 +58,15 @@ class AndroidSantaTrackerSmokeTest extends AbstractAndroidSantaTrackerSmokeTest 
         } else {
             expectNoDeprecationWarnings(result)
         }
-        assertInstantExecutionStateStored()
+        assertConfigurationCacheStateStored()
 
         where:
         agpVersion << TESTED_AGP_VERSIONS
     }
 
     @Unroll
-    @UnsupportedWithInstantExecution(iterationMatchers = [AGP_3_ITERATION_MATCHER, AGP_4_0_ITERATION_MATCHER])
+    @UnsupportedWithConfigurationCache(iterationMatchers = [AGP_3_ITERATION_MATCHER, AGP_4_0_ITERATION_MATCHER])
     def "incremental Java compilation works for Santa Tracker Java (agp=#agpVersion)"() {
-
-        // Skip versions broken for this test
-        // https://issuetracker.google.com/issues/150438232
-        assumeThat(agpVersion, not(equalTo("4.1.0-alpha01")))
 
         given:
         def checkoutDir = temporaryFolder.createDir("checkout")
@@ -90,7 +85,7 @@ class AndroidSantaTrackerSmokeTest extends AbstractAndroidSantaTrackerSmokeTest 
 
         then:
         result.task(":santa-tracker:compileDevelopmentDebugJavaWithJavac").outcome == SUCCESS
-        assertInstantExecutionStateStored()
+        assertConfigurationCacheStateStored()
 
         when:
         nonAbiChangeMutator.beforeBuild(buildContext)
@@ -99,7 +94,7 @@ class AndroidSantaTrackerSmokeTest extends AbstractAndroidSantaTrackerSmokeTest 
 
         then:
         result.task(":santa-tracker:compileDevelopmentDebugJavaWithJavac").outcome == SUCCESS
-        assertInstantExecutionStateLoaded()
+        assertConfigurationCacheStateLoaded()
         md5After != md5Before
 
         where:

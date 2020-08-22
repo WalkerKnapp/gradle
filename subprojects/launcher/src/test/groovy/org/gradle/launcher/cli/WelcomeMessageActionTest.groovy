@@ -18,11 +18,9 @@ package org.gradle.launcher.cli
 
 import com.google.common.base.Function
 import org.gradle.api.Action
-import org.gradle.initialization.BuildLayoutParameters
-import org.gradle.internal.logging.slf4j.OutputEventListenerBackedLogger
-import org.gradle.internal.logging.slf4j.OutputEventListenerBackedLoggerContext
-import org.gradle.internal.time.MockClock
+import org.gradle.internal.logging.ToStringLogger
 import org.gradle.launcher.bootstrap.ExecutionListener
+import org.gradle.launcher.configuration.BuildLayoutResult
 import org.gradle.test.fixtures.file.TestFile
 import org.gradle.util.GradleVersion
 import org.gradle.util.SetSystemProperties
@@ -41,7 +39,7 @@ class WelcomeMessageActionTest extends Specification {
     @Rule
     public final TemporaryFolder temporaryFolder = new TemporaryFolder()
 
-    BuildLayoutParameters buildLayoutParameters
+    BuildLayoutResult buildLayout
     File gradleUserHomeDir
     ToStringLogger log
     Action<ExecutionListener> delegateAction
@@ -49,7 +47,7 @@ class WelcomeMessageActionTest extends Specification {
 
     def setup() {
         gradleUserHomeDir = temporaryFolder.root
-        buildLayoutParameters = Mock(BuildLayoutParameters) {
+        buildLayout = Mock(BuildLayoutResult) {
             getGradleUserHomeDir() >> gradleUserHomeDir
         }
         log = new ToStringLogger()
@@ -57,8 +55,8 @@ class WelcomeMessageActionTest extends Specification {
         listener = Mock()
     }
 
-    private WelcomeMessageAction createWelcomeMessage(GradleVersion gradleVersion=GradleVersion.current(), String welcomeMessage) {
-        return new WelcomeMessageAction(log, buildLayoutParameters, gradleVersion, { welcomeMessage == null ? null : new ByteArrayInputStream(welcomeMessage.bytes) } as Function, delegateAction)
+    private WelcomeMessageAction createWelcomeMessage(GradleVersion gradleVersion = GradleVersion.current(), String welcomeMessage) {
+        return new WelcomeMessageAction(log, buildLayout, gradleVersion, { welcomeMessage == null ? null : new ByteArrayInputStream(welcomeMessage.bytes) } as Function, delegateAction)
     }
 
     def "prints highlights when file exists and contains visible content"() {
@@ -119,7 +117,7 @@ For more details see https://docs.gradle.org/42.0/release-notes.html''')
                 }
             }
         }
-        def action = new WelcomeMessageAction(log, buildLayoutParameters, GradleVersion.version("42.0"), inputStreamProvider, delegateAction)
+        def action = new WelcomeMessageAction(log, buildLayout, GradleVersion.version("42.0"), inputStreamProvider, delegateAction)
 
         when:
         action.execute(listener)
@@ -185,7 +183,7 @@ For more details see https://docs.gradle.org/42.0/release-notes.html''')
     def "does not print anything if system property is set to false"() {
         given:
         System.setProperty(WELCOME_MESSAGE_ENABLED_SYSTEM_PROPERTY, "false")
-        def action = createWelcomeMessage( null)
+        def action = createWelcomeMessage(null)
 
         when:
         action.execute(listener)
@@ -197,25 +195,5 @@ For more details see https://docs.gradle.org/42.0/release-notes.html''')
 
     private TestFile markerFile(String version) {
         new TestFile(gradleUserHomeDir, "notifications", version, "release-features.rendered")
-    }
-
-    private static class ToStringLogger extends OutputEventListenerBackedLogger {
-
-        private final StringBuilder log = new StringBuilder()
-
-        ToStringLogger() {
-            super("ToStringLogger", new OutputEventListenerBackedLoggerContext(new MockClock()), new MockClock())
-        }
-
-        @Override
-        void lifecycle(String message) {
-            log.append(message)
-            log.append('\n')
-        }
-
-        @Override
-        String toString() {
-            log.toString()
-        }
     }
 }

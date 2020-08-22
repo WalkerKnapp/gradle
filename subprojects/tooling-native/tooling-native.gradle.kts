@@ -13,35 +13,28 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import org.gradle.gradlebuild.unittestandcompile.ModuleType
-
 plugins {
-    `java-library`
-    gradlebuild.`strict-compile`
-    gradlebuild.classycle
+    id("gradlebuild.distribution.api-java")
 }
 
 dependencies {
-    implementation(project(":baseServices"))
-    implementation(project(":coreApi"))
-    implementation(project(":modelCore"))
+    implementation(project(":base-services"))
+    implementation(project(":core-api"))
+    implementation(project(":model-core"))
     implementation(project(":core"))
-    implementation(project(":fileCollections"))
-    implementation(project(":platformBase"))
-    implementation(project(":platformNative"))
-    implementation(project(":languageNative"))
-    implementation(project(":testingNative"))
-    implementation(project(":toolingApi"))
-    implementation(project(":ide")) // To pick up various builders (which should live somewhere else)
+    implementation(project(":file-collections"))
+    implementation(project(":platform-base"))
+    implementation(project(":platform-native"))
+    implementation(project(":language-native"))
+    implementation(project(":testing-native"))
+    implementation(project(":tooling-api"))
+    implementation(project(":ide")) {
+        because("To pick up various builders (which should live somewhere else)")
+    }
 
-    implementation(library("guava"))
+    implementation(libs.guava)
 
-    testImplementation(testFixtures(project(":platformNative")))
+    testImplementation(testFixtures(project(":platform-native")))
 
-    testRuntimeOnly(project(":runtimeApiInfo"))
+    crossVersionTestDistributionRuntimeOnly(project(":distributions-native"))
 }
-
-gradlebuildJava {
-    moduleType = ModuleType.CORE
-}
-

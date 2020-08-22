@@ -14,41 +14,32 @@
  * limitations under the License.
  */
 
-import org.gradle.gradlebuild.testing.integrationtests.cleanup.WhenNotEmpty
-import org.gradle.gradlebuild.unittestandcompile.ModuleType
-
+import gradlebuild.cleanup.WhenNotEmpty
 plugins {
-    `java-library`
+    id("gradlebuild.distribution.api-java")
 }
 
 dependencies {
-    implementation(project(":baseServices"))
+    implementation(project(":base-services"))
     implementation(project(":messaging"))
     implementation(project(":logging"))
-    implementation(project(":coreApi"))
-    implementation(project(":modelCore"))
+    implementation(project(":core-api"))
+    implementation(project(":model-core"))
     implementation(project(":core"))
-    implementation(project(":dependencyManagement"))
-    implementation(project(":pluginUse"))
+    implementation(project(":dependency-management"))
+    implementation(project(":plugin-use"))
 
-    implementation(library("slf4j_api"))
-    implementation(library("guava"))
+    implementation(libs.slf4jApi)
+    implementation(libs.guava)
 
-    testImplementation(testFixtures(project(":dependencyManagement")))
+    testImplementation(testFixtures(project(":dependency-management")))
 
-    integTestImplementation(project(":buildOption"))
+    integTestImplementation(project(":build-option"))
     integTestImplementation(project(":launcher"))
 
-    integTestRuntimeOnly(project(":toolingApiBuilders"))
-    integTestRuntimeOnly(project(":ide"))
-    integTestRuntimeOnly(project(":pluginDevelopment"))
-    integTestRuntimeOnly(project(":testKit"))
-
-    integTestRuntimeOnly(project(":runtimeApiInfo"))
-}
-
-gradlebuildJava {
-    moduleType = ModuleType.CORE
+    integTestDistributionRuntimeOnly(project(":distributions-basics")) {
+        because("Requires test-kit: 'java-gradle-plugin' is used in some integration tests which always adds the test-kit dependency.")
+    }
 }
 
 testFilesCleanup {

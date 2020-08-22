@@ -1,57 +1,57 @@
-import org.gradle.gradlebuild.unittestandcompile.ModuleType
+import gradlebuild.basics.googleApisJs
 
 plugins {
-    `java-library`
+    id("gradlebuild.distribution.api-java")
 }
 
-configurations {
-    create("reports")
-}
+val implementationResources: Configuration by configurations.creating
 
 repositories {
     googleApisJs()
 }
 
 dependencies {
-    implementation(project(":baseServices"))
+    implementation(project(":base-services"))
     implementation(project(":logging"))
-    implementation(project(":fileCollections"))
-    implementation(project(":coreApi"))
-    implementation(project(":modelCore"))
+    implementation(project(":file-collections"))
+    implementation(project(":core-api"))
+    implementation(project(":model-core"))
     implementation(project(":core"))
 
-    implementation(library("groovy"))
-    implementation(library("guava"))
-    implementation(library("inject"))
-    implementation(library("jatl"))
+    implementation(libs.groovy)
+    implementation(libs.guava)
+    implementation(libs.inject)
+    implementation(libs.jatl)
 
-    testImplementation(project(":processServices"))
-    testImplementation(project(":baseServicesGroovy"))
-    testImplementation(testLibrary("jsoup"))
+    implementationResources("jquery:jquery.min:3.5.1@js")
+
+    testImplementation(project(":process-services"))
+    testImplementation(project(":base-services-groovy"))
+    testImplementation(libs.jsoup)
     testImplementation(testFixtures(project(":core")))
 
-    testRuntimeOnly(project(":runtimeApiInfo"))
-    testRuntimeOnly(project(":workers"))
-    testRuntimeOnly(project(":dependencyManagement"))
-
-    integTestRuntimeOnly(project(":codeQuality"))
-    integTestRuntimeOnly(project(":jacoco"))
-
-    integTestRuntimeOnly(project(":testingJunitPlatform"))
-
-    add("reports", "jquery:jquery.min:1.11.0@js")
+    testRuntimeOnly(project(":distributions-core")) {
+        because("ProjectBuilder tests load services from a Gradle distribution.")
+    }
+    integTestDistributionRuntimeOnly(project(":distributions-jvm")) {
+        because("BuildDashboard has specific support for JVM plugins (CodeNarc, JaCoCo)")
+    }
 }
 
-gradlebuildJava {
-    moduleType = ModuleType.CORE
+strictCompile {
+    ignoreRawTypes() // raw types used in public API
+    ignoreParameterizedVarargType() // [unchecked] Possible heap pollution from parameterized vararg type: GenerateBuildDashboard.aggregate()
 }
 
-val generatedResourcesDir = gradlebuildJava.generatedResourcesDir
-
-val reportResources by tasks.registering(Copy::class) {
-    from(configurations["reports"])
-    into("$generatedResourcesDir/org/gradle/reporting")
+classycle {
+    excludePatterns.set(listOf("org/gradle/api/reporting/internal/**"))
 }
+
+val reportResources = tasks.register<Copy>("reportResources") {
+    from(implementationResources)
+    into(layout.buildDirectory.file("generated-resources/report-resources/org/gradle/reporting"))
+}
+
 sourceSets.main {
-    output.dir(generatedResourcesDir, "builtBy" to reportResources)
+    output.dir(reportResources.map { it.destinationDir.parentFile.parentFile.parentFile })
 }

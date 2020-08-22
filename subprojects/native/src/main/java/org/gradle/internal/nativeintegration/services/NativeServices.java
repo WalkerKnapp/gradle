@@ -22,14 +22,17 @@ import net.rubygrapefruit.platform.Process;
 import net.rubygrapefruit.platform.ProcessLauncher;
 import net.rubygrapefruit.platform.SystemInfo;
 import net.rubygrapefruit.platform.WindowsRegistry;
+import net.rubygrapefruit.platform.file.FileEvents;
 import net.rubygrapefruit.platform.file.Files;
 import net.rubygrapefruit.platform.file.PosixFiles;
 import net.rubygrapefruit.platform.internal.DefaultProcessLauncher;
 import net.rubygrapefruit.platform.memory.Memory;
 import net.rubygrapefruit.platform.terminal.Terminals;
 import org.gradle.api.JavaVersion;
+import org.gradle.internal.Cast;
 import org.gradle.internal.SystemProperties;
 import org.gradle.internal.jvm.Jvm;
+import org.gradle.internal.nativeintegration.NativeCapabilities;
 import org.gradle.internal.nativeintegration.ProcessEnvironment;
 import org.gradle.internal.nativeintegration.console.ConsoleDetector;
 import org.gradle.internal.nativeintegration.console.FallbackConsoleDetector;
@@ -67,6 +70,7 @@ import static org.gradle.internal.nativeintegration.filesystem.services.JdkFallb
 public class NativeServices extends DefaultServiceRegistry implements ServiceRegistry {
     private static final Logger LOGGER = LoggerFactory.getLogger(NativeServices.class);
     private static boolean useNativeIntegrations;
+    private static boolean useFileSystemWatching;
     private static final NativeServices INSTANCE = new NativeServices();
     private static final JansiBootPathConfigurer JANSI_BOOT_PATH_CONFIGURER = new JansiBootPathConfigurer();
     private static boolean initialized;
@@ -82,8 +86,10 @@ public class NativeServices extends DefaultServiceRegistry implements ServiceReg
 
     /**
      * Initializes the native services to use the given user home directory to store native libs and other resources. Does nothing if already initialized.
+     *
+     * @param initializeAdditionalNativeLibraries Whether to initialize additional native libraries like jansi and file-events.
      */
-    public static synchronized void initialize(File userHomeDir, boolean initializeJansi) {
+    public static synchronized void initialize(File userHomeDir, boolean initializeAdditionalNativeLibraries) {
         try {
             if (!initialized) {
                 useNativeIntegrations = "true".equalsIgnoreCase(System.getProperty("org.gradle.native", "true"));
@@ -107,7 +113,16 @@ public class NativeServices extends DefaultServiceRegistry implements ServiceReg
                             throw ex;
                         }
                     }
-                    if (initializeJansi) {
+                    if (initializeAdditionalNativeLibraries) {
+                        if (useNativeIntegrations) {
+                            useFileSystemWatching = true;
+                            try {
+                                FileEvents.init(nativeBaseDir);
+                            } catch (NativeIntegrationUnavailableException ex) {
+                                LOGGER.info("Native file system watching is not available for this operating system.", ex);
+                                useFileSystemWatching = false;
+                            }
+                        }
                         JANSI_BOOT_PATH_CONFIGURER.configure(nativeBaseDir);
                     }
                     LOGGER.info("Initialized native services in: " + nativeBaseDir);
@@ -270,12 +285,11 @@ public class NativeServices extends DefaultServiceRegistry implements ServiceReg
 
     protected FileMetadataAccessor createFileMetadataAccessor(OperatingSystem operatingSystem) {
         // Based on the benchmark found in org.gradle.internal.nativeintegration.filesystem.FileMetadataAccessorBenchmark
-        // and the results in the PR https://github.com/gradle/gradle/pull/1183
-        // we're using "native platform" for Mac OS and a  mix of File and NIO API for Linux and Windows
-        // Once JDK 9 is out, we need to revisit the choice, because testing for file.exists() should become much
-        // cheaper using the pure NIO implementation.
+        // and the results in the PR https://github.com/gradle/gradle/pull/12966
+        // we're using "native platform" for all OSes if available.
+        // If it isn't available, we fall back to using Java NIO and, if that fails, to using the old `File` APIs.
 
-        if ((operatingSystem.isMacOsX()) && useNativeIntegrations) {
+        if (useNativeIntegrations) {
             try {
                 return new NativePlatformBackedFileMetadataAccessor(net.rubygrapefruit.platform.Native.get(Files.class));
             } catch (NativeIntegrationUnavailableException e) {
@@ -284,14 +298,28 @@ public class NativeServices extends DefaultServiceRegistry implements ServiceReg
         }
 
         if (JavaVersion.current().isJava7Compatible()) {
-            return newInstanceOrFallback("org.gradle.internal.nativeintegration.filesystem.jdk7.Jdk7FileMetadataAccessor", NativeServices.class.getClassLoader(), FallbackFileMetadataAccessor.class);
+            return newInstanceOrFallback("org.gradle.internal.nativeintegration.filesystem.jdk7.NioFileMetadataAccessor", NativeServices.class.getClassLoader(), FallbackFileMetadataAccessor.class);
         }
 
         return new FallbackFileMetadataAccessor();
     }
 
+    protected NativeCapabilities createNativeCapabilities() {
+        return new NativeCapabilities() {
+            @Override
+            public boolean useNativeIntegrations() {
+                return useNativeIntegrations;
+            }
+
+            @Override
+            public boolean useFileSystemWatching() {
+                return useFileSystemWatching;
+            }
+        };
+    }
+
     private <T> T notAvailable(Class<T> type) {
-        return (T) Proxy.newProxyInstance(type.getClassLoader(), new Class[]{type}, new BrokenService(type.getSimpleName()));
+        return Cast.uncheckedNonnullCast(Proxy.newProxyInstance(type.getClassLoader(), new Class<?>[]{type}, new BrokenService(type.getSimpleName())));
     }
 
     private static String format(Throwable throwable) {

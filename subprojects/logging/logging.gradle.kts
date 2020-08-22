@@ -1,46 +1,38 @@
-import org.gradle.gradlebuild.unittestandcompile.ModuleType
-
-/**
- * Logging infrastructure.
- */
 plugins {
-    `java-library`
-    gradlebuild.classycle
+    id("gradlebuild.distribution.api-java")
 }
 
-dependencies {
-    api(library("slf4j_api"))
+description = "Logging infrastructure"
 
-    implementation(project(":baseServices"))
+gradlebuildJava.usedInWorkers()
+
+dependencies {
+    api(libs.slf4jApi)
+
+    implementation(project(":base-services"))
     implementation(project(":messaging"))
     implementation(project(":cli"))
-    implementation(project(":buildOption"))
+    implementation(project(":build-option"))
 
     implementation(project(":native"))
-    implementation(library("jul_to_slf4j"))
-    implementation(library("ant"))
-    implementation(library("commons_lang"))
-    implementation(library("guava"))
-    implementation(library("jansi"))
+    implementation(libs.julToSlf4j)
+    implementation(libs.ant)
+    implementation(libs.commonsLang)
+    implementation(libs.guava)
+    implementation(libs.jansi)
 
-    runtimeOnly(library("log4j_to_slf4j"))
-    runtimeOnly(library("jcl_to_slf4j"))
+    runtimeOnly(libs.log4jToSlf4j)
+    runtimeOnly(libs.jclToSlf4j)
 
     testImplementation(testFixtures(project(":core")))
 
-    integTestImplementation(library("ansi_control_sequence_util"))
+    integTestImplementation(libs.ansiControlSequenceUtil)
 
-    integTestRuntimeOnly(project(":apiMetadata"))
-    integTestRuntimeOnly(project(":runtimeApiInfo"))
-    integTestRuntimeOnly(project(":kotlinDslProviderPlugins"))
-    integTestRuntimeOnly(project(":testingJunitPlatform"))
+    testFixturesImplementation(project(":base-services"))
+    testFixturesImplementation(testFixtures(project(":core")))
+    testFixturesImplementation(libs.slf4jApi)
 
-    testFixturesImplementation(project(":baseServices"))
-    testFixturesImplementation(library("slf4j_api"))
-}
-
-gradlebuildJava {
-    moduleType = ModuleType.WORKER
+    integTestDistributionRuntimeOnly(project(":distributions-core"))
 }
 
 classycle {

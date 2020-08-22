@@ -73,22 +73,18 @@ class PerformanceTestBuildTypeTest {
                 "-s",
                 "--daemon",
                 "",
-                "-I",
-                "\"%teamcity.build.checkoutDir%/gradle/init-scripts/build-scan.init.gradle.kts\"",
                 "-Dorg.gradle.internal.tasks.createops",
                 "-Porg.gradle.performance.buildTypeId=Gradle_Check_IndividualPerformanceScenarioWorkersLinux",
                 "-Porg.gradle.performance.workerTestTaskName=fullPerformanceTest",
                 "-Porg.gradle.performance.coordinatorBuildId=%teamcity.build.id%",
-                "-PgithubToken=%github.ci.oauth.token%",
                 "\"-Dscan.tag.PerformanceTest\"",
-                "--build-cache",
                 "\"-Dgradle.cache.remote.url=%gradle.cache.remote.url%\"",
                 "\"-Dgradle.cache.remote.username=%gradle.cache.remote.username%\"",
                 "\"-Dgradle.cache.remote.password=%gradle.cache.remote.password%\""
         )
 
         assertEquals(
-                (listOf("clean", "distributedPerformanceTests") + expectedRunnerParams).joinToString(" "),
+                (listOf("clean", ":performance:distributedPerformanceTest") + expectedRunnerParams).joinToString(" "),
                 performanceTest.getGradleStep("GRADLE_RUNNER").gradleParams!!.trim()
         )
         assertEquals(BuildStep.ExecutionMode.DEFAULT, performanceTest.getGradleStep("GRADLE_RUNNER").executionMode)

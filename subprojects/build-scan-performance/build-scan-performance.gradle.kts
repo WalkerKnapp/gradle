@@ -1,6 +1,5 @@
-import org.gradle.gradlebuild.unittestandcompile.ModuleType
-import org.gradle.testing.PerformanceTest
-import org.gradle.testing.performance.generator.tasks.JvmProjectGeneratorTask
+import gradlebuild.performance.tasks.PerformanceTest
+import gradlebuild.performance.generator.tasks.JvmProjectGeneratorTask
 
 /*
  * Copyright 2016 the original author or authors.
@@ -18,28 +17,20 @@ import org.gradle.testing.performance.generator.tasks.JvmProjectGeneratorTask
  * limitations under the License.
  */
 plugins {
-    `java-library`
-    gradlebuild.classycle
+    id("gradlebuild.internal.java")
+    id("gradlebuild.performance-test")
 }
 
 dependencies {
-    // so that all Gradle features are available
-    val allTestRuntimeDependencies: DependencySet by rootProject.extra
-    allTestRuntimeDependencies.forEach {
-        performanceTestRuntimeOnly(it)
+    testFixturesApi(project(":internal-performance-testing"))
+    testFixturesApi(libs.commonsIo)
+    testFixturesApi(project(":base-services"))
+    testFixturesImplementation(project(":internal-testing"))
+    testFixturesImplementation(project(":internal-integ-testing"))
+
+    performanceTestDistributionRuntimeOnly(project(":distributions-full")) {
+        because("so that all Gradle features are available")
     }
-
-    testFixturesApi(project(":internalPerformanceTesting"))
-    testFixturesApi(library("commons_io"))
-    testFixturesApi(project(":baseServices"))
-    testFixturesImplementation(project(":internalTesting"))
-    testFixturesImplementation(project(":internalIntegTesting"))
-
-    performanceTestImplementation(project(":internalIntegTesting"))
-}
-
-gradlebuildJava {
-    moduleType = ModuleType.INTERNAL
 }
 
 val generateTemplate = tasks.register<JvmProjectGeneratorTask>("javaProject") {

@@ -17,7 +17,7 @@
 package org.gradle.integtests.resolve.verification
 
 import org.gradle.api.internal.artifacts.ivyservice.CacheLayout
-import org.gradle.integtests.fixtures.ToBeFixedForInstantExecution
+import org.gradle.integtests.fixtures.ToBeFixedForConfigurationCache
 import org.gradle.integtests.fixtures.cache.CachingIntegrationFixture
 import org.gradle.test.fixtures.maven.MavenFileModule
 import org.gradle.test.fixtures.maven.MavenFileRepository
@@ -112,7 +112,7 @@ class DependencyVerificationWritingIntegTest extends AbstractDependencyVerificat
         }
     }
 
-    @ToBeFixedForInstantExecution
+    @ToBeFixedForConfigurationCache
     @Unroll
     def "generates verification file for dependencies downloaded in previous build (stop in between = #stop)"() {
         given:
@@ -391,7 +391,6 @@ class DependencyVerificationWritingIntegTest extends AbstractDependencyVerificat
         hasModules([])
     }
 
-    @ToBeFixedForInstantExecution
     def "writes checksums of plugins using plugins block"() {
         given:
         addPlugin()
@@ -419,7 +418,6 @@ class DependencyVerificationWritingIntegTest extends AbstractDependencyVerificat
         hasModules(["test-plugin:test-plugin.gradle.plugin", "com:myplugin"])
     }
 
-    @ToBeFixedForInstantExecution
     def "writes checksums of plugins using buildscript block"() {
         given:
         addPlugin()
@@ -629,7 +627,7 @@ class DependencyVerificationWritingIntegTest extends AbstractDependencyVerificat
 """
     }
 
-    @ToBeFixedForInstantExecution(because = "composite builds")
+    @ToBeFixedForConfigurationCache(because = "composite builds")
     def "included build dependencies are used when generating the verification file"() {
         given:
         javaLibrary()
@@ -1143,7 +1141,6 @@ class DependencyVerificationWritingIntegTest extends AbstractDependencyVerificat
         }
     }
 
-    @ToBeFixedForInstantExecution
     def "can use --dry-run to write a different file for comparison"() {
         given:
         javaLibrary()
@@ -1245,7 +1242,6 @@ class DependencyVerificationWritingIntegTest extends AbstractDependencyVerificat
 """
     }
 
-    @ToBeFixedForInstantExecution
     def "doesn't write verification metadata for skipped configurations"() {
         javaLibrary()
         uncheckedModule("org", "foo")

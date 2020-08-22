@@ -1,6 +1,4 @@
-import org.gradle.gradlebuild.testing.integrationtests.cleanup.WhenNotEmpty
-import org.gradle.gradlebuild.unittestandcompile.ModuleType
-
+import gradlebuild.cleanup.WhenNotEmpty
 /*
  * Copyright 2012 the original author or authors.
  *
@@ -17,57 +15,56 @@ import org.gradle.gradlebuild.unittestandcompile.ModuleType
  * limitations under the License.
  */
 plugins {
-    `java-library`
+    id("gradlebuild.distribution.api-java")
 }
 
 dependencies {
-    implementation(project(":baseServices"))
+    implementation(project(":base-services"))
     implementation(project(":logging"))
-    implementation(project(":fileCollections"))
-    implementation(project(":coreApi"))
-    implementation(project(":modelCore"))
+    implementation(project(":file-collections"))
+    implementation(project(":core-api"))
+    implementation(project(":model-core"))
     implementation(project(":core"))
     implementation(project(":reporting"))
-    implementation(project(":platformBase"))
+    implementation(project(":platform-base"))
     implementation(project(":snapshots"))
-    implementation(project(":dependencyManagement"))
-    implementation(project(":baseServicesGroovy"))
+    implementation(project(":dependency-management"))
+    implementation(project(":base-services-groovy"))
+    implementation(project(":build-option"))
 
-    implementation(library("slf4j_api"))
-    implementation(library("groovy"))
-    implementation(library("guava"))
-    implementation(library("commons_lang"))
-    implementation(library("inject"))
-    implementation(library("jatl"))
+    implementation(libs.slf4jApi)
+    implementation(libs.groovy)
+    implementation(libs.guava)
+    implementation(libs.commonsLang)
+    implementation(libs.inject)
+    implementation(libs.jatl)
 
-    testImplementation(project(":processServices"))
+    testImplementation(project(":process-services"))
     testImplementation(testFixtures(project(":core")))
-    testImplementation(testFixtures(project(":dependencyManagement")))
+    testImplementation(testFixtures(project(":dependency-management")))
     testImplementation(testFixtures(project(":logging")))
 
-    testRuntimeOnly(project(":runtimeApiInfo"))
-    testRuntimeOnly(project(":kotlinDsl"))
-    testRuntimeOnly(project(":kotlinDslProviderPlugins"))
+    integTestImplementation(libs.jsoup)
+    integTestImplementation(libs.jetty)
 
-    integTestImplementation(testLibrary("jsoup"))
-    integTestImplementation(testLibrary("jetty"))
+    testFixturesApi(testFixtures(project(":platform-native")))
+    testFixturesImplementation(project(":base-services"))
+    testFixturesImplementation(project(":internal-integ-testing"))
+    testFixturesImplementation(libs.guava)
 
-    testFixturesApi(testFixtures(project(":platformNative")))
-    testFixturesImplementation(project(":baseServices"))
-    testFixturesImplementation(project(":internalTesting"))
-    testFixturesImplementation(project(":internalIntegTesting"))
-    testFixturesImplementation(library("guava"))
-
-    // These are only here for 'DiagnosticsComponentReportIntegrationTest.shows details of multiple components'
-    integTestRuntimeOnly(project(":plugins"))
-    integTestRuntimeOnly(project(":platformNative"))
-    integTestRuntimeOnly(project(":languageNative"))
-    integTestRuntimeOnly(project(":kotlinDslToolingBuilders"))
-
+    testRuntimeOnly(project(":distributions-core")) {
+        because("ProjectBuilder tests load services from a Gradle distribution.")
+    }
+    integTestDistributionRuntimeOnly(project(":distributions-full"))  {
+        because("There are integration tests that assert that all the tasks of a full distribution are reported (these should probably move to ':integTests').")
+    }
 }
 
-gradlebuildJava {
-    moduleType = ModuleType.CORE
+classycle {
+    excludePatterns.set(listOf(
+        "org/gradle/api/reporting/model/internal/*",
+        "org/gradle/api/reporting/dependencies/internal/*",
+        "org/gradle/api/plugins/internal/*"))
 }
 
 testFilesCleanup {

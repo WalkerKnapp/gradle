@@ -13,29 +13,23 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import org.gradle.gradlebuild.unittestandcompile.ModuleType
-
 plugins {
-    `java-library`
-    gradlebuild.classycle
-    gradlebuild.`publish-public-libraries`
-    gradlebuild.`strict-compile`
+    id("gradlebuild.distribution.api-java")
+    id("gradlebuild.publish-public-libraries")
 }
 
 description = "Base tools to work with files"
 
+gradlebuildJava.usedInWorkers()
+
 dependencies {
-    implementation(project(":baseAnnotations"))
-    implementation(library("guava")) { version { require(libraryVersion("guava")) } }
-    implementation(library("slf4j_api")) { version { require(libraryVersion("slf4j_api")) } }
+    implementation(project(":base-annotations"))
+    implementation(libs.guava)
+    implementation(libs.slf4jApi)
 
     testImplementation(project(":native"))
-    testImplementation(project(":baseServices")) {
+    testImplementation(project(":base-services")) {
         because("TextUtil is needed")
     }
     testImplementation(testFixtures(project(":native")))
-}
-
-gradlebuildJava {
-    moduleType = ModuleType.WORKER
 }

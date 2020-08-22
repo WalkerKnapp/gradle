@@ -14,124 +14,130 @@
  * limitations under the License.
  */
 
-import accessors.java
-import org.gradle.gradlebuild.testing.integrationtests.cleanup.WhenNotEmpty
-import org.gradle.gradlebuild.unittestandcompile.ModuleType
+import gradlebuild.cleanup.WhenNotEmpty
 
 plugins {
-    `java-library`
+    id("gradlebuild.distribution.implementation-java")
 }
 
 dependencies {
-    implementation(project(":baseServices"))
+    implementation(project(":base-services"))
     implementation(project(":messaging"))
     implementation(project(":native"))
     implementation(project(":logging"))
     implementation(project(":files"))
-    implementation(project(":fileCollections"))
-    implementation(project(":persistentCache"))
-    implementation(project(":coreApi"))
-    implementation(project(":modelCore"))
-    implementation(project(":baseServicesGroovy"))
-    implementation(project(":buildCache"))
+    implementation(project(":file-collections"))
+    implementation(project(":persistent-cache"))
+    implementation(project(":core-api"))
+    implementation(project(":model-core"))
+    implementation(project(":base-services-groovy"))
+    implementation(project(":build-cache"))
     implementation(project(":core"))
     implementation(project(":resources"))
-    implementation(project(":resourcesHttp"))
+    implementation(project(":resources-http"))
     implementation(project(":snapshots"))
     implementation(project(":execution"))
     implementation(project(":security"))
 
-    implementation(library("slf4j_api"))
-    implementation(library("groovy"))
-    implementation(library("asm"))
-    implementation(library("asm_commons"))
-    implementation(library("asm_util"))
-    implementation(library("guava"))
-    implementation(library("commons_lang"))
-    implementation(library("commons_io"))
-    implementation(library("commons_httpclient"))
-    implementation(library("inject"))
-    implementation(library("gson"))
-    implementation(library("ant"))
-    implementation(library("ivy"))
-    implementation(library("maven3"))
+    implementation(libs.slf4jApi)
+    implementation(libs.groovy)
+    implementation(libs.asm)
+    implementation(libs.asmCommons)
+    implementation(libs.asmUtil)
+    implementation(libs.guava)
+    implementation(libs.commonsLang)
+    implementation(libs.commonsIo)
+    implementation(libs.commonsHttpclient)
+    implementation(libs.inject)
+    implementation(libs.gson)
+    implementation(libs.ant)
+    implementation(libs.ivy)
+    implementation(libs.maven3)
 
-    runtimeOnly(library("bouncycastle_provider"))
-    runtimeOnly(project(":installationBeacon"))
-    runtimeOnly(project(":compositeBuilds"))
-    runtimeOnly(project(":versionControl"))
-
-    testImplementation(project(":processServices"))
+    testImplementation(project(":process-services"))
     testImplementation(project(":diagnostics"))
-    testImplementation(project(":buildCachePackaging"))
-    testImplementation(library("nekohtml"))
+    testImplementation(project(":build-cache-packaging"))
+    testImplementation(libs.nekohtml)
     testImplementation(testFixtures(project(":core")))
     testImplementation(testFixtures(project(":messaging")))
-    testImplementation(testFixtures(project(":coreApi")))
-    testImplementation(testFixtures(project(":versionControl")))
-    testImplementation(testFixtures(project(":resourcesHttp")))
-    testImplementation(testFixtures(project(":baseServices")))
+    testImplementation(testFixtures(project(":core-api")))
+    testImplementation(testFixtures(project(":version-control")))
+    testImplementation(testFixtures(project(":resources-http")))
+    testImplementation(testFixtures(project(":base-services")))
     testImplementation(testFixtures(project(":snapshots")))
     testImplementation(testFixtures(project(":execution")))
 
-    testRuntimeOnly(project(":runtimeApiInfo"))
-
-    integTestImplementation(project(":buildOption"))
-    integTestImplementation(library("jansi"))
-    integTestImplementation(library("ansi_control_sequence_util"))
-    integTestImplementation(testLibrary("jetty")) {
+    integTestImplementation(project(":build-option"))
+    integTestImplementation(libs.jansi)
+    integTestImplementation(libs.ansiControlSequenceUtil)
+    integTestImplementation(libs.jetty) {
         because("tests use HttpServlet directly")
     }
     integTestImplementation(testFixtures(project(":security")))
-    integTestRuntimeOnly(project(":ivy"))
-    integTestRuntimeOnly(project(":maven"))
-    integTestRuntimeOnly(project(":resourcesS3"))
-    integTestRuntimeOnly(project(":resourcesSftp"))
-    integTestRuntimeOnly(project(":testKit"))
 
-    integTestRuntimeOnly(project(":apiMetadata"))
-    integTestRuntimeOnly(project(":kotlinDsl"))
-    integTestRuntimeOnly(project(":kotlinDslProviderPlugins"))
-    integTestRuntimeOnly(project(":pluginDevelopment"))
-
-    testFixturesApi(project(":baseServices")) {
+    testFixturesApi(project(":base-services")) {
         because("Test fixtures export the Action class")
     }
-    testFixturesApi(project(":persistentCache")) {
+    testFixturesApi(project(":persistent-cache")) {
         because("Test fixtures export the CacheAccess class")
     }
 
-    testFixturesApi(testLibrary("jetty"))
+    testFixturesApi(libs.jetty)
     testFixturesImplementation(project(":core"))
     testFixturesImplementation(testFixtures(project(":core")))
-    testFixturesImplementation(testFixtures(project(":resourcesHttp")))
-    testFixturesImplementation(project(":coreApi"))
+    testFixturesImplementation(testFixtures(project(":resources-http")))
+    testFixturesImplementation(project(":core-api"))
     testFixturesImplementation(project(":messaging"))
-    testFixturesImplementation(project(":internalTesting"))
-    testFixturesImplementation(project(":internalIntegTesting"))
-    testFixturesImplementation(library("slf4j_api"))
-    testFixturesImplementation(library("inject"))
-    testFixturesImplementation(library("guava")) {
+    testFixturesImplementation(project(":internal-integ-testing"))
+    testFixturesImplementation(libs.slf4jApi)
+    testFixturesImplementation(libs.inject)
+    testFixturesImplementation(libs.guava) {
         because("Groovy compiler reflects on private field on TextUtil")
     }
-    testFixturesImplementation(library("bouncycastle_pgp"))
-    testFixturesApi(testLibrary("testcontainers_spock")) {
+    testFixturesImplementation(libs.bouncycastlePgp)
+    testFixturesApi(libs.testcontainersSpock) {
         because("API because of Groovy compiler bug leaking internals")
     }
-    testFixturesImplementation(project(":jvmServices")) {
+    testFixturesImplementation(project(":jvm-services")) {
         because("Groovy compiler bug leaks internals")
     }
-    crossVersionTestRuntimeOnly(project(":maven"))
+
+    testRuntimeOnly(project(":distributions-core")) {
+        because("ProjectBuilder tests load services from a Gradle distribution.")
+    }
+    integTestDistributionRuntimeOnly(project(":distributions-basics"))
+    crossVersionTestDistributionRuntimeOnly(project(":distributions-core"))
 }
 
-gradlebuildJava {
-    moduleType = ModuleType.CORE
+classycle {
+    excludePatterns.set(listOf("org/gradle/**"))
 }
 
 testFilesCleanup {
     policy.set(WhenNotEmpty.REPORT)
 }
 
-tasks.classpathManifest {
-    additionalProjects.add(":runtimeApiInfo")
+tasks.clean {
+    val testFiles = layout.buildDirectory.dir("tmp/test files")
+    doFirst {
+        // On daemon crash, read-only cache tests can leave read-only files around.
+        // clean now takes care of those files as well
+        testFiles.get().asFileTree.matching {
+            include("**/read-only-cache/**")
+        }.visit { this.file.setWritable(true) }
+    }
 }
+
+afterEvaluate {
+    // This is a workaround for the validate plugins task trying to inspect classes which
+    // have changed but are NOT tasks
+    tasks.withType<ValidatePlugins>().configureEach {
+        val main = sourceSets.main.get()
+        classes.setFrom(main.output.classesDirs.asFileTree.filter { !it.isInternal(main) })
+    }
+}
+
+fun File.isInternal(sourceSet: SourceSet) = isInternal(sourceSet.output.classesDirs.files)
+
+fun File.isInternal(roots: Set<File>): Boolean = name == "internal" ||
+    !roots.contains(parentFile) && parentFile.isInternal(roots)

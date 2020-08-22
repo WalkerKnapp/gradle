@@ -18,6 +18,7 @@ package org.gradle.api.internal.file;
 
 import org.gradle.api.Project;
 import org.gradle.api.Task;
+import org.gradle.api.Transformer;
 import org.gradle.api.file.ConfigurableFileCollection;
 import org.gradle.api.file.Directory;
 import org.gradle.api.file.DirectoryProperty;
@@ -25,11 +26,13 @@ import org.gradle.api.file.FileCollection;
 import org.gradle.api.file.ProjectLayout;
 import org.gradle.api.file.RegularFile;
 import org.gradle.api.internal.file.collections.MinimalFileSet;
-import org.gradle.api.internal.provider.AbstractMappingProvider;
+import org.gradle.api.internal.provider.MappingProvider;
 import org.gradle.api.internal.provider.PropertyHost;
 import org.gradle.api.internal.provider.Providers;
 import org.gradle.api.internal.tasks.TaskDependencyFactory;
 import org.gradle.api.provider.Provider;
+import org.gradle.api.tasks.util.PatternSet;
+import org.gradle.internal.Factory;
 import org.gradle.internal.deprecation.DeprecationLogger;
 
 import java.io.File;
@@ -39,18 +42,20 @@ public class DefaultProjectLayout implements ProjectLayout, TaskFileVarFactory {
     private final DirectoryProperty buildDir;
     private final FileResolver fileResolver;
     private final TaskDependencyFactory taskDependencyFactory;
+    private final Factory<PatternSet> patternSetFactory;
     private final PropertyHost propertyHost;
     private final FileCollectionFactory fileCollectionFactory;
     private final FileFactory fileFactory;
 
-    public DefaultProjectLayout(File projectDir, FileResolver fileResolver, TaskDependencyFactory taskDependencyFactory, PropertyHost propertyHost, FileCollectionFactory fileCollectionFactory, FilePropertyFactory filePropertyFactory, FileFactory fileFactory) {
+    public DefaultProjectLayout(File projectDir, FileResolver fileResolver, TaskDependencyFactory taskDependencyFactory, Factory<PatternSet> patternSetFactory, PropertyHost propertyHost, FileCollectionFactory fileCollectionFactory, FilePropertyFactory filePropertyFactory, FileFactory fileFactory) {
         this.fileResolver = fileResolver;
         this.taskDependencyFactory = taskDependencyFactory;
+        this.patternSetFactory = patternSetFactory;
         this.propertyHost = propertyHost;
         this.fileCollectionFactory = fileCollectionFactory;
         this.fileFactory = fileFactory;
         this.projectDir = fileFactory.dir(projectDir);
-        this.buildDir = filePropertyFactory.newDirectoryProperty().fileValue(fileResolver.resolve(Project.DEFAULT_BUILD_DIR_NAME));
+        this.buildDir = filePropertyFactory.newDirectoryProperty().convention(fileFactory.dir(fileResolver.resolve(Project.DEFAULT_BUILD_DIR_NAME)));
     }
 
     @Override
@@ -65,7 +70,7 @@ public class DefaultProjectLayout implements ProjectLayout, TaskFileVarFactory {
 
     @Override
     public ConfigurableFileCollection newInputFileCollection(Task consumer) {
-        return new CachingTaskInputFileCollection(fileResolver, fileResolver.getPatternSetFactory(), taskDependencyFactory, propertyHost);
+        return new CachingTaskInputFileCollection(fileResolver, patternSetFactory, taskDependencyFactory, propertyHost);
     }
 
     @Override
@@ -75,22 +80,22 @@ public class DefaultProjectLayout implements ProjectLayout, TaskFileVarFactory {
 
     @Override
     public Provider<RegularFile> file(Provider<File> provider) {
-        return new AbstractMappingProvider<RegularFile, File>(RegularFile.class, Providers.internal(provider)) {
+        return new MappingProvider<>(RegularFile.class, Providers.internal(provider), new Transformer<RegularFile, File>() {
             @Override
-            protected RegularFile mapValue(File file) {
+            public RegularFile transform(File file) {
                 return fileFactory.file(fileResolver.resolve(file));
             }
-        };
+        });
     }
 
     @Override
     public Provider<Directory> dir(Provider<File> provider) {
-        return new AbstractMappingProvider<Directory, File>(Directory.class, Providers.internal(provider)) {
+        return new MappingProvider<>(Directory.class, Providers.internal(provider), new Transformer<Directory, File>() {
             @Override
-            protected Directory mapValue(File file) {
+            public Directory transform(File file) {
                 return fileFactory.dir(fileResolver.resolve(file));
             }
-        };
+        });
     }
 
     @Override
@@ -99,6 +104,7 @@ public class DefaultProjectLayout implements ProjectLayout, TaskFileVarFactory {
     }
 
     @Override
+    @Deprecated
     public ConfigurableFileCollection configurableFiles(Object... files) {
         DeprecationLogger.deprecateMethod(ProjectLayout.class, "configurableFiles()").replaceWith("ObjectFactory.fileCollection()")
             .willBeRemovedInGradle7()

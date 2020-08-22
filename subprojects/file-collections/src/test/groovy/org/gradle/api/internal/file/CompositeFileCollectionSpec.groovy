@@ -17,18 +17,18 @@
 package org.gradle.api.internal.file
 
 import org.gradle.api.Task
-import org.gradle.api.internal.file.collections.FileCollectionResolveContext
-import org.gradle.api.internal.file.collections.FileSystemMirroringFileTree
 import org.gradle.api.internal.tasks.TaskDependencyContainer
 import org.gradle.api.internal.tasks.TaskDependencyResolveContext
+
+import java.util.function.Consumer
 
 class CompositeFileCollectionSpec extends FileCollectionSpec {
     @Override
     AbstractFileCollection containing(File... files) {
         return new TestCollection() {
             @Override
-            void visitContents(FileCollectionResolveContext context) {
-                context.addAll(files as List)
+            protected void visitChildren(Consumer<FileCollectionInternal> visitor) {
+                visitor.accept(TestFiles.fileCollectionFactory().fixed(files))
             }
         }
     }
@@ -37,9 +37,9 @@ class CompositeFileCollectionSpec extends FileCollectionSpec {
         def visited = 0;
         def collection = new TestCollection() {
             @Override
-            void visitContents(FileCollectionResolveContext context) {
+            protected void visitChildren(Consumer<FileCollectionInternal> visitor) {
                 visited++
-                context.add(new File("foo").absoluteFile)
+                visitor.accept(TestFiles.fileCollectionFactory().fixed(new File("foo")))
             }
         }
 
@@ -65,9 +65,9 @@ class CompositeFileCollectionSpec extends FileCollectionSpec {
         def child = collectionDependsOn(dependency)
         def collection = new TestCollection() {
             @Override
-            void visitContents(FileCollectionResolveContext context) {
+            protected void visitChildren(Consumer<FileCollectionInternal> visitor) {
                 visited++
-                context.add(child)
+                visitor.accept(child)
             }
         }
 
@@ -201,27 +201,27 @@ class CompositeFileCollectionSpec extends FileCollectionSpec {
     def "visits content of tree of collections"() {
         def child1 = new TestCollection() {
             @Override
-            void visitContents(FileCollectionResolveContext context) {
-                context.add(new File("1").absoluteFile)
+            protected void visitChildren(Consumer<FileCollectionInternal> visitor) {
+                visitor.accept(TestFiles.fileCollectionFactory().fixed(new File("1").absoluteFile))
             }
         }
         def child2 = new TestCollection() {
             @Override
-            void visitContents(FileCollectionResolveContext context) {
-                context.add(child1)
+            protected void visitChildren(Consumer<FileCollectionInternal> visitor) {
+                visitor.accept(child1)
             }
         }
         def child3 = new TestCollection() {
             @Override
-            void visitContents(FileCollectionResolveContext context) {
-                context.add(new File("2").absoluteFile)
+            protected void visitChildren(Consumer<FileCollectionInternal> visitor) {
+                visitor.accept(TestFiles.fileCollectionFactory().fixed(new File("2").absoluteFile))
             }
         }
         def collection = new TestCollection() {
             @Override
-            void visitContents(FileCollectionResolveContext context) {
-                context.add(child2)
-                context.add(child3)
+            protected void visitChildren(Consumer<FileCollectionInternal> visitor) {
+                visitor.accept(child2)
+                visitor.accept(child3)
             }
         }
 
@@ -235,27 +235,27 @@ class CompositeFileCollectionSpec extends FileCollectionSpec {
         def dependency2 = Stub(Task)
         def child1 = new TestCollection() {
             @Override
-            void visitContents(FileCollectionResolveContext context) {
-                context.add(collectionDependsOn(dependency1))
+            protected void visitChildren(Consumer<FileCollectionInternal> visitor) {
+                visitor.accept(collectionDependsOn(dependency1))
             }
         }
         def child2 = new TestCollection() {
             @Override
-            void visitContents(FileCollectionResolveContext context) {
-                context.add(child1)
+            protected void visitChildren(Consumer<FileCollectionInternal> visitor) {
+                visitor.accept(child1)
             }
         }
         def child3 = new TestCollection() {
             @Override
-            void visitContents(FileCollectionResolveContext context) {
-                context.add(child2)
-                context.add(collectionDependsOn(dependency2))
+            protected void visitChildren(Consumer<FileCollectionInternal> visitor) {
+                visitor.accept(child2)
+                visitor.accept(collectionDependsOn(dependency2))
             }
         }
         def collection = new TestCollection() {
             @Override
-            void visitContents(FileCollectionResolveContext context) {
-                context.add(child3)
+            protected void visitChildren(Consumer<FileCollectionInternal> visitor) {
+                visitor.accept(child3)
             }
         }
 
@@ -275,21 +275,21 @@ class CompositeFileCollectionSpec extends FileCollectionSpec {
         }
         def child2 = new TestCollection() {
             @Override
-            void visitContents(FileCollectionResolveContext context) {
-                context.add(child1)
+            protected void visitChildren(Consumer<FileCollectionInternal> visitor) {
+                visitor.accept(child1)
             }
         }
         def child3 = new TestCollection() {
             @Override
-            void visitContents(FileCollectionResolveContext context) {
-                context.add(child2)
-                context.add(collectionDependsOn(dependency2))
+            protected void visitChildren(Consumer<FileCollectionInternal> visitor) {
+                visitor.accept(child2)
+                visitor.accept(collectionDependsOn(dependency2))
             }
         }
         def collection = new TestCollection() {
             @Override
-            void visitContents(FileCollectionResolveContext context) {
-                context.add(child3)
+            protected void visitChildren(Consumer<FileCollectionInternal> visitor) {
+                visitor.accept(child3)
             }
         }
 
@@ -297,30 +297,46 @@ class CompositeFileCollectionSpec extends FileCollectionSpec {
         collection.buildDependencies.getDependencies(task) == [dependency1, dependency2] as LinkedHashSet
     }
 
-    def "can visit structure"() {
-        def child1 = Stub(FileCollectionInternal)
-        def child2 = Stub(FileTreeInternal)
-        def child2Source = Stub(FileSystemMirroringFileTree)
-        def source = Stub(FileCollectionInternal.Source)
-
-        def tree = new TestCollection() {
+    def "visits children when visitor requests contents"() {
+        def child1 = Mock(FileCollectionInternal)
+        def child2 = Mock(FileTreeInternal)
+        def collection = new TestCollection() {
             @Override
-            void visitContents(FileCollectionResolveContext context) {
-                context.add(child1)
-                context.add(child2)
+            protected void visitChildren(Consumer<FileCollectionInternal> visitor) {
+                visitor.accept(child1)
+                visitor.accept(child2)
             }
         }
         def visitor = Mock(FileCollectionStructureVisitor)
 
         when:
-        tree.visitStructure(visitor)
+        collection.visitStructure(visitor)
 
         then:
-        child1.visitStructure(visitor) >> { FileCollectionStructureVisitor v -> v.visitCollection(source, child1) }
-        child2.visitStructure(visitor) >> { FileCollectionStructureVisitor v -> v.visitGenericFileTree(child2, child2Source) }
-        1 * visitor.visitCollection(source, child1)
-        1 * visitor.visitGenericFileTree(child2, child2Source)
-        0 * visitor._
+        1 * visitor.startVisit(FileCollectionInternal.OTHER, collection) >> true
+        1 * child1.visitStructure(visitor)
+        1 * child2.visitStructure(visitor)
+        0 * _
+    }
+
+    def "does not visit children when visitor does not request contents"() {
+        def child1 = Mock(FileCollectionInternal)
+        def child2 = Mock(FileTreeInternal)
+        def collection = new TestCollection() {
+            @Override
+            protected void visitChildren(Consumer<FileCollectionInternal> visitor) {
+                visitor.accept(child1)
+                visitor.accept(child2)
+            }
+        }
+        def visitor = Mock(FileCollectionStructureVisitor)
+
+        when:
+        collection.visitStructure(visitor)
+
+        then:
+        1 * visitor.startVisit(FileCollectionInternal.OTHER, collection) >> false
+        0 * _
     }
 
     def collectionDependsOn(Task... tasks) {
@@ -340,8 +356,8 @@ class CompositeFileCollectionSpec extends FileCollectionSpec {
         }
 
         @Override
-        void visitContents(FileCollectionResolveContext context) {
-            throw new UnsupportedOperationException()
+        protected void visitChildren(Consumer<FileCollectionInternal> visitor) {
+            throw new UnsupportedOperationException();
         }
     }
 }

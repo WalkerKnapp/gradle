@@ -13,13 +13,10 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import org.gradle.gradlebuild.unittestandcompile.ModuleType
 
 plugins {
-    `java-library`
-    gradlebuild.classycle
-    gradlebuild.`publish-public-libraries`
-    gradlebuild.`strict-compile`
+    id("gradlebuild.distribution.implementation-java")
+    id("gradlebuild.publish-public-libraries")
 }
 
 description = "Tools to take immutable, comparable snapshots of files and other things"
@@ -28,37 +25,33 @@ dependencies {
     api(project(":files"))
     api(project(":hashing"))
 
-    implementation(project(":baseAnnotations"))
+    implementation(project(":base-annotations"))
 
-    implementation(library("guava")) { version { require(libraryVersion("guava")) } }
-    implementation(library("slf4j_api")) { version { require(libraryVersion("slf4j_api")) } }
+    implementation(libs.guava)
+    implementation(libs.slf4jApi)
 
-    testImplementation(project(":processServices"))
+    testImplementation(project(":process-services"))
     testImplementation(project(":resources"))
     testImplementation(project(":native"))
-    testImplementation(project(":persistentCache"))
-    testImplementation(library("ant"))
+    testImplementation(project(":persistent-cache"))
+    testImplementation(libs.ant)
     testImplementation(testFixtures(project(":core")))
-    testImplementation(testFixtures(project(":coreApi")))
-    testImplementation(testFixtures(project(":baseServices")))
-    testImplementation(testFixtures(project(":fileCollections")))
+    testImplementation(testFixtures(project(":core-api")))
+    testImplementation(testFixtures(project(":base-services")))
+    testImplementation(testFixtures(project(":file-collections")))
     testImplementation(testFixtures(project(":messaging")))
 
-    testRuntimeOnly(project(":runtimeApiInfo"))
-    testRuntimeOnly(project(":workers"))
-    testRuntimeOnly(project(":dependencyManagement"))
+    testFixturesImplementation(project(":base-services"))
+    testFixturesImplementation(project(":core-api"))
+    testFixturesImplementation(project(":file-collections"))
 
-    testFixturesImplementation(project(":baseServices"))
-    testFixturesImplementation(project(":coreApi"))
-    testFixturesImplementation(project(":fileCollections"))
-
-    integTestRuntimeOnly(project(":apiMetadata"))
-    integTestRuntimeOnly(project(":kotlinDsl"))
-    integTestRuntimeOnly(project(":kotlinDslProviderPlugins"))
-    integTestRuntimeOnly(project(":kotlinDslToolingBuilders"))
+    integTestDistributionRuntimeOnly(project(":distributions-core"))
 }
 
-gradlebuildJava {
-    moduleType = ModuleType.CORE
+afterEvaluate {
+    // This is a workaround for the validate plugins task trying to inspect classes which have changed but are NOT tasks.
+    // For the current project, we exclude all internal packages, since there are no tasks in there.
+    tasks.withType<ValidatePlugins>().configureEach {
+        classes.setFrom(sourceSets.main.get().output.classesDirs.asFileTree.matching { exclude("**/internal/**") })
+    }
 }
-

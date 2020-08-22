@@ -18,6 +18,7 @@ package org.gradle.integtests.resolve.attributes
 
 import org.gradle.integtests.fixtures.GradleMetadataResolveRunner
 import org.gradle.integtests.fixtures.RequiredFeature
+import org.gradle.integtests.fixtures.ToBeFixedForConfigurationCache
 import org.gradle.integtests.resolve.AbstractModuleDependencyResolveTest
 import spock.lang.Issue
 import spock.lang.Unroll
@@ -156,6 +157,7 @@ class DependenciesAttributesIntegrationTest extends AbstractModuleDependencyReso
     }
 
     @RequiredFeature(feature = GradleMetadataResolveRunner.GRADLE_METADATA, value = "true")
+    @ToBeFixedForConfigurationCache
     def "Fails resolution because dependency attributes and constraint attributes conflict"() {
         given:
         repository {
@@ -258,6 +260,7 @@ class DependenciesAttributesIntegrationTest extends AbstractModuleDependencyReso
 
     @RequiredFeature(feature = GradleMetadataResolveRunner.GRADLE_METADATA, value = "true")
     @Issue("gradle/gradle#5232")
+    @ToBeFixedForConfigurationCache
     def "Serializes and reads back failed resolution when failure comes from an unmatched typed attribute"() {
         given:
         repository {
@@ -352,6 +355,7 @@ class DependenciesAttributesIntegrationTest extends AbstractModuleDependencyReso
     }
 
     @RequiredFeature(feature = GradleMetadataResolveRunner.GRADLE_METADATA, value = "true")
+    @ToBeFixedForConfigurationCache
     def "Fails resolution because consumer configuration attributes and dependency attributes conflict"() {
         given:
         repository {
@@ -386,23 +390,11 @@ class DependenciesAttributesIntegrationTest extends AbstractModuleDependencyReso
         fails 'checkDeps'
 
         then:
-        failure.assertHasCause("""Unable to find a matching variant of org:test:1.0:
-  - Variant 'api' capability org:test:1.0:
-      - Incompatible attribute:
-          - Required org.gradle.usage 'java-runtime' and found incompatible value 'java-api'.
-      - Other attributes:
-          - Required custom 'c1' and found compatible value 'c1'.
-          - Found org.gradle.category 'library' but wasn't required.
-          - Found org.gradle.libraryelements 'jar' but wasn't required.
-          - Found org.gradle.status '${defaultStatus()}' but wasn't required.
-  - Variant 'runtime' capability org:test:1.0:
-      - Incompatible attribute:
-          - Required custom 'c1' and found incompatible value 'c2'.
-      - Other attributes:
-          - Found org.gradle.category 'library' but wasn't required.
-          - Found org.gradle.libraryelements 'jar' but wasn't required.
-          - Found org.gradle.status '${defaultStatus()}' but wasn't required.
-          - Required org.gradle.usage 'java-runtime' and found compatible value 'java-runtime'.""")
+        failure.assertHasCause("""No matching variant of org:test:1.0 was found. The consumer was configured to find a runtime of a component, as well as attribute 'custom' with value 'c1' but:
+  - Variant 'api' capability org:test:1.0 declares a component, as well as attribute 'custom' with value 'c1':
+      - Incompatible because this component declares an API of a component and the consumer needed a runtime of a component
+  - Variant 'runtime' capability org:test:1.0 declares a runtime of a component:
+      - Incompatible because this component declares a component, as well as attribute 'custom' with value 'c2' and the consumer needed a component, as well as attribute 'custom' with value 'c1'""")
     }
 
     @RequiredFeature(feature = GradleMetadataResolveRunner.GRADLE_METADATA, value = "true")
@@ -515,6 +507,7 @@ class DependenciesAttributesIntegrationTest extends AbstractModuleDependencyReso
     }
 
     @RequiredFeature(feature = GradleMetadataResolveRunner.GRADLE_METADATA, value = "true")
+    @ToBeFixedForConfigurationCache
     def "Fails resolution because consumer configuration attributes and constraint attributes conflict"() {
         given:
         repository {
@@ -552,23 +545,11 @@ class DependenciesAttributesIntegrationTest extends AbstractModuleDependencyReso
         fails 'checkDeps'
 
         then:
-        failure.assertHasCause("""Unable to find a matching variant of org:test:1.0:
-  - Variant 'api' capability org:test:1.0:
-      - Incompatible attribute:
-          - Required org.gradle.usage 'java-runtime' and found incompatible value 'java-api'.
-      - Other attributes:
-          - Required custom 'c1' and found compatible value 'c1'.
-          - Found org.gradle.category 'library' but wasn't required.
-          - Found org.gradle.libraryelements 'jar' but wasn't required.
-          - Found org.gradle.status '${defaultStatus()}' but wasn't required.
-  - Variant 'runtime' capability org:test:1.0:
-      - Incompatible attribute:
-          - Required custom 'c1' and found incompatible value 'c2'.
-      - Other attributes:
-          - Found org.gradle.category 'library' but wasn't required.
-          - Found org.gradle.libraryelements 'jar' but wasn't required.
-          - Found org.gradle.status '${defaultStatus()}' but wasn't required.
-          - Required org.gradle.usage 'java-runtime' and found compatible value 'java-runtime'.""")
+        failure.assertHasCause("""No matching variant of org:test:1.0 was found. The consumer was configured to find a runtime of a component, as well as attribute 'custom' with value 'c1' but:
+  - Variant 'api' capability org:test:1.0 declares a component, as well as attribute 'custom' with value 'c1':
+      - Incompatible because this component declares an API of a component and the consumer needed a runtime of a component
+  - Variant 'runtime' capability org:test:1.0 declares a runtime of a component:
+      - Incompatible because this component declares a component, as well as attribute 'custom' with value 'c2' and the consumer needed a component, as well as attribute 'custom' with value 'c1'""")
     }
 
     @RequiredFeature(feature = GradleMetadataResolveRunner.GRADLE_METADATA, value = "true")

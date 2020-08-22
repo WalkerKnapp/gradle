@@ -1,5 +1,3 @@
-import org.gradle.gradlebuild.unittestandcompile.ModuleType
-
 /*
  * Copyright 2012 the original author or authors.
  *
@@ -16,51 +14,41 @@ import org.gradle.gradlebuild.unittestandcompile.ModuleType
  * limitations under the License.
  */
 plugins {
-    `java-library`
-    gradlebuild.`strict-compile`
-    gradlebuild.classycle
+    id("gradlebuild.distribution.api-java")
 }
 
 dependencies {
-    implementation(project(":baseServices"))
+    implementation(project(":base-services"))
     implementation(project(":messaging"))
     implementation(project(":logging"))
     implementation(project(":files"))
-    implementation(project(":fileCollections"))
-    implementation(project(":persistentCache"))
-    implementation(project(":coreApi"))
+    implementation(project(":file-collections"))
+    implementation(project(":persistent-cache"))
+    implementation(project(":core-api"))
     implementation(project(":core"))
     implementation(project(":resources"))
-    implementation(project(":dependencyManagement"))
+    implementation(project(":dependency-management"))
 
-    implementation(library("guava"))
-    implementation(library("inject"))
-    implementation(library("jgit"))
-    implementation(library("commons_httpclient"))
-    implementation(library("jsch"))
+    implementation(libs.guava)
+    implementation(libs.inject)
+    implementation(libs.jgit)
+    implementation(libs.commonsHttpclient)
+    implementation(libs.jsch)
 
     testImplementation(project(":native"))
     testImplementation(project(":snapshots"))
-    testImplementation(project(":processServices"))
+    testImplementation(project(":process-services"))
     testImplementation(testFixtures(project(":core")))
 
-    testFixturesImplementation(project(":baseServices"))
-    testFixturesImplementation(project(":internalTesting"))
-    testFixturesImplementation(project(":internalIntegTesting"))
+    testFixturesImplementation(project(":base-services"))
+    testFixturesImplementation(project(":internal-integ-testing"))
 
-    testFixturesImplementation(library("jgit"))
-    testFixturesImplementation(library("commons_io"))
-    testFixturesImplementation(library("commons_httpclient"))
-    testFixturesImplementation(library("jsch"))
-    testFixturesImplementation(library("guava"))
+    testFixturesImplementation(libs.jgit)
+    testFixturesImplementation(libs.commonsIo)
+    testFixturesImplementation(libs.commonsHttpclient)
+    testFixturesImplementation(libs.jsch)
+    testFixturesImplementation(libs.guava)
 
     integTestImplementation(project(":launcher"))
-    integTestRuntimeOnly(project(":pluginDevelopment"))
-    integTestRuntimeOnly(project(":testKit"))
-    integTestRuntimeOnly(project(":runtimeApiInfo"))
+    integTestDistributionRuntimeOnly(project(":distributions-basics"))
 }
-
-gradlebuildJava {
-    moduleType = ModuleType.CORE
-}
-

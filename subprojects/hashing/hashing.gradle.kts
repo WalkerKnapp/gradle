@@ -13,23 +13,17 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import org.gradle.gradlebuild.unittestandcompile.ModuleType
-
 plugins {
-    `java-library`
-    gradlebuild.classycle
-    gradlebuild.`publish-public-libraries`
-    gradlebuild.`strict-compile`
+    id("gradlebuild.distribution.api-java")
+    id("gradlebuild.publish-public-libraries")
 }
 
-description = "Common shared classes without external dependencies"
+description = "Tools for creating secure hashes for files and other content"
+
+// We need this because org.gradle.internal.nativeintegration.filesystem.Stat is used in workers
+gradlebuildJava.usedInWorkers()
 
 dependencies {
-    implementation(project(":baseAnnotations"))
-    implementation(library("guava")) { version { require(libraryVersion("guava")) } }
-}
-
-gradlebuildJava {
-    // We need this because org.gradle.internal.nativeintegration.filesystem.Stat is used in workers
-    moduleType = ModuleType.WORKER
+    implementation(project(":base-annotations"))
+    implementation(libs.guava)
 }

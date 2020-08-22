@@ -24,7 +24,9 @@ import org.apache.commons.lang.StringUtils;
 import org.gradle.api.Action;
 import org.gradle.api.GradleException;
 import org.gradle.buildinit.plugins.internal.modifiers.BuildInitDsl;
+import org.gradle.internal.Cast;
 import org.gradle.internal.file.PathToFileResolver;
+import org.gradle.util.GFileUtils;
 
 import javax.annotation.Nullable;
 import java.io.File;
@@ -47,7 +49,7 @@ public class BuildScriptBuilder {
     private final PathToFileResolver fileResolver;
     private final String fileNameWithoutExtension;
 
-    private final List<String> headerLines = new ArrayList<String>();
+    private final List<String> headerLines = new ArrayList<>();
     private final TopLevelBlock block = new TopLevelBlock();
 
     public BuildScriptBuilder(BuildInitDsl dsl, PathToFileResolver fileResolver, String fileNameWithoutExtension) {
@@ -159,7 +161,7 @@ public class BuildScriptBuilder {
     }
 
     private static List<ExpressionValue> expressionValues(Object... expressions) {
-        List<ExpressionValue> result = new ArrayList<ExpressionValue>(expressions.length);
+        List<ExpressionValue> result = new ArrayList<>(expressions.length);
         for (Object expression : expressions) {
             result.add(expressionValue(expression));
         }
@@ -167,7 +169,7 @@ public class BuildScriptBuilder {
     }
 
     private static Map<String, ExpressionValue> expressionMap(Map<String, ?> expressions) {
-        LinkedHashMap<String, ExpressionValue> result = new LinkedHashMap<String, ExpressionValue>();
+        LinkedHashMap<String, ExpressionValue> result = new LinkedHashMap<>();
         for (Map.Entry<String, ?> entry : expressions.entrySet()) {
             result.put(entry.getKey(), expressionValue(entry.getValue()));
         }
@@ -185,7 +187,7 @@ public class BuildScriptBuilder {
             return new LiteralValue(expression);
         }
         if (expression instanceof Map) {
-            return new MapLiteralValue(expressionMap((Map<String, ?>) expression));
+            return new MapLiteralValue(expressionMap(Cast.uncheckedNonnullCast(expression)));
         }
         throw new IllegalArgumentException("Don't know how to treat " + expression + " as an expression.");
     }
@@ -330,22 +332,17 @@ public class BuildScriptBuilder {
     }
 
     public TemplateOperation create() {
-        return new TemplateOperation() {
-            @Override
-            public void generate() {
-                File target = getTargetFile();
-                try {
-                    PrintWriter writer = new PrintWriter(new FileWriter(target));
-                    try {
-                        PrettyPrinter printer = new PrettyPrinter(syntaxFor(dsl), writer);
-                        printer.printFileHeader(headerLines);
-                        block.writeBodyTo(printer);
-                    } finally {
-                        writer.close();
-                    }
-                } catch (Exception e) {
-                    throw new GradleException("Could not generate file " + target + ".", e);
+        return () -> {
+            File target = getTargetFile();
+            GFileUtils.mkdirs(target.getParentFile());
+            try {
+                try (PrintWriter writer = new PrintWriter(new FileWriter(target))) {
+                    PrettyPrinter printer = new PrettyPrinter(syntaxFor(dsl), writer);
+                    printer.printFileHeader(headerLines);
+                    block.writeBodyTo(printer);
                 }
+            } catch (Exception e) {
+                throw new GradleException("Could not generate file " + target + ".", e);
             }
         };
     }
@@ -960,7 +957,7 @@ public class BuildScriptBuilder {
     }
 
     private static class ScriptBlockImpl implements ScriptBlockBuilder, BlockBody {
-        final List<Statement> statements = new ArrayList<Statement>();
+        final List<Statement> statements = new ArrayList<>();
 
         public void add(Statement statement) {
             statements.add(statement);
@@ -1026,9 +1023,9 @@ public class BuildScriptBuilder {
         final RepositoriesBlock repositories = new RepositoriesBlock();
         final DependenciesBlock dependencies = new DependenciesBlock();
         final StatementSequence plugins = new StatementSequence();
-        final ConfigurationStatements<TaskTypeSelector> taskTypes = new ConfigurationStatements<TaskTypeSelector>();
-        final ConfigurationStatements<TaskSelector> tasks = new ConfigurationStatements<TaskSelector>();
-        final ConfigurationStatements<ConventionSelector> conventions = new ConfigurationStatements<ConventionSelector>();
+        final ConfigurationStatements<TaskTypeSelector> taskTypes = new ConfigurationStatements<>();
+        final ConfigurationStatements<TaskSelector> tasks = new ConfigurationStatements<>();
+        final ConfigurationStatements<ConventionSelector> conventions = new ConfigurationStatements<>();
 
         CrossConfigBlock(String blockName) {
             this.blockName = blockName;
@@ -1110,9 +1107,9 @@ public class BuildScriptBuilder {
         final DependenciesBlock dependencies = new DependenciesBlock();
         final CrossConfigBlock allprojects = new CrossConfigBlock("allprojects");
         final CrossConfigBlock subprojects = new CrossConfigBlock("subprojects");
-        final ConfigurationStatements<TaskTypeSelector> taskTypes = new ConfigurationStatements<TaskTypeSelector>();
-        final ConfigurationStatements<TaskSelector> tasks = new ConfigurationStatements<TaskSelector>();
-        final ConfigurationStatements<ConventionSelector> conventions = new ConfigurationStatements<ConventionSelector>();
+        final ConfigurationStatements<TaskTypeSelector> taskTypes = new ConfigurationStatements<>();
+        final ConfigurationStatements<TaskSelector> tasks = new ConfigurationStatements<>();
+        final ConfigurationStatements<ConventionSelector> conventions = new ConfigurationStatements<>();
 
         @Override
         public void writeBodyTo(PrettyPrinter printer) {
@@ -1418,12 +1415,12 @@ public class BuildScriptBuilder {
 
         @Override
         public String taskSelector(TaskSelector selector) {
-            return "val " + selector.taskName + " by tasks.getting(" + selector.taskType + "::class)";
+            return "tasks." + selector.taskName;
         }
 
         @Override
         public String taskRegistration(String taskName, String taskType) {
-            return "val " + taskName + " by tasks.creating(" + taskType + "::class)";
+            return "val " + taskName + " by tasks.registering(" + taskType + "::class)";
         }
 
         @Override
@@ -1457,7 +1454,7 @@ public class BuildScriptBuilder {
 
         @Override
         public String containerElement(String container, String element) {
-            return container + ".getByName(" + string(element) + ")";
+            return container + "[" + string(element) + "]";
         }
     }
 
@@ -1537,12 +1534,12 @@ public class BuildScriptBuilder {
 
         @Override
         public String taskSelector(TaskSelector selector) {
-            return selector.taskName;
+            return "tasks.named('" + selector.taskName + "')";
         }
 
         @Override
         public String taskRegistration(String taskName, String taskType) {
-            return "task " + taskName + "(type: " + taskType + ")";
+            return "tasks.register('" + taskName + "', " + taskType + ")";
         }
 
         @Override

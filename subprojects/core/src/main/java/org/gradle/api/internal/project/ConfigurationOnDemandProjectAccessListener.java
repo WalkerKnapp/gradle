@@ -16,9 +16,9 @@
 
 package org.gradle.api.internal.project;
 
-import org.gradle.initialization.ProjectAccessListener;
+import org.gradle.initialization.ProjectAccessHandler;
 
-public class ConfigurationOnDemandProjectAccessListener implements ProjectAccessListener {
+public class ConfigurationOnDemandProjectAccessListener implements ProjectAccessHandler {
 
     @Override
     public void beforeRequestingTaskByPath(ProjectInternal targetProject) {
@@ -28,11 +28,6 @@ public class ConfigurationOnDemandProjectAccessListener implements ProjectAccess
     @Override
     public void beforeResolvingProjectDependency(ProjectInternal targetProject) {
         evaluateProjectAndDiscoverTasks(targetProject);
-    }
-
-    @Override
-    public void onProjectAccess(String invocationDescription, Object invocationSource) {
-        // NOOP
     }
 
     private synchronized void evaluateProjectAndDiscoverTasks(final ProjectInternal targetProject) {

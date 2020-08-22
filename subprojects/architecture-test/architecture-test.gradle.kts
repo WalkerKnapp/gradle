@@ -1,28 +1,22 @@
-import org.gradle.gradlebuild.ProjectGroups.publicProjects
-import org.gradle.gradlebuild.PublicApi
-import org.gradle.gradlebuild.unittestandcompile.ModuleType
+import gradlebuild.basics.PublicApi
 
 plugins {
-    `java-library`
-}
-
-gradlebuildJava {
-    moduleType = ModuleType.INTERNAL
+    id("gradlebuild.internal.java")
+    id("gradlebuild.binary-compatibility")
 }
 
 dependencies {
-    testImplementation(project(":baseServices"))
-    testImplementation(project(":modelCore"))
+    currentClasspath(project(":distributions-full"))
+    testImplementation(project(":base-services"))
+    testImplementation(project(":model-core"))
 
-    testImplementation(testLibrary("archunit_junit4"))
-    testImplementation(library("guava"))
+    testImplementation(libs.archunitJunit4)
+    testImplementation(libs.guava)
 
-    publicProjects.forEach {
-        testRuntimeOnly(it)
-    }
+    testRuntimeOnly(project(":distributions-full"))
 }
 
-tasks.withType<Test> {
+tasks.test {
     // Looks like loading all the classes requires more than the default 512M
     maxHeapSize = "700M"
 

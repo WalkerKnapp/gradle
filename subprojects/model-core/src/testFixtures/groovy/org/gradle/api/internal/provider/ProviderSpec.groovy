@@ -16,13 +16,14 @@
 
 package org.gradle.api.internal.provider
 
+
 import org.gradle.api.Transformer
 import org.gradle.api.provider.Provider
 import org.gradle.internal.state.Managed
 import org.gradle.internal.state.ManagedFactory
 import spock.lang.Specification
 
-abstract class ProviderSpec<T> extends Specification {
+abstract class ProviderSpec<T> extends Specification implements ProviderAssertions {
     abstract Provider<T> providerWithValue(T value)
 
     abstract Provider<T> providerWithNoValue()
@@ -444,10 +445,9 @@ abstract class ProviderSpec<T> extends Specification {
             }
 
             @Override
-            protected ValueSupplier.Value<T> calculateOwnValue() {
+            protected ValueSupplier.Value<T> calculateOwnValue(ValueSupplier.ValueConsumer consumer) {
                 throw new RuntimeException("broken!")
             }
         }
     }
-
 }

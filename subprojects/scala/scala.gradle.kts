@@ -13,59 +13,58 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
-import org.gradle.gradlebuild.unittestandcompile.ModuleType
+import gradlebuild.integrationtests.integrationTestUsesSampleDir
 
 plugins {
-    `java-library`
+    id("gradlebuild.distribution.api-java")
 }
 
 dependencies {
-    implementation(project(":baseServices"))
+    implementation(project(":base-services"))
     implementation(project(":logging"))
-    implementation(project(":workerProcesses"))
-    implementation(project(":fileCollections"))
-    implementation(project(":coreApi"))
-    implementation(project(":modelCore"))
+    implementation(project(":worker-processes"))
+    implementation(project(":file-collections"))
+    implementation(project(":core-api"))
+    implementation(project(":model-core"))
     implementation(project(":core"))
     implementation(project(":workers"))
-    implementation(project(":platformBase"))
-    implementation(project(":platformJvm"))
-    implementation(project(":languageJvm"))
-    implementation(project(":languageJava"))
-    implementation(project(":languageScala"))
+    implementation(project(":platform-base"))
+    implementation(project(":platform-jvm"))
+    implementation(project(":language-jvm"))
+    implementation(project(":language-java"))
+    implementation(project(":language-scala"))
     implementation(project(":plugins"))
     implementation(project(":reporting"))
-    implementation(project(":dependencyManagement"))
+    implementation(project(":dependency-management"))
+    implementation(project(":process-services"))
 
-    implementation(library("groovy"))
-    implementation(library("guava"))
-    implementation(library("inject"))
+    implementation(libs.groovy)
+    implementation(libs.guava)
+    implementation(libs.inject)
 
-    testImplementation(project(":baseServicesGroovy"))
+    testImplementation(project(":base-services-groovy"))
     testImplementation(project(":files"))
-    testImplementation(project(":processServices"))
     testImplementation(project(":resources"))
-    testImplementation(library("slf4j_api"))
-    testImplementation(library("commons_io"))
+    testImplementation(libs.slf4jApi)
+    testImplementation(libs.commonsIo)
     testImplementation(testFixtures(project(":core")))
     testImplementation(testFixtures(project(":plugins")))
-    testImplementation(testFixtures(project(":languageJvm")))
-    testImplementation(testFixtures(project(":languageJava")))
+    testImplementation(testFixtures(project(":language-jvm")))
+    testImplementation(testFixtures(project(":language-java")))
 
-    testRuntimeOnly(project(":runtimeApiInfo"))
+    integTestImplementation(project(":jvm-services"))
+    integTestImplementation(testFixtures(project(":language-scala")))
 
-    integTestImplementation(project(":jvmServices"))
-    integTestImplementation(testFixtures(project(":languageScala")))
-    integTestRuntimeOnly(project(":ide"))
-    integTestRuntimeOnly(project(":maven"))
-    integTestRuntimeOnly(project(":testingJunitPlatform"))
+    testRuntimeOnly(project(":distributions-core")) {
+        because("ProjectBuilder tests load services from a Gradle distribution.")
+    }
+    integTestDistributionRuntimeOnly(project(":distributions-jvm"))
 }
 
-gradlebuildJava {
-    moduleType = ModuleType.CORE
+classycle {
+    excludePatterns.set(listOf("org/gradle/api/internal/tasks/scala/**",
+        // Unable to change package of public API
+        "org/gradle/api/tasks/ScalaRuntime*"))
 }
 
-tasks.named<Test>("integTest") {
-    jvmArgs("-XX:MaxPermSize=1500m") // AntInProcessScalaCompilerIntegrationTest needs lots of permgen
-}
+integrationTestUsesSampleDir("subprojects/scala/src/main")

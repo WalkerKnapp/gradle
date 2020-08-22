@@ -243,7 +243,7 @@ dependencies {
  */
 
 // Compile stuff
-task compile(type: JavaCompile) {
+tasks.register('compile', JavaCompile) {
     classpath = 12
 }
 
@@ -271,7 +271,7 @@ artifacts {
 
 allprojects {
     // Compile stuff
-    task compile(type: JavaCompile) {
+    tasks.register('compile', JavaCompile) {
         // Set a property
         foo.bar = 'bazar'
 
@@ -712,7 +712,7 @@ tasks.withType(Test) {
     encoding = 'UTF-8'
 }
 
-test {
+tasks.named('test') {
     maxParallelForks = 23
 
     // Use TestNG

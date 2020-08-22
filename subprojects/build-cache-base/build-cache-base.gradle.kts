@@ -13,21 +13,13 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import org.gradle.gradlebuild.unittestandcompile.ModuleType
-
 plugins {
-    `java-library`
-    gradlebuild.`strict-compile`
-    gradlebuild.classycle
-    gradlebuild.`publish-public-libraries`
+    id("gradlebuild.distribution.api-java")
+    id("gradlebuild.publish-public-libraries")
 }
 
 dependencies {
-    implementation(project(":baseAnnotations"))
+    implementation(project(":base-annotations"))
     implementation(project(":files"))
-    implementation(library("slf4j_api")) { version { require(libraryVersion("slf4j_api")) } }
-}
-
-gradlebuildJava {
-    moduleType = ModuleType.CORE
+    implementation(libs.slf4jApi)
 }

@@ -18,7 +18,7 @@ package org.gradle.api.tasks
 
 import org.gradle.integtests.fixtures.AbstractIntegrationSpec
 import org.gradle.integtests.fixtures.DirectoryBuildCacheFixture
-import org.gradle.integtests.fixtures.ToBeFixedForInstantExecution
+import org.gradle.integtests.fixtures.ToBeFixedForConfigurationCache
 import org.gradle.test.fixtures.archive.TarTestFixture
 
 class CachedTaskIntegrationTest extends AbstractIntegrationSpec implements DirectoryBuildCacheFixture {
@@ -83,16 +83,18 @@ class CachedTaskIntegrationTest extends AbstractIntegrationSpec implements Direc
         skipped ":foo"
     }
 
-    @ToBeFixedForInstantExecution
+    @ToBeFixedForConfigurationCache(because = "task wrongly up-to-date")
     def "task is loaded from cache when returning to already cached state after failure"() {
         buildFile << """
             task foo {
                 inputs.property("change", project.hasProperty("change"))
-                outputs.file("out.txt")
+                def outTxt = file('out.txt')
+                outputs.file(outTxt)
                 outputs.cacheIf { true }
+                def fail = providers.gradleProperty('fail')
                 doLast {
-                    project.file("out.txt") << "xxx"
-                    if (project.hasProperty("fail")) {
+                    outTxt << "xxx"
+                    if (fail.isPresent()) {
                         throw new RuntimeException("Boo!")
                     }
                 }
@@ -113,7 +115,7 @@ class CachedTaskIntegrationTest extends AbstractIntegrationSpec implements Direc
         skipped ":foo"
     }
 
-    @ToBeFixedForInstantExecution(skip = ToBeFixedForInstantExecution.Skip.FLAKY)
+    @ToBeFixedForConfigurationCache(skip = ToBeFixedForConfigurationCache.Skip.FLAKY)
     def "displays info about loading and storing in cache"() {
         buildFile << defineCacheableTask()
         when:
