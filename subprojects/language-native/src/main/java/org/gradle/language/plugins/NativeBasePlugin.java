@@ -78,6 +78,7 @@ import org.gradle.nativeplatform.toolchain.NativeToolChain;
 import org.gradle.nativeplatform.toolchain.internal.PlatformToolProvider;
 
 import javax.inject.Inject;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Set;
 import java.util.concurrent.Callable;
@@ -169,22 +170,29 @@ public class NativeBasePlugin implements Plugin<Project> {
             // Register each child of each component
             component.getBinaries().whenElementKnown(binary -> components.add(binary));
 
+            ArrayList<TaskProvider<Task>> assembleTasks = new ArrayList<>();
+
             if (component instanceof ProductionComponent) {
                 // Add an assemble task for each binary and also wire the development binary in to the `assemble` task
                 component.getBinaries().whenElementFinalized(ComponentWithOutputs.class, binary -> {
                     // Determine which output to produce at development time.
                     final FileCollection outputs = binary.getOutputs();
                     Names names = ((ComponentWithNames) binary).getNames();
-                    tasks.register(names.getTaskName("assemble"), task -> {
+                    assembleTasks.add(tasks.register(names.getTaskName("assemble"), task -> {
                         task.dependsOn(outputs);
                         task.setGroup(LifecycleBasePlugin.BUILD_GROUP);
-                    });
+                    }));
 
                     if (binary == ((ProductionComponent) component).getDevelopmentBinary().get()) {
                         tasks.named(LifecycleBasePlugin.ASSEMBLE_TASK_NAME, task -> task.dependsOn(outputs));
                     }
                 });
             }
+
+            // Register a task to assemble all natives
+            tasks.register("assembleNatives", task -> {
+                assembleTasks.forEach(task::dependsOn);
+            });
 
             if (component instanceof ComponentWithTargetMachines) {
                 ComponentWithTargetMachines componentWithTargetMachines = (ComponentWithTargetMachines)component;
