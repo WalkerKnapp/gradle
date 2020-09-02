@@ -61,7 +61,7 @@ public abstract class OperatingSystem {
         String osName = os.toLowerCase();
         if (osName.contains("windows")) {
             return WINDOWS;
-        } else if (osName.contains("mac os x") || osName.contains("darwin") || osName.contains("osx")) {
+        } else if (osName.contains("mac os x") || osName.contains("darwin") || osName.contains("osx") || osName.contains("macos")) {
             return MAC_OS;
         } else if (osName.contains("sunos") || osName.contains("solaris")) {
             return SOLARIS;
