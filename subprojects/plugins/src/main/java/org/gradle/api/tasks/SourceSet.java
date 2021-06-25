@@ -237,7 +237,6 @@ public interface SourceSet extends ExtensionAware {
      *
      * @since 6.0
      */
-    @Incubating
     String getJavadocTaskName();
 
     /**
@@ -254,7 +253,6 @@ public interface SourceSet extends ExtensionAware {
      *
      * @since 6.0
      */
-    @Incubating
     String getJavadocJarTaskName();
 
     /**
@@ -264,7 +262,6 @@ public interface SourceSet extends ExtensionAware {
      *
      * @since 6.0
      */
-    @Incubating
     String getSourcesJarTaskName();
 
     /**
@@ -277,24 +274,6 @@ public interface SourceSet extends ExtensionAware {
     String getTaskName(@Nullable String verb, @Nullable String target);
 
     /**
-     * Returns the name of the compile configuration for this source set.
-     *
-     * @return The configuration name
-     * @deprecated Use {@link #getImplementationConfigurationName()}, {@link #getApiConfigurationName()}, {@link #getCompileClasspathConfigurationName()} or {@link #getApiElementsConfigurationName()} instead.
-     */
-    @Deprecated
-    String getCompileConfigurationName();
-
-    /**
-     * Returns the name of the runtime configuration for this source set.
-     *
-     * @return The runtime configuration name
-     * @deprecated Use {@link #getRuntimeOnlyConfigurationName()}, {@link #getRuntimeClasspathConfigurationName()} or {@link #getRuntimeElementsConfigurationName()} instead.
-     */
-    @Deprecated
-    String getRuntimeConfigurationName();
-
-    /**
      * Returns the name of the compile only configuration for this source set.
      *
      * @return The compile only configuration name
@@ -302,6 +281,15 @@ public interface SourceSet extends ExtensionAware {
      * @since 2.12
      */
     String getCompileOnlyConfigurationName();
+
+    /**
+     * Returns the name of the 'compile only api' configuration for this source set.
+     *
+     * @return The 'compile only api' configuration name
+     *
+     * @since 6.7
+     */
+    String getCompileOnlyApiConfigurationName();
 
     /**
      * Returns the name of the compile classpath configuration for this source set.
@@ -390,7 +378,6 @@ public interface SourceSet extends ExtensionAware {
      * @return the name of the javadoc elements configuration.
      * @since 6.0
      */
-    @Incubating
     String getJavadocElementsConfigurationName();
 
     /**
@@ -400,7 +387,6 @@ public interface SourceSet extends ExtensionAware {
      * @return the name of the sources elements configuration.
      * @since 6.0
      */
-    @Incubating
     String getSourcesElementsConfigurationName();
 
     /**

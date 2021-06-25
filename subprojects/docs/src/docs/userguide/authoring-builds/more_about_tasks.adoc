@@ -61,7 +61,7 @@ We have already seen how to define tasks using strings for task names in <<tutor
 
 [NOTE]
 ====
-The task configuration APIs are described in more detail in the <<task_configuration_avoidance#,task configuration avoidance chapter>>.
+The task configuration APIs are described in more detail in the <<task_configuration_avoidance#task_configuration_avoidance,task configuration avoidance chapter>>.
 ====
 
 .Defining tasks using strings for task names
@@ -70,39 +70,32 @@ include::sample[dir="snippets/tasks/defineUsingStringTaskNames/groovy",files="bu
 include::sample[dir="snippets/tasks/defineUsingStringTaskNames/kotlin",files="build.gradle.kts[]"]
 ====
 
-There is an alternative syntax for defining tasks, which you may prefer to use:
+We add the tasks to the `tasks` collection.
+Have a look at link:{javadocPath}/org/gradle/api/tasks/TaskContainer.html[TaskContainer] for more variations of the `register()` method.
 
-.Defining tasks using the `tasks` container
+In the Kotlin DSL there is also a specific link:https://kotlinlang.org/docs/reference/delegated-properties.html[delegated properties] syntax that is useful if you need the registered task for further reference.
+
+.Assigning tasks to variables with DSL specific syntax
 ====
-include::sample[dir="snippets/tasks/addToTaskContainer/groovy",files="build.gradle[]"]
-include::sample[dir="snippets/tasks/addToTaskContainer/kotlin",files="build.gradle.kts[]"]
-====
-
-Here we add tasks to the `tasks` collection. Have a look at link:{javadocPath}/org/gradle/api/tasks/TaskContainer.html[TaskContainer] for more variations of the `register()` method.
-
-And finally, there are language specific syntaxes for the Groovy and Kotlin DSL:
-
-.Defining tasks using a DSL specific syntax
-====
-include::sample[dir="snippets/tasks/defineAsGroovyExpression/groovy",files="build.gradle[]"]
+include::sample[dir="snippets/tasks/defineAsKotlinDelegatedProperty/groovy",files="build.gradle[]"]
 include::sample[dir="snippets/tasks/defineAsKotlinDelegatedProperty/kotlin",files="build.gradle.kts[]"]
+====
 
-[.multi-language-text.lang-kotlin]
-Note that the Kotlin link:https://kotlinlang.org/docs/reference/delegated-properties.html[delegated properties] syntax is particularly useful if you need the created task for further reference.
+[WARNING]
+====
+If you look at the API of the _tasks_ container you may notice that there are additional methods to _create_ tasks.
+The use of these methods is discouraged and will be deprecated in future versions.
+These methods only exist for backward compatibility as they were introduced before <<task_configuration_avoidance#task_configuration_avoidance,task configuration avoidance>> was added to Gradle.
 ====
 
 [[sec:locating_tasks]]
 == Locating tasks
 
-You often need to locate the tasks that you have defined in the build file, for example, to configure them or use them for dependencies. There are a number of ways of doing this. Firstly, just like with defining tasks there are language specific syntaxes for the Groovy and Kotlin DSL:
+You often need to locate the tasks that you have defined in the build file, for example, to configure them or use them for dependencies.
+There are a number of ways of doing this. Firstly, just like with defining tasks there are language specific syntaxes for the Groovy and Kotlin DSL:
 
-.Accessing tasks using a DSL specific syntax
-====
-include::sample[dir="snippets/tasks/accessAsGroovyProperty/groovy",files="build.gradle[]"]
-include::sample[dir="snippets/tasks/accessAsKotlinDelegatedProperty/kotlin",files="build.gradle.kts[]"]
-====
-
-Tasks are also available through the `tasks` collection.
+In general, tasks are available through the `tasks` collection.
+You should use of the methods that return a _task provider_ – `register()` or `named()` – to make sure you do not break <<task_configuration_avoidance#task_configuration_avoidance,task configuration avoidance>>.
 
 .Accessing tasks via tasks collection
 ====
@@ -110,12 +103,29 @@ include::sample[dir="snippets/tasks/accessFromTaskContainer/groovy",files="build
 include::sample[dir="snippets/tasks/accessFromTaskContainer/kotlin",files="build.gradle.kts[]"]
 ====
 
-You can access tasks from any project using the task's path using the `tasks.getByPath()` method. You can call the `getByPath()` method with a task name, or a relative path, or an absolute path.
+Tasks of a specific type can also be accessed by using the `tasks.withType()` method.
+This enables to easily avoid duplication of code and reduce redundancy.
+
+.Accessing tasks by their type
+====
+include::sample[dir="snippets/tasks/accessUsingType/groovy",files="build.gradle[]"]
+include::sample[dir="snippets/tasks/accessUsingType/kotlin",files="build.gradle.kts[]"]
+====
+
+[WARNING]
+====
+The following shows how to access a task by path.
+This is not a recommended practice anymore as it breaks <<task_configuration_avoidance#task_configuration_avoidance,task configuration avoidance>> and project isolation.
+Dependencies between projects <<declaring_dependencies_between_subprojects.adoc#declaring_dependencies_between_subprojects,should be declared as dependencies>>.
+====
+
+You can access tasks from any project using the task's path using the `tasks.getByPath()` method.
+You can call the `getByPath()` method with a task name, or a relative path, or an absolute path.
 
 .Accessing tasks by path
 ====
-include::sample[dir="snippets/tasks/accessUsingPath/groovy",files="build.gradle[]"]
-include::sample[dir="snippets/tasks/accessUsingPath/kotlin",files="build.gradle.kts[]"]
+include::sample[dir="snippets/tasks/accessUsingPath/groovy",files="project-a/build.gradle[];build.gradle[]"]
+include::sample[dir="snippets/tasks/accessUsingPath/kotlin",files="project-a/build.gradle.kts[];build.gradle.kts[]"]
 
 .Output of **`gradle -q hello`**
 ----
@@ -124,50 +134,49 @@ include::{snippetsPath}/tasks/accessUsingPath/tests/accessUsingPath.out[]
 ----
 ====
 
-Tasks of a specific type can also be accessed by using the `tasks.withType()` method. This enables to easily avoid duplication of code and reduce redundancy.
-
-.Accessing tasks by their type
-====
-include::sample[dir="snippets/tasks/accessUsingType/groovy",files="build.gradle[]"]
-include::sample[dir="snippets/tasks/accessUsingType/kotlin",files="build.gradle.kts[]"]
-====
-
 Have a look at link:{javadocPath}/org/gradle/api/tasks/TaskContainer.html[TaskContainer] for more options for locating tasks.
 
 [[sec:configuring_tasks]]
 == Configuring tasks
 
-As an example, let's look at the `Copy` task provided by Gradle. To create a `Copy` task for your build, you can declare in your build script:
+As an example, let's look at the `Copy` task provided by Gradle.
+To register a `Copy` task for your build, you can declare in your build script:
 
-.Creating a copy task
+.Registering a copy task
 ====
 include::sample[dir="snippets/tasks/configureUsingBlock/groovy",files="build.gradle[tags=declare-task]"]
 include::sample[dir="snippets/tasks/configureUsingBlock/kotlin",files="build.gradle.kts[tags=declare-task]"]
 ====
 
-This creates a copy task with no default behavior. The task can be configured using its API (see link:{groovyDslPath}/org.gradle.api.tasks.Copy.html[Copy]). The following examples show several different ways to achieve the same configuration.
+This registers a copy task with no default behavior.
+The task can be configured using its API (see link:{groovyDslPath}/org.gradle.api.tasks.Copy.html[Copy]).
+The following examples show several different ways to achieve the same configuration.
 
-Just to be clear, realize that the name of this task is “`myCopy`”, but it is of _type_ “`Copy`”. You can have multiple tasks of the same _type_, but with different names. You'll find this gives you a lot of power to implement cross-cutting concerns across all tasks of a particular type.
+Just to be clear, realize that the name of this task is `myCopy`, but it is of _type_ `Copy`.
+You can have multiple tasks of the same _type_, but with different names.
+You'll find this gives you a lot of power to implement cross-cutting concerns across all tasks of a particular type.
 
-.Configuring a task using the API
+.Configuring a task
 ====
 include::sample[dir="snippets/tasks/configureUsingVar/groovy",files="build.gradle[tags=configure]"]
 include::sample[dir="snippets/tasks/configureUsingVar/kotlin",files="build.gradle.kts[tags=configure]"]
 ====
 
-This is similar to the way we would configure objects in Java. You have to repeat the context (`myCopy`) in the configuration statement every time. This is a redundancy and not very nice to read.
+You can also store the task reference in a variable and use to configure the task further at a later point in the script.
 
-There is another way of configuring a task. It also preserves the context and it is arguably the most readable. It is usually our favorite.
-
-.Configuring a task using a DSL specific syntax
+.Retrieve a task reference and use it to configuring the task
 ====
 include::sample[dir="snippets/tasks/configureUsingBlock/groovy",files="build.gradle[tags=configure]"]
 include::sample[dir="snippets/tasks/configureUsingBlock/kotlin",files="build.gradle.kts[tags=configure]"]
 ====
 
-This works for _any_ task. Task access is just a shortcut for the `tasks.named()` (Kotlin) or `tasks.getByName()` (Groovy) method. It is important to note that blocks used here are for _configuring_ the task and are not evaluated when the task executes.
-
 Have a look at link:{javadocPath}/org/gradle/api/tasks/TaskContainer.html[TaskContainer] for more options for configuring tasks.
+
+[TIP]
+====
+If you use the _Kotlin DSL_ and the task you want to configure was added by a plugin, you can use a convenient accessor for the task.
+That is, instead of `tasks.named("test")` you can just write `tasks.test`.
+====
 
 You can also use a configuration block when you define a task.
 
@@ -197,24 +206,15 @@ include::sample[dir="snippets/tasks/taskConstructorArgs-onTaskContainer/kotlin",
 
 You can then create a task, passing the constructor arguments at the end of the parameter list.
 
-.Creating a task with constructor arguments using TaskContainer
+.Registering a task with constructor arguments using TaskContainer
 ====
 include::sample[dir="snippets/tasks/taskConstructorArgs-onTaskContainer/groovy",files="build.gradle[tags=on-task-container]"]
 include::sample[dir="snippets/tasks/taskConstructorArgs-onTaskContainer/kotlin",files="build.gradle.kts[tags=on-task-container]"]
 ====
 
-You can also create the task using a `constructorArgs` Map argument using the Project API:
-
-.Creating a task with constructor arguments using Map
-====
-include::sample[dir="snippets/tasks/taskConstructorArgs-onProject/groovy",files="build.gradle[tags=on-project]"]
-include::sample[dir="snippets/tasks/taskConstructorArgs-onProject/kotlin",files="build.gradle.kts[tags=on-project]"]
-====
-
 [NOTE]
-.Prefer creating a task with constructor arguments using the TaskContainer
 ====
-It's recommended to use the <<task_configuration_avoidance.adoc#,Task Configuration Avoidance>> APIs to improve configuration time.
+It's recommended to use the <<task_configuration_avoidance.adoc#task_configuration_avoidance,Task Configuration Avoidance>> APIs to improve configuration time.
 ====
 
 In all circumstances, the values passed as constructor arguments must be non-null.
@@ -223,7 +223,7 @@ If you attempt to pass a `null` value, Gradle will throw a `NullPointerException
 [[sec:adding_dependencies_to_tasks]]
 == Adding dependencies to a task
 
-There are several ways you can define the dependencies of a task. In <<tutorial_using_tasks.adoc#sec:task_dependencies,Task dependencies>> you were introduced to defining dependencies using task names. Task names can refer to tasks in the same project as the task, or to tasks in other projects. To refer to a task in another project, you prefix the name of the task with the path of the project it belongs to. The following is an example which adds a dependency from `projectA:taskX` to `projectB:taskY`:
+There are several ways you can define the dependencies of a task. In <<tutorial_using_tasks.adoc#sec:task_dependencies,Task dependencies>> you were introduced to defining dependencies using task names. Task names can refer to tasks in the same project as the task, or to tasks in other projects. To refer to a task in another project, you prefix the name of the task with the path of the project it belongs to. The following is an example which adds a dependency from `project-a:taskX` to `project-b:taskY`:
 
 .Adding dependency on task from another project
 ====
@@ -237,9 +237,9 @@ include::{snippetsPath}/tasks/addDependencyUsingPath/tests/addDependencyUsingPat
 ----
 ====
 
-Instead of using a task name, you can define a dependency using a `Task` object, as shown in this example:
+Instead of using a task name, you can define a dependency using a `TaskProvider` object, as shown in this example:
 
-.Adding dependency using task object
+.Adding dependency using task provider object
 ====
 include::sample[dir="snippets/tasks/addDependencyUsingTask/groovy",files="build.gradle[]"]
 include::sample[dir="snippets/tasks/addDependencyUsingTask/kotlin",files="build.gradle.kts[]"]
@@ -251,7 +251,10 @@ include::{snippetsPath}/tasks/addDependencyUsingTask/tests/addDependencyUsingTas
 ----
 ====
 
-For more advanced uses, you can define a task dependency using a lazy block. When evaluated, the block is passed the task whose dependencies are being calculated. The lazy block should return a single `Task` or collection of `Task` objects, which are then treated as dependencies of the task. The following example adds a dependency from `taskX` to all the tasks in the project whose name starts with `lib`:
+For more advanced uses, you can define a task dependency using a lazy block.
+When evaluated, the block is passed the task whose dependencies are being calculated.
+The lazy block should return a single `Task` or collection of `Task` objects, which are then treated as dependencies of the task.
+The following example adds a dependency from `taskX` to all the tasks in the project whose name starts with `lib`:
 
 .Adding dependency using a lazy block
 ====
@@ -426,7 +429,7 @@ All of Gradle's built-in tasks respond to timeouts in a timely manner.
 .Specifying task timeouts
 ====
 include::sample[dir="snippets/tasks/timeout/groovy",files="build.gradle[]"]
-include::sample[dir="snippets/tasks/timeout/kotlin",files="build.gradle.kts[]"]
+include::sample[dir="snippets/tasks/timeout/kotlin",files="build.gradle.kts[tags=without-import]"]
 ====
 
 [[sec:up_to_date_checks]]
@@ -652,6 +655,10 @@ Implies `<<#incremental,@Incremental>>`.
 | `@link:{javadocPath}/org/gradle/api/tasks/PathSensitive.html[PathSensitive]`
 | `File`+++*+++
 | [[inputs_path_sensitivity]]Used with any input file property to tell Gradle to only consider the given part of the file paths as important. For example, if a property is annotated with `@PathSensitive(PathSensitivity.NAME_ONLY)`, then moving the files around without changing their contents will not make the task out-of-date.
+
+| `@link:{javadocPath}/org/gradle/api/tasks/IgnoreEmptyDirectories.html[IgnoreEmptyDirectories]`
+| `Iterable&lt;File&gt;`*
+| Used with `@InputFiles` or `@InputDirectory` to instruct Gradle to track only changes to the contents of directories and not differences in the directories themselves. For example, removing, renaming or adding an empty directory somewhere in the directory structure will not make the task out-of-date.
 |===
 
 [NOTE]
@@ -746,8 +753,11 @@ There are other task types where this kind of nested inputs are available:
 
 * link:{groovyDslPath}/org.gradle.api.tasks.JavaExec.html#org.gradle.api.tasks.JavaExec:argumentProviders[JavaExec.getArgumentProviders()] - model e.g. custom tools
 * link:{groovyDslPath}/org.gradle.api.tasks.JavaExec.html#org.gradle.api.tasks.JavaExec:jvmArgumentProviders[JavaExec.getJvmArgumentProviders()] - used for Jacoco Java agent
-* link:{groovyDslPath}/org.gradle.api.tasks.compile.CompileOptions.html#org.gradle.api.tasks.compile.CompileOptions:compilerArgumentProviders[CompileOptions.getCompilerArgumentProviders()] - model e.g annotation processors
-* link:{groovyDslPath}/org.gradle.api.tasks.Exec.html#org.gradle.api.tasks.Exec:argumentProviders[Exec.getArgumentProviders()] - model e.g custom tools
+* link:{groovyDslPath}/org.gradle.api.tasks.compile.CompileOptions.html#org.gradle.api.tasks.compile.CompileOptions:compilerArgumentProviders[CompileOptions.getCompilerArgumentProviders()] - model e.g. annotation processors
+* link:{groovyDslPath}/org.gradle.api.tasks.Exec.html#org.gradle.api.tasks.Exec:argumentProviders[Exec.getArgumentProviders()] - model e.g. custom tools
+* link:{groovyDslPath}/org.gradle.api.tasks.compile.ForkOptions.html#org.gradle.api.tasks.compile.ForkOptions:jvmArgumentProviders[JavaCompile.getOptions().getForkOptions().getJvmArgumentProviders()] - model Java compiler daemon command line arguments
+* link:{groovyDslPath}/org.gradle.api.tasks.compile.GroovyForkOptions.html#org.gradle.api.tasks.compile.GroovyForkOptions:jvmArgumentProviders[GroovyCompile.getGroovyOptions().getForkOptions().getJvmArgumentProviders()] - model Groovy compiler daemon command line arguments
+* link:{groovyDslPath}/org.gradle.api.tasks.scala.ScalaForkOptions.html#org.gradle.api.tasks.scala.ScalaForkOptions:jvmArgumentProviders[ScalaCompile.getScalaOptions().getForkOptions().getJvmArgumentProviders()] - model Scala compiler daemon command line arguments
 
 In the same way, this kind of modelling is available to custom tasks.
 
@@ -757,13 +767,20 @@ In the same way, this kind of modelling is available to custom tasks.
 When executing the build Gradle checks if task types are declared with the proper annotations.
 It tries to identify problems where e.g. annotations are used on incompatible types, or on setters etc.
 Any getter not annotated with an input/output annotation is also flagged.
-These problems are then turned into deprecation warnings when the task is executed.
+These problems then fail the build or are turned into deprecation warnings when the task is executed.
 
-.Example output with a task having undeclared inputs and outputs
-----
-> gradle processTemplatesRuntime
-include::{snippetsPath}/tasks/incrementalBuild-customTaskClass/tests/customTaskClassWithoutInputOutputAnnotations.out[]
-----
+[NOTE]
+====
+Tasks that have a validation warning are executed without any optimizations.
+Specifically, they never can be:
+
+* <<#sec:up_to_date_checks,up-to-date>>,
+* loaded from or stored in the <<build_cache.adoc#build_cache,build cache>>,
+* executed in parallel with other tasks, even if <<multi_project_configuration_and_execution.adoc#sec:parallel_execution,parallel execution>> is enabled,
+* executed incrementally.
+
+The in-memory representation of the file system state (aka _<<gradle_daemon.adoc#sec:daemon_watch_fs,Virtual File System>>)_ is also invalidated before an invalid task is executed.
+====
 
 [[sec:task_input_output_runtime_api]]
 ==== Runtime API
@@ -913,6 +930,9 @@ The incremental build annotations provide enough information for Gradle to perfo
 * `@InputFile` - verifies that the property has a value and that the path corresponds to a file (not a directory) that exists.
 * `@InputDirectory` - same as for `@InputFile`, except the path must correspond to a directory.
 * `@OutputDirectory` - verifies that the path doesn’t match a file and also creates the directory if it doesn’t already exist.
+
+If one task produces an output in a location and another task consumes that location by referring to it as an input, then Gradle checks that the consumer task depends on the producer task.
+When the producer and the consumer tasks are executing at the same time, the build fails to avoid capturing an incorrect state.
 
 Such validation improves the robustness of the build, allowing you to identify issues related to inputs and outputs quickly.
 
@@ -1157,17 +1177,47 @@ include::sample[dir="snippets/tasks/inputNormalization/groovy",files="build.grad
 include::sample[dir="snippets/tasks/inputNormalization/kotlin",files="build.gradle.kts[tags=ignore-build-info-properties]"]
 ====
 
-If adding such a file to your jar files is something you do for all of the projects in your build, and you want to filter this file for all consumers, you may wrap the configurations described above in an `allprojects {}` or `subprojects {}` block in the root build script.
+If adding such a file to your jar files is something you do for all of the projects in your build, and you want to filter this file for all consumers,
+you should consider configuring such normalization in a <<sharing_build_logic_between_subprojects#sec:convention_plugins,convention plugin>> to share it between subprojects.
 
 The effect of this configuration would be that changes to `build-info.properties` would be ignored for up-to-date checks and <<build_cache.adoc#build_cache,build cache>> key calculations.
 Note that this will not change the runtime behavior of the `test` task — i.e. any test is still able to load `build-info.properties` and the runtime classpath is still the same as before.
+
+[[sec:property_file_normalization]]
+===== Properties file normalization
+
+By default, properties files (i.e. files that end in a `.properties` extension) will be normalized to ignore differences in comments, whitespace and the order of properties.
+Gradle does this by loading the properties files and only considering the individual properties during up-to-date checks or build cache key calculations.
+
+It is sometimes the case, though, that certain properties have a runtime impact, while others do not.
+If a property is changing that does not have an impact on the runtime classpath, it may be desirable to exclude it from up-to-date checks and <<build_cache.adoc#build_cache,build cache>> key calculations.
+However, excluding the entire file would also exclude the properties that do have a runtime impact.
+In this case, properties can be excluded selectively from any or all properties files on the runtime classpath.
+
+A rule for ignoring properties can be applied to a specific set of files using the patterns described in link:{groovyDslPath}/org.gradle.normalization.RuntimeClasspathNormalization.html[RuntimeClasspathNormalization].
+In the event that a file matches a rule, but cannot be loaded as a properties file (e.g. because it is not formatted properly or uses a non-standard encoding), it will be incorporated into the up-to-date or build cache key calculation as a normal file.
+In other words, if the file cannot be loaded as a properties file, any changes to whitespace, property order, or comments may cause the task to become out-of-date or cause a cache miss.
+
+.Ignore a property in selected properties files
+====
+include::sample[dir="snippets/tasks/inputNormalizationPropertiesFiles/groovy",files="build.gradle[tags=ignore-property-selected]"]
+include::sample[dir="snippets/tasks/inputNormalizationPropertiesFiles/kotlin",files="build.gradle.kts[tags=ignore-property-selected]"]
+====
+
+.Ignore a property in all properties files
+====
+include::sample[dir="snippets/tasks/inputNormalizationPropertiesFiles/groovy",files="build.gradle[tags=ignore-property-all]"]
+include::sample[dir="snippets/tasks/inputNormalizationPropertiesFiles/kotlin",files="build.gradle.kts[tags=ignore-property-all]"]
+====
 
 [[sec:meta_inf_normalization]]
 ===== Java `META-INF` normalization
 
 For files in the `META-INF` directory of jar archives it's not always possible to ignore files completely due to their runtime impact.
 
-Manifests and properties files within `META-INF` are normalized to ignore comments, whitespace and order differences. Manifest attribute names are compared case-and-order insensitively. Properties file keys are order insensitive.
+Manifest files within `META-INF` are normalized to ignore comments, whitespace and order differences.
+Manifest attribute names are compared case-and-order insensitively.
+Manifest properties files are normalized according to <<more_about_tasks.adoc#sec:property_file_normalization,Properties File Normalization>>.
 
 .Ignore `META-INF` manifest attributes
 ====
@@ -1237,7 +1287,7 @@ include::{snippetsPath}/tasks/addRules/tests/taskRuleDependsOn.out[]
 ----
 ====
 
-If you run “`gradle -q tasks`” you won't find a task named “`pingServer1`” or “`pingServer2`”, but this script is executing logic based on the request to run those tasks.
+If you run `gradle -q tasks` you won't find a task named `pingServer1` or `pingServer2`, but this script is executing logic based on the request to run those tasks.
 
 [[sec:finalizer_tasks]]
 == Finalizer tasks

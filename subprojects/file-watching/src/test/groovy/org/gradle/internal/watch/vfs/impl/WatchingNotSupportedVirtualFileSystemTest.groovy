@@ -21,8 +21,13 @@ import org.gradle.internal.snapshot.CaseSensitivity
 import org.gradle.internal.snapshot.SnapshotHierarchy
 import org.gradle.internal.vfs.impl.DefaultSnapshotHierarchy
 import org.gradle.internal.vfs.impl.VfsRootReference
+import org.gradle.internal.watch.vfs.VfsLogging
+import org.gradle.internal.watch.vfs.WatchLogging
+import org.gradle.internal.watch.vfs.WatchMode
 import spock.lang.Specification
+import spock.lang.Unroll
 
+@Unroll
 class WatchingNotSupportedVirtualFileSystemTest extends Specification {
     def emptySnapshotHierarchy = DefaultSnapshotHierarchy.empty(CaseSensitivity.CASE_SENSITIVE)
     def nonEmptySnapshotHierarchy = Stub(SnapshotHierarchy) {
@@ -32,19 +37,19 @@ class WatchingNotSupportedVirtualFileSystemTest extends Specification {
     def watchingNotSupportedHandler = new WatchingNotSupportedVirtualFileSystem(rootReference)
     def buildOperationRunner = new TestBuildOperationExecutor()
 
-    def "invalidates the virtual file system before and after the build"() {
+    def "invalidates the virtual file system before and after the build (watch mode: #watchMode.description)"() {
         when:
-        watchingNotSupportedHandler.afterBuildStarted(retentionEnabled, buildOperationRunner)
+        watchingNotSupportedHandler.afterBuildStarted(watchMode, VfsLogging.NORMAL, WatchLogging.NORMAL, buildOperationRunner)
         then:
         rootReference.getRoot() == emptySnapshotHierarchy
 
         when:
         rootReference.update { root -> nonEmptySnapshotHierarchy }
-        watchingNotSupportedHandler.beforeBuildFinished(retentionEnabled, buildOperationRunner, Integer.MAX_VALUE)
+        watchingNotSupportedHandler.beforeBuildFinished(watchMode, VfsLogging.NORMAL, WatchLogging.NORMAL, buildOperationRunner, Integer.MAX_VALUE)
         then:
         rootReference.getRoot() == emptySnapshotHierarchy
 
         where:
-        retentionEnabled << [true, false]
+        watchMode << WatchMode.values().toList()
     }
 }

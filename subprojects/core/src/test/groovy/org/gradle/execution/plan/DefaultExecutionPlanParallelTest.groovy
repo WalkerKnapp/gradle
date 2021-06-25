@@ -21,6 +21,7 @@ import org.gradle.api.Task
 import org.gradle.api.file.FileCollection
 import org.gradle.api.internal.TaskInternal
 import org.gradle.api.internal.project.ProjectInternal
+import org.gradle.api.internal.tasks.TaskStateInternal
 import org.gradle.api.tasks.Destroys
 import org.gradle.api.tasks.InputDirectory
 import org.gradle.api.tasks.InputFile
@@ -28,15 +29,20 @@ import org.gradle.api.tasks.LocalState
 import org.gradle.api.tasks.OutputDirectory
 import org.gradle.api.tasks.OutputFile
 import org.gradle.api.tasks.OutputFiles
+import org.gradle.api.tasks.TaskAction
 import org.gradle.composite.internal.IncludedBuildTaskGraph
 import org.gradle.internal.nativeintegration.filesystem.FileSystem
 import org.gradle.internal.work.WorkerLeaseRegistry
 import org.gradle.test.fixtures.file.TestFile
 import org.gradle.testfixtures.internal.NativeServicesTestFixture
+import org.gradle.util.Path
 import org.gradle.util.Requires
 import org.gradle.util.TestPrecondition
+import org.gradle.util.internal.ToBeImplemented
 import spock.lang.Issue
 import spock.lang.Unroll
+
+import static org.gradle.internal.snapshot.CaseSensitivity.CASE_SENSITIVE
 
 class DefaultExecutionPlanParallelTest extends AbstractExecutionPlanSpec {
 
@@ -49,7 +55,7 @@ class DefaultExecutionPlanParallelTest extends AbstractExecutionPlanSpec {
         _ * lease.tryLock() >> true
         def taskNodeFactory = new TaskNodeFactory(project.gradle, Stub(IncludedBuildTaskGraph))
         def dependencyResolver = new TaskDependencyResolver([new TaskNodeDependencyResolver(taskNodeFactory)])
-        executionPlan = new DefaultExecutionPlan(thisBuild, taskNodeFactory, dependencyResolver)
+        executionPlan = new DefaultExecutionPlan(Path.ROOT.toString(), taskNodeFactory, dependencyResolver, nodeValidator, new ExecutionNodeAccessHierarchy(CASE_SENSITIVE, fs), new ExecutionNodeAccessHierarchy(CASE_SENSITIVE, fs))
     }
 
     TaskInternal task(Map<String, ?> options = [:], String name) {
@@ -263,48 +269,33 @@ class DefaultExecutionPlanParallelTest extends AbstractExecutionPlanSpec {
         tasksAreNotExecutedInParallel(a, b)
     }
 
+    @ToBeImplemented("When we support symlinks in the VFS, we should implement this as well")
     @Requires(TestPrecondition.SYMLINKS)
     def "a task that writes into a symlink that overlaps with output of currently running task is not started"() {
         given:
         def taskOutput = file("outputDir").createDir()
         def symlink = file("symlink")
-        fs.createSymbolicLink(symlink, taskOutput)
+        symlink.createLink(taskOutput)
 
         and:
         Task a = task("a", type: AsyncWithOutputDirectory)
         _ * a.outputDirectory >> taskOutput
         Task b = task("b", type: AsyncWithOutputFile)
-        _ * b.outputFile >> symlink.file("fileUnderSymlink")
+        // Need to use new File() here, since TestFile.file() canonicalizes the result
+        _ * b.outputFile >> new File(symlink, "fileUnderSymlink")
 
         expect:
-        tasksAreNotExecutedInParallel(a, b)
+        // TODO: Should be tasksAreNotExecutedInParallel(a, b)
+        tasksAreExecutedInParallel(a, b)
     }
 
-    private void tasksAreNotExecutedInParallel(Task first, Task second) {
-        addToGraphAndPopulate(first, second)
-
-        def firstTaskNode = selectNextTaskNode()
-
-        assert selectNextTask() == null
-        assert lockedProjects.empty
-
-        executionPlan.finishedExecuting(firstTaskNode)
-        def secondTask = selectNextTask()
-
-        assert [firstTaskNode.task, secondTask] as Set == [first, second] as Set
-    }
-
+    @ToBeImplemented("When we support symlinks in the VFS, we should implement this as well")
     @Requires(TestPrecondition.SYMLINKS)
     def "a task that writes into a symlink of a shared output dir of currently running task is not started"() {
         given:
         def taskOutput = file("outputDir").createDir()
         def symlink = file("symlink")
-        fs.createSymbolicLink(symlink, taskOutput)
-
-        // Deleting any file clears the internal canonicalisation cache.
-        // This allows the created symlink to be actually resolved.
-        // See java.io.UnixFileSystem#cache.
-        file("tmp").createFile().delete()
+        symlink.createLink(taskOutput)
 
         and:
         Task a = task("a", type: AsyncWithOutputDirectory)
@@ -313,23 +304,20 @@ class DefaultExecutionPlanParallelTest extends AbstractExecutionPlanSpec {
         _ * b.outputDirectory >> symlink
 
         expect:
-        tasksAreNotExecutedInParallel(a, b)
+        // TODO: Should be: tasksAreNotExecutedInParallel(a, b)
+        tasksAreExecutedInParallel(a, b)
 
         cleanup:
         assert symlink.delete()
     }
 
+    @ToBeImplemented("When we support symlinks in the VFS, we should implement this as well")
     @Requires(TestPrecondition.SYMLINKS)
     def "a task that stores local state into a symlink of a shared output dir of currently running task is not started"() {
         given:
         def taskOutput = file("outputDir").createDir()
         def symlink = file("symlink")
-        fs.createSymbolicLink(symlink, taskOutput)
-
-        // Deleting any file clears the internal canonicalisation cache.
-        // This allows the created symlink to be actually resolved.
-        // See java.io.UnixFileSystem#cache.
-        file("tmp").createFile().delete()
+        symlink.createLink(taskOutput)
 
         and:
         Task a = task("a", type: AsyncWithOutputDirectory)
@@ -338,7 +326,8 @@ class DefaultExecutionPlanParallelTest extends AbstractExecutionPlanSpec {
         _ * b.localStateFile >> symlink
 
         expect:
-        tasksAreNotExecutedInParallel(a, b)
+        // TODO: Should be: tasksAreNotExecutedInParallel(a, b)
+        tasksAreExecutedInParallel(a, b)
 
         cleanup:
         assert symlink.delete()
@@ -755,6 +744,127 @@ class DefaultExecutionPlanParallelTest extends AbstractExecutionPlanSpec {
         executionPlan.getNode(finalizer).state == Node.ExecutionState.SKIPPED
     }
 
+    def "no task is started when invalid task is running"() {
+        given:
+        def first = task("first", type: Async)
+        def second = task("second", type: Async)
+
+        when:
+        addToGraphAndPopulate(second, first)
+        def invalidTaskNode = selectNextTaskNode()
+
+        then:
+        invalidTaskNode.task == first
+        1 * nodeValidator.hasValidationProblems({ LocalTaskNode node -> node.task == first }) >> true
+        0 * nodeValidator.hasValidationProblems(_ as Node)
+
+        when:
+        def noTaskSelected = selectNextTask()
+        then:
+        noTaskSelected == null
+        1 * nodeValidator.hasValidationProblems({ LocalTaskNode node -> node.task == second }) >> false
+        0 * nodeValidator.hasValidationProblems(_ as Node)
+
+        when:
+        executionPlan.finishedExecuting(invalidTaskNode)
+        def validTask = selectNextTask()
+        then:
+        validTask == second
+    }
+
+    def "an invalid task is not started when another task is running"() {
+        given:
+        def first = task("fist", type: Async)
+        def second = task("second", type: Async)
+
+        when:
+        addToGraphAndPopulate(second, first)
+        def validTaskNode = selectNextTaskNode()
+
+        then:
+        validTaskNode.task == first
+        1 * nodeValidator.hasValidationProblems({ LocalTaskNode node -> node.task == first }) >> false
+        0 * nodeValidator.hasValidationProblems(_ as Node)
+
+        when:
+        def noTaskSelected = selectNextTask()
+        then:
+        noTaskSelected == null
+        1 * nodeValidator.hasValidationProblems({ LocalTaskNode node -> node.task == second }) >> true
+        0 * nodeValidator.hasValidationProblems(_ as Node)
+
+        when:
+        executionPlan.finishedExecuting(validTaskNode)
+        def invalidTask = selectNextTask()
+        then:
+        invalidTask == second
+    }
+
+    def "a skipped invalid task does not hold up rest of build"() {
+        given:
+        executionPlan.continueOnFailure = true
+        def failure = new RuntimeException("BOOM!")
+        def brokenState = Stub(TaskStateInternal) {
+            getFailure() >> failure
+            rethrowFailure() >> { throw failure }
+        }
+        def broken = task("broken", type: Async)
+        def invalid = task("invalid", type: Async, dependsOn: [broken])
+        def regular = task("task", type: Async)
+
+        when:
+        addToGraphAndPopulate(broken, invalid, regular)
+        def firstTaskNode = selectNextTaskNode()
+
+        then:
+        firstTaskNode.state == Node.ExecutionState.EXECUTING
+        firstTaskNode.task == broken
+        1 * nodeValidator.hasValidationProblems({ LocalTaskNode node -> node.task == broken }) >> false
+        0 * nodeValidator.hasValidationProblems(_ as Node)
+
+        when:
+        executionPlan.finishedExecuting(firstTaskNode)
+        def secondTaskNode = selectNextTaskNode()
+
+        then:
+        secondTaskNode.state == Node.ExecutionState.SKIPPED
+        secondTaskNode.task == invalid
+        _ * broken.state >> brokenState
+        1 * nodeValidator.hasValidationProblems({ LocalTaskNode node -> node.task == invalid }) >> true
+        0 * nodeValidator.hasValidationProblems(_ as Node)
+
+        when:
+        def thirdTaskNode = selectNextTaskNode()
+
+        then:
+        thirdTaskNode.state == Node.ExecutionState.EXECUTING
+        thirdTaskNode.task == regular
+        1 * nodeValidator.hasValidationProblems({ LocalTaskNode node -> node.task == regular }) >> false
+        0 * nodeValidator.hasValidationProblems(_ as Node)
+    }
+
+    private void tasksAreNotExecutedInParallel(Task first, Task second) {
+        addToGraphAndPopulate(first, second)
+
+        def firstTaskNode = selectNextTaskNode()
+
+        assert selectNextTask() == null
+        assert lockedProjects.empty
+
+        executionPlan.finishedExecuting(firstTaskNode)
+        def secondTask = selectNextTask()
+
+        assert [firstTaskNode.task, secondTask] as Set == [first, second] as Set
+    }
+
+    private void tasksAreExecutedInParallel(Task first, Task second) {
+        addToGraphAndPopulate(first, second)
+
+        def tasks = [selectNextTask(), selectNextTask()]
+
+        assert tasks as Set == [first, second] as Set
+    }
+
     private void addToGraphAndPopulate(Task... tasks) {
         executionPlan.addEntryTasks(Arrays.asList(tasks))
         executionPlan.determineExecutionPlan()
@@ -803,6 +913,13 @@ class DefaultExecutionPlanParallelTest extends AbstractExecutionPlanSpec {
         }
     }
 
+    static class FailingTask extends DefaultTask {
+        @TaskAction
+        void execute() {
+            throw new RuntimeException("BOOM!")
+        }
+    }
+
     private TaskInternal selectNextTask() {
         selectNextTaskNode()?.task
     }
@@ -814,7 +931,7 @@ class DefaultExecutionPlanParallelTest extends AbstractExecutionPlanSpec {
         }
         if (nextTaskNode?.task instanceof Async) {
             def project = (ProjectInternal) nextTaskNode.task.project
-            project.mutationState.accessLock.unlock()
+            project.owner.accessLock.unlock()
         }
         return nextTaskNode
     }

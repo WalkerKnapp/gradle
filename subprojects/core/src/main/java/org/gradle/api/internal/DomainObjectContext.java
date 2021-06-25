@@ -51,7 +51,7 @@ public interface DomainObjectContext {
     /**
      * The container that holds the model for this context, to allow synchronized access to the model.
      */
-    ModelContainer getModel();
+    ModelContainer<?> getModel();
 
     /**
      * The path to the build that is associated with this object.
@@ -65,4 +65,25 @@ public interface DomainObjectContext {
      */
     boolean isScript();
 
+    /**
+     * Whether the context is a root script.
+     *
+     * `Settings` is such a context.
+     *
+     * Some objects are associated with a script, that is associated with a domain object.
+     */
+    boolean isRootScript();
+
+    /**
+     * Indicates if the context is plugin resolution
+     */
+    boolean isPluginContext();
+
+    /**
+     * Returns true if the context represents a detached state, for
+     * example detached dependency resolution
+     */
+    default boolean isDetachedState() {
+        return false;
+    }
 }

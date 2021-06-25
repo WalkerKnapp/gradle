@@ -17,7 +17,6 @@
 package org.gradle.api.artifacts;
 
 import org.gradle.api.Action;
-import org.gradle.api.Incubating;
 import org.gradle.api.artifacts.component.ComponentSelector;
 import org.gradle.internal.HasInternalProtocol;
 
@@ -40,8 +39,8 @@ public interface DependencySubstitutions {
      * configurations.main.resolutionStrategy.dependencySubstitution {
      *   // Use a rule to change the dependency module while leaving group + version intact
      *   all { DependencySubstitution dependency -&gt;
-     *     if (dependency.requested instanceof ModuleComponentSelector &amp;&amp; dependency.requested.name == 'groovy-all') {
-     *       dependency.useTarget details.requested.group + ':groovy:' + details.requested.version
+     *     if (dependency.requested instanceof ModuleComponentSelector &amp;&amp; dependency.requested.module == 'groovy-all') {
+     *       dependency.useTarget dependency.requested.group + ':groovy:' + dependency.requested.version
      *     }
      *   }
      *   // Use a rule to replace all missing projects with module dependencies
@@ -79,7 +78,6 @@ public interface DependencySubstitutions {
      * @param detailsAction the variant selection details configuration
      * @since 6.6
      */
-    @Incubating
     ComponentSelector variant(ComponentSelector selector, Action<? super VariantSelectionDetails> detailsAction);
 
     /**
@@ -88,7 +86,6 @@ public interface DependencySubstitutions {
      * @param selector the original selector
      * @since 6.6
      */
-    @Incubating
     ComponentSelector platform(ComponentSelector selector);
 
     /**
@@ -99,11 +96,11 @@ public interface DependencySubstitutions {
      * configurations { main }
      * configurations.main.resolutionStrategy.dependencySubstitution {
      *   // Substitute project and module dependencies
-     *   substitute module('org.gradle:api') with project(':api')
-     *   substitute project(':util') with module('org.gradle:util:3.0')
+     *   substitute module('org.gradle:api') using project(':api')
+     *   substitute project(':util') using module('org.gradle:util:3.0')
      *
      *   // Substitute one module dependency for another
-     *   substitute module('org.gradle:api:2.0') with module('org.gradle:api:2.1')
+     *   substitute module('org.gradle:api:2.0') using module('org.gradle:api:2.1')
      * }
      * </pre>
      */
@@ -129,7 +126,6 @@ public interface DependencySubstitutions {
          *
          * @since 6.6
          */
-        @Incubating
         Substitution withClassifier(String classifier);
 
         /**
@@ -141,7 +137,6 @@ public interface DependencySubstitutions {
          *
          * @since 6.6
          */
-        @Incubating
         Substitution withoutClassifier();
 
         /**
@@ -149,12 +144,14 @@ public interface DependencySubstitutions {
          *
          * @since 6.6
          */
-        @Incubating
         Substitution withoutArtifactSelectors();
 
         /**
          * Specify the target of the substitution.
+         *
+         * @deprecated Use {@link #using(ComponentSelector)} instead. This method will be removed in Gradle 8.0.
          */
+        @Deprecated
         void with(ComponentSelector notation);
 
 
@@ -164,7 +161,6 @@ public interface DependencySubstitutions {
          *
          * @since 6.6
          */
-        @Incubating
         Substitution using(ComponentSelector notation);
     }
 }

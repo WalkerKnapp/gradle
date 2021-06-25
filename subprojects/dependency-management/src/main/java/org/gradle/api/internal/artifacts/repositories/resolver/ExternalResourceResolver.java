@@ -74,7 +74,7 @@ import org.gradle.internal.resource.local.FileStore;
 import org.gradle.internal.resource.local.LocallyAvailableExternalResource;
 import org.gradle.internal.resource.local.LocallyAvailableResourceFinder;
 import org.gradle.internal.resource.transfer.CacheAwareExternalResourceAccessor;
-import org.gradle.util.CollectionUtils;
+import org.gradle.util.internal.CollectionUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -325,7 +325,11 @@ public abstract class ExternalResourceResolver<T extends ModuleComponentResolveM
         try {
             publishChecksum(destination, content, algorithm, length);
         } catch (Exception ex) {
-            LOGGER.warn("Cannot upload checksum for " + content.getName() + ". Remote repository doesn't support " + algorithm + ". Error: " + ex.getMessage());
+            if (LOGGER.isDebugEnabled()) {
+                LOGGER.warn("Cannot upload checksum for " + content.getName() + " because the remote repository doesn't support " + algorithm + ". This will not fail the build.", ex);
+            } else {
+                LOGGER.warn("Cannot upload checksum for " + content.getName() + " because the remote repository doesn't support " + algorithm + ". This will not fail the build.");
+            }
         }
     }
 

@@ -17,13 +17,16 @@
 package org.gradle.integtests.samples.antmigration
 
 import org.gradle.integtests.fixtures.AbstractSampleIntegrationTest
+import org.gradle.integtests.fixtures.MissingTaskDependenciesFixture
 import org.gradle.integtests.fixtures.Sample
 import org.gradle.integtests.fixtures.ToBeFixedForConfigurationCache
 import org.gradle.integtests.fixtures.UsesSample
+import org.gradle.internal.reflect.problems.ValidationProblemId
+import org.gradle.internal.reflect.validation.ValidationTestFor
 import org.junit.Rule
 import spock.lang.Unroll
 
-class SamplesAntImportIntegrationTest extends AbstractSampleIntegrationTest {
+class SamplesAntImportIntegrationTest extends AbstractSampleIntegrationTest implements MissingTaskDependenciesFixture {
 
     @Rule
     Sample sample = new Sample(testDirectoryProvider)
@@ -58,7 +61,7 @@ class SamplesAntImportIntegrationTest extends AbstractSampleIntegrationTest {
         executer.inDirectory(dslDir)
 
         when:
-        def result = succeeds('retrieveRuntimeDependencies')
+        succeeds('retrieveRuntimeDependencies')
 
         then: "The JARs are copied to the destination directory"
         dslDir.file('build/libs/our-custom.jar').isFile()
@@ -69,6 +72,9 @@ class SamplesAntImportIntegrationTest extends AbstractSampleIntegrationTest {
         dsl << ['groovy', 'kotlin']
     }
 
+    @ValidationTestFor(
+        ValidationProblemId.IMPLICIT_DEPENDENCY
+    )
     @Unroll
     @UsesSample("antMigration/fileDeps")
     def "can use task properties to link tasks (#dsl)"() {
@@ -77,7 +83,7 @@ class SamplesAntImportIntegrationTest extends AbstractSampleIntegrationTest {
         executer.inDirectory(dslDir)
 
         when:
-        def result = succeeds('javadocJar', 'unpackJavadocs')
+        succeeds('javadocJar', 'unpackJavadocs')
 
         then: "The HTML Javadoc files are unpacked to the 'dist' directory"
         dslDir.file('build/dist/org/example/app/HelloApp.html').isFile()

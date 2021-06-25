@@ -28,7 +28,7 @@ import org.gradle.internal.serialize.Decoder;
 import org.gradle.internal.serialize.Encoder;
 import org.gradle.internal.serialize.Serializer;
 import org.gradle.internal.serialize.SetSerializer;
-import org.gradle.util.BuildCommencedTimeProvider;
+import org.gradle.util.internal.BuildCommencedTimeProvider;
 
 import java.util.Set;
 
@@ -60,7 +60,7 @@ public class DefaultModuleArtifactsCache extends AbstractArtifactsCache {
 
     @Override
     protected ModuleArtifactsCacheEntry get(ArtifactsAtRepositoryKey key) {
-        return getCache().get(key);
+        return getCache().getIfPresent(key);
     }
 
     private static class ModuleArtifactsKeySerializer extends AbstractSerializer<ArtifactsAtRepositoryKey> {

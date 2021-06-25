@@ -21,7 +21,7 @@ import org.gradle.internal.FileUtils;
 import org.gradle.internal.exceptions.DiagnosticsVisitor;
 import org.gradle.internal.typeconversion.NotationParser;
 import org.gradle.internal.typeconversion.UnsupportedNotationException;
-import org.gradle.util.DeferredUtil;
+import org.gradle.util.internal.DeferredUtil;
 
 import javax.annotation.Nullable;
 import java.io.File;
@@ -62,6 +62,11 @@ public abstract class AbstractFileResolver implements FileResolver {
                 visitor.candidate("Anything that can be converted to a file, as per Project.file()");
             }
         };
+    }
+
+    @Override
+    public String resolveForDisplay(Object path) {
+        return resolveAsRelativePath(path);
     }
 
     @Override

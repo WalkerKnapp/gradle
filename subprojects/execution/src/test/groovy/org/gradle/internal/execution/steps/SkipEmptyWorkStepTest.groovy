@@ -17,12 +17,10 @@
 package org.gradle.internal.execution.steps
 
 import com.google.common.collect.ImmutableSortedMap
-import org.gradle.internal.execution.AfterPreviousExecutionContext
-import org.gradle.internal.execution.CachingResult
 import org.gradle.internal.execution.ExecutionOutcome
 import org.gradle.internal.execution.history.AfterPreviousExecutionState
 import org.gradle.internal.execution.history.ExecutionHistoryStore
-import org.gradle.internal.fingerprint.FileCollectionFingerprint
+import org.gradle.internal.snapshot.FileSystemSnapshot
 import spock.lang.Unroll
 
 class SkipEmptyWorkStepTest extends StepSpec<AfterPreviousExecutionContext> {
@@ -30,7 +28,7 @@ class SkipEmptyWorkStepTest extends StepSpec<AfterPreviousExecutionContext> {
     def afterPreviousExecutionState = Mock(AfterPreviousExecutionState)
 
     def delegateResult = Mock(CachingResult)
-    def outputFingerprints = ImmutableSortedMap.<String, FileCollectionFingerprint>of()
+    def outputSnapshots = ImmutableSortedMap.<String, FileSystemSnapshot>of()
     def executionHistoryStore = Mock(ExecutionHistoryStore)
 
     @Override
@@ -39,39 +37,39 @@ class SkipEmptyWorkStepTest extends StepSpec<AfterPreviousExecutionContext> {
     }
 
     def setup() {
-        _ * work.executionHistoryStore >> Optional.of(executionHistoryStore)
+        _ * context.history >> Optional.of(executionHistoryStore)
     }
 
     def "delegates when work is not skipped"() {
         when:
-        def result = step.execute(context)
+        def result = step.execute(work, context)
 
         then:
         result == delegateResult
 
         _ * context.afterPreviousExecutionState >> Optional.of(afterPreviousExecutionState)
-        1 * afterPreviousExecutionState.outputFileProperties >> outputFingerprints
-        _ * work.skipIfInputsEmpty(outputFingerprints) >> Optional.empty()
+        1 * afterPreviousExecutionState.outputFilesProducedByWork >> outputSnapshots
+        _ * work.skipIfInputsEmpty(outputSnapshots) >> Optional.empty()
 
         then:
-        1 * delegate.execute(context) >> delegateResult
+        1 * delegate.execute(work, context) >> delegateResult
         0 * _
     }
 
     @Unroll
     def "removes execution history when empty work is skipped (outcome: #outcome)"() {
         when:
-        def result = step.execute(context)
+        def result = step.execute(work, context)
 
         then:
-        result.outcome.get() == outcome
+        result.executionResult.get().outcome == outcome
 
         _ * context.afterPreviousExecutionState >> Optional.of(afterPreviousExecutionState)
-        1 * afterPreviousExecutionState.outputFileProperties >> outputFingerprints
-        _ * work.skipIfInputsEmpty(outputFingerprints) >> Optional.of(outcome)
+        1 * afterPreviousExecutionState.outputFilesProducedByWork >> outputSnapshots
+        _ * work.skipIfInputsEmpty(outputSnapshots) >> Optional.of(outcome)
 
         then:
-        1 * executionHistoryStore.remove(identity)
+        1 * executionHistoryStore.remove(identity.uniqueId)
         0 * _
 
         where:

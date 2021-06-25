@@ -34,7 +34,7 @@ import org.gradle.internal.component.external.model.VariantMetadataRules;
 import org.gradle.internal.component.model.Exclude;
 import org.gradle.internal.component.model.ExcludeMetadata;
 import org.gradle.internal.component.model.ModuleSources;
-import org.gradle.util.CollectionUtils;
+import org.gradle.util.internal.CollectionUtils;
 
 import java.util.IdentityHashMap;
 import java.util.List;
@@ -98,7 +98,7 @@ public class DefaultIvyModuleResolveMetadata extends AbstractLazyModuleComponent
         ImmutableList<ModuleComponentArtifactMetadata> artifacts = configurationHelper.filterArtifacts(name, hierarchy);
         ImmutableList<ExcludeMetadata> excludesForConfiguration = configurationHelper.filterExcludes(hierarchy);
 
-        DefaultConfigurationMetadata configuration = new DefaultConfigurationMetadata(componentId, name, transitive, visible, hierarchy, ImmutableList.copyOf(artifacts), componentMetadataRules, excludesForConfiguration, getAttributes().asImmutable(), false);
+        DefaultConfigurationMetadata configuration = new DefaultConfigurationMetadata(componentId, name, transitive, visible, hierarchy, ImmutableList.copyOf(artifacts), componentMetadataRules, excludesForConfiguration, getAttributes().asImmutable(), false, false);
         configuration.setDependencies(configurationHelper.filterDependencies(configuration));
         return configuration;
     }

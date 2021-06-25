@@ -16,7 +16,7 @@
 
 package org.gradle.integtests.composite
 
-import org.gradle.integtests.fixtures.ToBeFixedForConfigurationCache
+import groovy.test.NotYetImplemented
 import org.gradle.integtests.fixtures.build.BuildTestFile
 import org.gradle.integtests.fixtures.resolve.ResolveTestFixture
 import spock.lang.Issue
@@ -57,7 +57,6 @@ class CompositeBuildDeclaredSubstitutionsIntegrationTest extends AbstractComposi
         }
     }
 
-    @ToBeFixedForConfigurationCache
     def "will only make declared substitutions when defined for included build"() {
         given:
         dependency "org.test:buildB:1.0"
@@ -65,8 +64,8 @@ class CompositeBuildDeclaredSubstitutionsIntegrationTest extends AbstractComposi
         dependency "org.test:b2:1.0"
 
         includeBuild buildB, """
-            substitute module("org.test:buildB") with project(":")
-            substitute module("org.test:b1:1.0") with project(":b1")
+            substitute module("org.test:buildB") using project(":")
+            substitute module("org.test:b1:1.0") using project(":b1")
 """
 
         expect:
@@ -83,7 +82,6 @@ class CompositeBuildDeclaredSubstitutionsIntegrationTest extends AbstractComposi
         }
     }
 
-    @ToBeFixedForConfigurationCache
     def "can combine included builds with declared and discovered substitutions"() {
         given:
         dependency "org.test:b1:1.0"
@@ -91,7 +89,7 @@ class CompositeBuildDeclaredSubstitutionsIntegrationTest extends AbstractComposi
 
         includeBuild buildB
         includeBuild buildC, """
-            substitute module("org.test:XXX") with project(":")
+            substitute module("org.test:XXX") using project(":")
 """
 
         expect:
@@ -107,7 +105,6 @@ class CompositeBuildDeclaredSubstitutionsIntegrationTest extends AbstractComposi
         }
     }
 
-    @ToBeFixedForConfigurationCache
     def "can inject substitutions into other builds"() {
         given:
         mavenRepo.module("org.test", "plugin", "1.0").publish()
@@ -117,7 +114,7 @@ class CompositeBuildDeclaredSubstitutionsIntegrationTest extends AbstractComposi
 
         includeBuild buildB
         includeBuild buildC, """
-            substitute module("org.test:XXX") with project(":")
+            substitute module("org.test:XXX") using project(":")
 """
 
         expect:
@@ -134,7 +131,6 @@ class CompositeBuildDeclaredSubstitutionsIntegrationTest extends AbstractComposi
     }
 
     @Issue("https://github.com/gradle/gradle/issues/5871")
-    @ToBeFixedForConfigurationCache
     def "can inject substitutions into other builds when root build does not reference included builds via a dependency and included build has non-empty script classpath"() {
         mavenRepo.module("org.test", "plugin", "1.0").publish()
 
@@ -154,7 +150,7 @@ class CompositeBuildDeclaredSubstitutionsIntegrationTest extends AbstractComposi
 
         includeBuild buildB
         includeBuild buildC, """
-            substitute module("org.test:XXX") with project(":")
+            substitute module("org.test:XXX") using project(":")
 """
 
         when:
@@ -165,14 +161,13 @@ class CompositeBuildDeclaredSubstitutionsIntegrationTest extends AbstractComposi
         result.assertTaskExecuted(":buildC:jar")
     }
 
-    @ToBeFixedForConfigurationCache
     def "can substitute arbitrary coordinates for included build"() {
         given:
         dependency "org.test:buildX:1.0"
 
         when:
         includeBuild buildB, """
-            substitute module("org.test:buildX") with project(":b1")
+            substitute module("org.test:buildX") using project(":b1")
 """
 
         then:
@@ -184,7 +179,6 @@ class CompositeBuildDeclaredSubstitutionsIntegrationTest extends AbstractComposi
         }
     }
 
-    @ToBeFixedForConfigurationCache
     def "resolves project substitution for build based on rootProject name"() {
         given:
         def buildB2 = rootDir.file("hierarchy", "buildB");
@@ -202,7 +196,7 @@ class CompositeBuildDeclaredSubstitutionsIntegrationTest extends AbstractComposi
         when:
         // The project path ':' is resolved using the rootProject.name of buildB2
         includeBuild buildB2, """
-            substitute module("org.gradle:buildX") with project(":")
+            substitute module("org.gradle:buildX") using project(":")
 """
 
         then:
@@ -214,7 +208,6 @@ class CompositeBuildDeclaredSubstitutionsIntegrationTest extends AbstractComposi
         }
     }
 
-    @ToBeFixedForConfigurationCache
     def "substitutes external dependency with project dependency from same participant build"() {
         given:
         dependency "org.test:buildB:1.0"
@@ -222,8 +215,8 @@ class CompositeBuildDeclaredSubstitutionsIntegrationTest extends AbstractComposi
 
         when:
         includeBuild buildB, """
-            substitute module("org.test:buildB") with project(":")
-            substitute module("org.test:b2:1.0") with project(":b2")
+            substitute module("org.test:buildB") using project(":")
+            substitute module("org.test:b2:1.0") using project(":b2")
 """
 
         then:
@@ -239,7 +232,6 @@ class CompositeBuildDeclaredSubstitutionsIntegrationTest extends AbstractComposi
         }
     }
 
-    @ToBeFixedForConfigurationCache
     def "preserves the requested attributes when performing a composite substitution"() {
         platformDependency 'org.test:platform:1.0'
 
@@ -271,7 +263,6 @@ class CompositeBuildDeclaredSubstitutionsIntegrationTest extends AbstractComposi
 
     }
 
-    @ToBeFixedForConfigurationCache
     @Unroll
     def "preserves the requested attributes when performing a composite substitution using mapping"() {
         platformDependency 'org.test:platform:1.0'
@@ -289,7 +280,7 @@ class CompositeBuildDeclaredSubstitutionsIntegrationTest extends AbstractComposi
 
         when:
         includeBuild(platform, """
-            substitute $source with $dest
+            substitute $source using $dest
         """)
 
         then:
@@ -310,7 +301,6 @@ class CompositeBuildDeclaredSubstitutionsIntegrationTest extends AbstractComposi
         'module("org.test:platform")'           | 'project(":")'
     }
 
-    @ToBeFixedForConfigurationCache
     def "preserves the requested capabilities when performing a composite substitution"() {
         buildA.buildFile << """
             dependencies {
@@ -342,7 +332,6 @@ class CompositeBuildDeclaredSubstitutionsIntegrationTest extends AbstractComposi
 
     }
 
-    @ToBeFixedForConfigurationCache
     def "preserves the requested capabilities when performing a composite substitution using mapping"() {
         buildA.buildFile << """
             dependencies {
@@ -360,7 +349,7 @@ class CompositeBuildDeclaredSubstitutionsIntegrationTest extends AbstractComposi
 
         when:
         includeBuild buildB, """
-            substitute $source with $dest
+            substitute $source using $dest
         """
 
         then:
@@ -380,6 +369,90 @@ class CompositeBuildDeclaredSubstitutionsIntegrationTest extends AbstractComposi
         "module('org.test:buildB')"                                                                             | "project(':')"
         "variant(module('org.test:buildB')) { capabilities { requireCapability('org:buildB-test-fixtures') } }" | "project(':')"
         "module('org.test:buildB')"                                                                             | "variant(project(':')) { capabilities { requireCapability('org:should-not-be-used') } }"
+    }
+
+    @NotYetImplemented
+    @Issue("https://github.com/gradle/gradle/issues/15659")
+    def "resolves dependencies of included build with dependency substitution when substitution build contains buildSrc"() {
+        given:
+        includeBuild(buildB, """
+            substitute(module("org.test:b1")).using(project(":b1"))
+        """)
+        includeBuild(buildC)
+        buildC.buildFile << """
+            dependencies {
+                implementation('org.test:b1:1.0')
+            }
+        """
+
+        when:
+        // presence of buildSrc build causes IllegalStateException for the execution below
+        buildB.file("buildSrc/build.gradle").touch()
+
+        then:
+        execute(buildA, ":buildC:dependencies")
+    }
+
+    @NotYetImplemented
+    @Issue("https://github.com/gradle/gradle/issues/15659")
+    def "builds included build with dependency substitution when substitution build contains buildSrc"() {
+        given:
+        includeBuild(buildB, """
+            substitute(module("org.test:b1")).using(project(":b1"))
+        """)
+        includeBuild(buildC)
+        buildC.buildFile << """
+            dependencies {
+                implementation('org.test:b1:1.0')
+            }
+        """
+
+        when:
+        // presence of buildSrc build causes IllegalStateException for the execution below
+        buildB.file("buildSrc/build.gradle").touch()
+
+        then:
+        execute(buildA, ":buildC:build")
+    }
+
+    @NotYetImplemented
+    @Issue("https://github.com/gradle/gradle/issues/15659")
+    def "resolves dependencies of included build with dependency substitution when substitution build uses a plugin from its build-logic build"() {
+        given:
+        includeBuild(buildB, """
+            substitute(module("org.test:b1")).using(project(":b1"))
+        """)
+        includeBuild(buildC)
+        buildC.buildFile << """
+            dependencies {
+                implementation('org.test:b1:1.0')
+            }
+        """
+
+        when:
+        buildB.file("build-logic/build.gradle") << """
+            plugins {
+                id("groovy-gradle-plugin")
+            }
+        """
+        buildB.file("build-logic/src/main/groovy/foo.gradle") << """
+            println("foo applied")
+        """
+        buildB.settingsFile.setText("""
+            pluginManagement {
+                includeBuild('build-logic')
+            }
+            ${buildB.settingsFile.text}
+        """)
+        buildB.buildFile.setText("""
+            plugins {
+                id("java-library")
+                id("foo")
+            }
+        """)
+
+        then:
+        execute(buildA, ":buildC:dependencies")
     }
 
     void resolvedGraph(@DelegatesTo(ResolveTestFixture.NodeBuilder) Closure closure) {

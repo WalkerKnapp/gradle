@@ -16,7 +16,6 @@
 package org.gradle.kotlin.dsl
 
 import org.gradle.api.Action
-import org.gradle.api.Incubating
 import org.gradle.api.PathValidation
 import org.gradle.api.file.ConfigurableFileCollection
 import org.gradle.api.file.ConfigurableFileTree
@@ -64,14 +63,18 @@ import kotlin.script.templates.ScriptTemplateDefinition
  */
 @ScriptTemplateDefinition(
     resolver = KotlinBuildScriptDependenciesResolver::class,
-    scriptFilePattern = "^(settings|.+\\.settings)\\.gradle\\.kts$")
-@ScriptTemplateAdditionalCompilerArguments([
-    "-jvm-target", "1.8",
-    "-Xjsr305=strict",
-    "-XXLanguage:+NewInference",
-    "-XXLanguage:+SamConversionForKotlinFunctions",
-    "-XXLanguage:+ReferencesToSyntheticJavaProperties"
-])
+    scriptFilePattern = "(?:.+\\.)?settings\\.gradle\\.kts"
+)
+@ScriptTemplateAdditionalCompilerArguments(
+    [
+        "-language-version", "1.4",
+        "-api-version", "1.4",
+        "-jvm-target", "1.8",
+        "-Xjvm-default=all",
+        "-Xjsr305=strict",
+        "-XXLanguage:+DisableCompatibilityModeForNewInference",
+    ]
+)
 @SamWithReceiverAnnotations("org.gradle.api.HasImplicitReceiver")
 @GradleDsl
 abstract class KotlinSettingsScript(
@@ -99,11 +102,12 @@ abstract class KotlinSettingsScript(
      * @see [PluginDependenciesSpec]
      * @since 6.0
      */
-    @Incubating
     @Suppress("unused")
     open fun plugins(@Suppress("unused_parameter") block: PluginDependenciesSpecScope.() -> Unit): Unit =
-        throw Exception("The plugins {} block must not be used here. "
-            + "If you need to apply a plugin imperatively, please use apply<PluginType>() or apply(plugin = \"id\") instead.")
+        throw Exception(
+            "The plugins {} block must not be used here. "
+                + "If you need to apply a plugin imperatively, please use apply<PluginType>() or apply(plugin = \"id\") instead."
+        )
 }
 
 
@@ -432,7 +436,6 @@ abstract class SettingsScriptApi(
      * @see [Settings.getPluginManagement]
      * @since 6.0
      */
-    @Incubating
     @Suppress("unused")
     open fun pluginManagement(@Suppress("unused_parameter") block: PluginManagementSpec.() -> Unit): Unit =
         internalError()

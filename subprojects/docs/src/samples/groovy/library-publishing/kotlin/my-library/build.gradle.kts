@@ -7,11 +7,11 @@ version = "1.0.2"
 group = "org.gradle.sample"
 
 repositories {
-    jcenter()
+    mavenCentral()
 }
 
 dependencies {
-    implementation("org.codehaus.groovy:groovy-all:3.0.5")
+    implementation("org.codehaus.groovy:groovy-all:3.0.7")
 }
 
 publishing {

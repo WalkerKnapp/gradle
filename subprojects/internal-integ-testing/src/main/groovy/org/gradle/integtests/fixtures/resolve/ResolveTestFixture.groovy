@@ -805,6 +805,10 @@ allprojects {
             byReason(ComponentSelectionCause.BY_ANCESTOR.defaultReason)
         }
 
+        NodeBuilder byConsistentResolution(String source) {
+            byConstraint("version resolved in configuration ':$source' by consistent resolution")
+        }
+
         /**
          * Marks that this node was selected by the given reason
          */
@@ -869,6 +873,10 @@ class GenerateGraphTask extends DefaultTask {
     Configuration configuration
     @Internal
     boolean buildArtifacts
+
+    GenerateGraphTask() {
+        outputs.upToDateWhen { false }
+    }
 
     @TaskAction
     def generateOutput() {

@@ -140,6 +140,20 @@
     "crossVersionTests": false
   },
   {
+    "dirName": "configuration-cache",
+    "name": "configuration-cache",
+    "unitTests": true,
+    "functionalTests": true,
+    "crossVersionTests": true
+  },
+  {
+    "dirName": "configuration-cache-report",
+    "name": "configuration-cache-report",
+    "unitTests": true,
+    "functionalTests": false,
+    "crossVersionTests": false
+  },
+  {
     "dirName": "core",
     "name": "core",
     "unitTests": true,
@@ -150,13 +164,20 @@
     "dirName": "core-api",
     "name": "core-api",
     "unitTests": true,
-    "functionalTests": false,
+    "functionalTests": true,
     "crossVersionTests": false
   },
   {
     "dirName": "core-platform",
     "name": "core-platform",
     "unitTests": false,
+    "functionalTests": false,
+    "crossVersionTests": false
+  },
+  {
+    "dirName": "data-structures",
+    "name": "data-structures",
+    "unitTests": true,
     "functionalTests": false,
     "crossVersionTests": false
   },
@@ -266,6 +287,13 @@
     "crossVersionTests": false
   },
   {
+    "dirName": "file-temp",
+    "name": "file-temp",
+    "unitTests": true,
+    "functionalTests": false,
+    "crossVersionTests": false
+  },
+  {
     "dirName": "file-watching",
     "name": "file-watching",
     "unitTests": true,
@@ -301,30 +329,9 @@
     "crossVersionTests": false
   },
   {
-    "dirName": "ide-play",
-    "name": "ide-play",
-    "unitTests": false,
-    "functionalTests": true,
-    "crossVersionTests": false
-  },
-  {
     "dirName": "installation-beacon",
     "name": "installation-beacon",
     "unitTests": false,
-    "functionalTests": false,
-    "crossVersionTests": false
-  },
-  {
-    "dirName": "configuration-cache",
-    "name": "configuration-cache",
-    "unitTests": true,
-    "functionalTests": true,
-    "crossVersionTests": true
-  },
-  {
-    "dirName": "configuration-cache-report",
-    "name": "configuration-cache-report",
-    "unitTests": true,
     "functionalTests": false,
     "crossVersionTests": false
   },
@@ -387,22 +394,15 @@
   {
     "dirName": "java-compiler-plugin",
     "name": "java-compiler-plugin",
-    "unitTests": false,
-    "functionalTests": false,
-    "crossVersionTests": false
-  },
-  {
-    "dirName": "javascript",
-    "name": "javascript",
     "unitTests": true,
-    "functionalTests": true,
+    "functionalTests": false,
     "crossVersionTests": false
   },
   {
     "dirName": "jvm-services",
     "name": "jvm-services",
     "unitTests": true,
-    "functionalTests": false,
+    "functionalTests": true,
     "crossVersionTests": false
   },
   {
@@ -472,19 +472,12 @@
     "dirName": "language-jvm",
     "name": "language-jvm",
     "unitTests": true,
-    "functionalTests": true,
+    "functionalTests": false,
     "crossVersionTests": false
   },
   {
     "dirName": "language-native",
     "name": "language-native",
-    "unitTests": true,
-    "functionalTests": true,
-    "crossVersionTests": false
-  },
-  {
-    "dirName": "language-scala",
-    "name": "language-scala",
     "unitTests": true,
     "functionalTests": true,
     "crossVersionTests": false
@@ -581,13 +574,6 @@
     "crossVersionTests": false
   },
   {
-    "dirName": "platform-play",
-    "name": "platform-play",
-    "unitTests": true,
-    "functionalTests": true,
-    "crossVersionTests": false
-  },
-  {
     "dirName": "plugin-development",
     "name": "plugin-development",
     "unitTests": true,
@@ -606,6 +592,13 @@
     "name": "plugins",
     "unitTests": true,
     "functionalTests": true,
+    "crossVersionTests": false
+  },
+  {
+    "dirName": "problems",
+    "name": "problems",
+    "unitTests": true,
+    "functionalTests": false,
     "crossVersionTests": false
   },
   {
@@ -652,7 +645,7 @@
   },
   {
     "dirName": "resources-s3",
-    "name": "resourcesS3",
+    "name": "resources-s3",
     "unitTests": true,
     "functionalTests": true,
     "crossVersionTests": false

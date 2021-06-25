@@ -23,7 +23,7 @@ import org.gradle.api.artifacts.ExcludeRule
 import org.gradle.api.internal.artifacts.ivyservice.ivyresolve.parser.MetaDataParser
 import org.gradle.api.internal.attributes.ImmutableAttributes
 import org.gradle.api.provider.Property
-import org.gradle.api.publication.maven.internal.VersionRangeMapper
+import org.gradle.api.publish.maven.internal.dependencies.VersionRangeMapper
 import org.gradle.api.publish.internal.versionmapping.VariantVersionMappingStrategyInternal
 import org.gradle.api.publish.internal.versionmapping.VersionMappingStrategyInternal
 import org.gradle.api.publish.maven.internal.dependencies.MavenDependencyInternal
@@ -38,9 +38,9 @@ import org.gradle.api.publish.maven.internal.publication.MavenPomInternal
 import org.gradle.api.publish.maven.internal.publication.ReadableMavenProjectIdentity
 import org.gradle.test.fixtures.file.TestFile
 import org.gradle.test.fixtures.file.TestNameTestDirectoryProvider
-import org.gradle.util.CollectionUtils
+import org.gradle.util.internal.CollectionUtils
 import org.gradle.util.TestUtil
-import org.gradle.util.TextUtil
+import org.gradle.util.internal.TextUtil
 import org.junit.Rule
 import spock.lang.Specification
 import spock.lang.Unroll
@@ -52,7 +52,7 @@ class MavenPomFileGeneratorTest extends Specification {
     def rangeMapper = Stub(VersionRangeMapper)
     def strategy = Stub(VersionMappingStrategyInternal) {
         findStrategyForVariant(_) >> Stub(VariantVersionMappingStrategyInternal) {
-            maybeResolveVersion(_, _) >> null
+            maybeResolveVersion(_, _, _) >> null
         }
     }
     def generator = new MavenPomFileGenerator(projectIdentity, rangeMapper, strategy, ImmutableAttributes.EMPTY, ImmutableAttributes.EMPTY, false)
@@ -63,7 +63,7 @@ class MavenPomFileGeneratorTest extends Specification {
         expect:
         pomFile.text.startsWith(TextUtil.toPlatformLineSeparators(
 """<?xml version="1.0" encoding="UTF-8"?>
-<project xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd" xmlns="http://maven.apache.org/POM/4.0.0"
+<project xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd" xmlns="http://maven.apache.org/POM/4.0.0"
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
 """))
     }

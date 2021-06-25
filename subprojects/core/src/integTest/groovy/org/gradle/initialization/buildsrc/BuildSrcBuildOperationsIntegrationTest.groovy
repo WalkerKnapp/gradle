@@ -61,12 +61,12 @@ class BuildSrcBuildOperationsIntegrationTest extends AbstractIntegrationSpec {
 
         def configureOps = ops.all(ConfigureBuildBuildOperationType)
         configureOps.size() == 2
-        configureOps[0].displayName == "Configure build (:buildSrc)"
-        configureOps[0].details.buildPath == ":buildSrc"
-        configureOps[0].parentId == buildSrcOps[0].id
-        configureOps[1].displayName == "Configure build"
-        configureOps[1].details.buildPath == ":"
-        configureOps[1].parentId == root.id
+        configureOps[0].displayName == "Configure build"
+        configureOps[0].details.buildPath == ":"
+        configureOps[0].parentId == root.id
+        configureOps[1].displayName == "Configure build (:buildSrc)"
+        configureOps[1].details.buildPath == ":buildSrc"
+        configureOps[1].parentId == buildSrcOps[0].id
 
         def taskGraphOps = ops.all(CalculateTaskGraphBuildOperationType)
         taskGraphOps.size() == 2
@@ -77,12 +77,15 @@ class BuildSrcBuildOperationsIntegrationTest extends AbstractIntegrationSpec {
         taskGraphOps[1].details.buildPath == ':'
         taskGraphOps[1].parentId == root.id
 
+        def runMainTasks = ops.first(Pattern.compile("Run main tasks"))
+        runMainTasks.parentId == root.id
+
         def runTasksOps = ops.all(Pattern.compile("Run tasks.*"))
         runTasksOps.size() == 2
         runTasksOps[0].displayName == "Run tasks (:buildSrc)"
         runTasksOps[0].parentId == buildSrcOps[0].id
         runTasksOps[1].displayName == "Run tasks"
-        runTasksOps[1].parentId == root.id
+        runTasksOps[1].parentId == runMainTasks.id
 
         def graphNotifyOps = ops.all(NotifyTaskGraphWhenReadyBuildOperationType)
         graphNotifyOps.size() == 2

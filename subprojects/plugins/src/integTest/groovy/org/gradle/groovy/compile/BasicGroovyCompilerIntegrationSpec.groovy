@@ -23,6 +23,9 @@ import org.gradle.integtests.fixtures.TargetCoverage
 import org.gradle.integtests.fixtures.TestResources
 import org.gradle.integtests.fixtures.executer.ExecutionFailure
 import org.gradle.integtests.fixtures.executer.ExecutionResult
+import org.gradle.internal.reflect.problems.ValidationProblemId
+import org.gradle.internal.reflect.validation.ValidationMessageChecker
+import org.gradle.internal.reflect.validation.ValidationTestFor
 import org.gradle.test.fixtures.file.TestFile
 import org.gradle.testing.fixture.GroovyCoverage
 import org.gradle.util.Requires
@@ -33,11 +36,11 @@ import spock.lang.Ignore
 import spock.lang.Issue
 
 @TargetCoverage({ GroovyCoverage.SUPPORTED_BY_JDK })
-abstract class BasicGroovyCompilerIntegrationSpec extends MultiVersionIntegrationSpec {
+abstract class BasicGroovyCompilerIntegrationSpec extends MultiVersionIntegrationSpec implements ValidationMessageChecker {
     @Rule
     TestResources resources = new TestResources(temporaryFolder)
 
-    String groovyDependency = "org.codehaus.groovy:groovy-all:$version"
+    String groovyDependency
 
     String getGroovyVersionNumber() {
         version.split(":", 2)[0]
@@ -47,6 +50,7 @@ abstract class BasicGroovyCompilerIntegrationSpec extends MultiVersionIntegratio
         // necessary for picking up some of the output/errorOutput when forked executer is used
         executer.withArgument("-i")
         executer.withRepositoryMirrors()
+        groovyDependency = "org.codehaus.groovy:groovy-all:$version"
     }
 
     def "compileGoodCode"() {
@@ -77,6 +81,40 @@ abstract class BasicGroovyCompilerIntegrationSpec extends MultiVersionIntegratio
         groovyClassFile('Groovy.class').exists()
         groovyGeneratedSourceFile('Groovy$$Generated.java').exists()
         groovyClassFile('Groovy$$Generated.class').exists()
+    }
+
+    def "can compile with annotation processor that takes arguments"() {
+        Assume.assumeFalse(versionLowerThan("1.7"))
+
+        when:
+        writeAnnotationProcessingBuild(
+            "", // no Java
+            "$annotationText class Groovy {}"
+        )
+        setupAnnotationProcessor()
+        enableAnnotationProcessingOfJavaStubs()
+        buildFile << """
+            compileGroovy.options.compilerArgumentProviders.add(new SuffixArgumentProvider("Gen"))
+            class SuffixArgumentProvider implements CommandLineArgumentProvider {
+                @Input
+                String suffix
+
+                SuffixArgumentProvider(String suffix) {
+                    this.suffix = suffix
+                }
+
+                @Override
+                List<String> asArguments() {
+                    ["-Asuffix=\${suffix}".toString()]
+                }
+            }
+        """
+
+        then:
+        succeeds("compileGroovy")
+        groovyClassFile('Groovy.class').exists()
+        groovyGeneratedSourceFile('Groovy$$Gen.java').exists()
+        groovyClassFile('Groovy$$Gen.class').exists()
     }
 
     def "disableIncrementalCompilationWithAnnotationProcessor"() {
@@ -368,18 +406,29 @@ abstract class BasicGroovyCompilerIntegrationSpec extends MultiVersionIntegratio
 
     def "useConfigurationScript"() {
         Assume.assumeFalse(versionLowerThan("2.1"))
+        Assume.assumeFalse('Test must run with 9+, cannot guarantee that with a lower toolchain', getClass().name.contains("LowerToolchain"))
 
         expect:
         fails("compileGroovy")
         checkCompileOutput('Cannot find matching method java.lang.String#bar()')
     }
 
+    @ValidationTestFor(
+        ValidationProblemId.INPUT_FILE_DOES_NOT_EXIST
+    )
     def "failsBecauseOfMissingConfigFile"() {
         Assume.assumeFalse(versionLowerThan("2.1"))
+        expectReindentedValidationMessage()
 
         expect:
+        def configFile = file('groovycompilerconfig.groovy')
         fails("compileGroovy")
-        failure.assertHasCause("File '${file('groovycompilerconfig.groovy')}' specified for property 'groovyOptions.configurationScript' does not exist.")
+        failureDescriptionContains(inputDoesNotExist {
+            type('org.gradle.api.tasks.compile.GroovyCompile')
+                .property('groovyOptions.configurationScript')
+                .file(configFile)
+                .includeLink()
+        })
     }
 
     def "failsBecauseOfInvalidConfigFile"() {
@@ -392,6 +441,8 @@ abstract class BasicGroovyCompilerIntegrationSpec extends MultiVersionIntegratio
     // JavaFx was removed in JDK 10
     @Requires(TestPrecondition.JDK9_OR_EARLIER)
     def "compileJavaFx8Code"() {
+        Assume.assumeFalse("Setup invalid with toolchains", getClass().name.contains('Toolchain') && !getClass().name.contains('SameToolchain'))
+
         expect:
         succeeds("compileGroovy")
     }
@@ -578,7 +629,10 @@ ${compilerConfiguration()}
 
     def writeAnnotationProcessorProject() {
         file("processor").create {
-            file("build.gradle") << "apply plugin: 'java'"
+            file("build.gradle") << """apply plugin: 'java'
+
+${annotationProcessorExtraSetup()}
+"""
             "src/main" {
                 file("resources/META-INF/services/javax.annotation.processing.Processor") << "com.test.SimpleAnnotationProcessor"
                 "java/com/test/" {
@@ -602,25 +656,34 @@ ${compilerConfiguration()}
                         import java.io.IOException;
                         import java.io.Writer;
                         import java.util.Set;
+                        import java.util.Map;
 
-                        import javax.annotation.processing.AbstractProcessor;
-                        import javax.annotation.processing.RoundEnvironment;
-                        import javax.annotation.processing.SupportedAnnotationTypes;
+                        import javax.annotation.processing.*;
                         import javax.lang.model.element.Element;
                         import javax.lang.model.element.TypeElement;
                         import javax.lang.model.SourceVersion;
                         import javax.tools.JavaFileObject;
 
                         @SupportedAnnotationTypes("com.test.SimpleAnnotation")
+                        @SupportedOptions({ "suffix" })
                         public class SimpleAnnotationProcessor extends AbstractProcessor {
+                            private Map<String, String> options;
+
+                            @Override
+                            public synchronized void init(ProcessingEnvironment processingEnv) {
+                                super.init(processingEnv);
+                                options = processingEnv.getOptions();
+                            }
+
                             @Override
                             public boolean process(final Set<? extends TypeElement> annotations, final RoundEnvironment roundEnv) {
                                 if (isClasspathContaminated()) {
                                     throw new RuntimeException("Annotation Processor Classpath is contaminated by Gradle ClassLoader");
                                 }
 
+                                final String suffix = options.getOrDefault("suffix", "Generated");
                                 for (final Element classElement : roundEnv.getElementsAnnotatedWith(SimpleAnnotation.class)) {
-                                    final String className = String.format("%s\$\$Generated", classElement.getSimpleName().toString());
+                                    final String className = String.format("%s\$\$%s", classElement.getSimpleName().toString(), suffix);
 
                                     Writer writer = null;
                                     try {
@@ -663,6 +726,10 @@ ${compilerConfiguration()}
                 }
             }
         }
+    }
+
+    String annotationProcessorExtraSetup() {
+        ""
     }
 
     String checkCompileOutput(String errorMessage) {

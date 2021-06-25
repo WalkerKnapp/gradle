@@ -23,7 +23,6 @@ import org.gradle.integtests.fixtures.GradleMetadataResolveRunner
 import org.gradle.integtests.fixtures.RequiredFeature
 import org.gradle.integtests.fixtures.ToBeFixedForConfigurationCache
 import org.gradle.integtests.resolve.AbstractModuleDependencyResolveTest
-import spock.lang.Ignore
 import spock.lang.Unroll
 
 @RequiredFeature(feature = GradleMetadataResolveRunner.GRADLE_METADATA, value = "true")
@@ -38,12 +37,6 @@ class JavaBundlingResolveIntegrationTest extends AbstractModuleDependencyResolve
             }
             apply plugin: 'java-base'
         """
-    }
-
-    @Ignore
-    def "Spock workaround"() {
-        expect:
-        true
     }
 
     @Unroll
@@ -96,7 +89,7 @@ class JavaBundlingResolveIntegrationTest extends AbstractModuleDependencyResolve
                 module('org:producer:1.0') {
                     variant('api', [
                             'org.gradle.dependency.bundling': 'external',
-                            'org.gradle.status': defaultStatus(),
+                            'org.gradle.status': JavaBundlingResolveIntegrationTest.defaultStatus(),
                             'org.gradle.usage': 'java-api',
                             'org.gradle.libraryelements': 'jar',
                             'org.gradle.category': 'library'
@@ -174,7 +167,7 @@ class JavaBundlingResolveIntegrationTest extends AbstractModuleDependencyResolve
                     module('org:producer:1.0') {
                         variant('fatApi', [
                                 'org.gradle.dependency.bundling': selected,
-                                'org.gradle.status': defaultStatus(),
+                                'org.gradle.status': JavaBundlingResolveIntegrationTest.defaultStatus(),
                                 'org.gradle.usage': 'java-api',
                                 'org.gradle.libraryelements': 'jar'
                         ])

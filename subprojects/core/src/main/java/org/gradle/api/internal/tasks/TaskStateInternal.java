@@ -18,7 +18,7 @@ package org.gradle.api.internal.tasks;
 
 import org.gradle.api.tasks.TaskExecutionException;
 import org.gradle.api.tasks.TaskState;
-import org.gradle.util.CollectionUtils;
+import org.gradle.util.internal.CollectionUtils;
 
 import javax.annotation.Nullable;
 import java.util.ArrayList;
@@ -73,11 +73,11 @@ public class TaskStateInternal implements TaskState {
             this.failure = failure;
         } else if (this.failure instanceof TaskExecutionException) {
             TaskExecutionException taskExecutionException = (TaskExecutionException) this.failure;
-            List<Throwable> causes = new ArrayList<Throwable>(taskExecutionException.getCauses());
+            List<Throwable> causes = new ArrayList<>(taskExecutionException.getCauses());
             CollectionUtils.addAll(causes, failure.getCauses());
             taskExecutionException.initCauses(causes);
         } else {
-            List<Throwable> causes = new ArrayList<Throwable>();
+            List<Throwable> causes = new ArrayList<>();
             causes.add(this.failure);
             causes.addAll(failure.getCauses());
             failure.initCauses(causes);

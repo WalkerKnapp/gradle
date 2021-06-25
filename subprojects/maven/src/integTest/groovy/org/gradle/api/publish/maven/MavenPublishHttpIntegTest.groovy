@@ -115,8 +115,8 @@ class MavenPublishHttpIntegTest extends AbstractMavenPublishIntegTest {
 
         then:
         succeeds 'publish'
-        outputContains("Remote repository doesn't support sha-256")
-        outputContains("Remote repository doesn't support sha-512")
+        outputContains("remote repository doesn't support SHA-256. This will not fail the build.")
+        outputContains("remote repository doesn't support SHA-512. This will not fail the build.")
     }
 
 
@@ -334,7 +334,6 @@ class MavenPublishHttpIntegTest extends AbstractMavenPublishIntegTest {
         succeeds 'publish'
     }
 
-    @ToBeFixedForConfigurationCache
     def "fails at configuration time with helpful error message when username and password provider has no value"() {
         given:
         buildFile << publicationBuild(version, group, mavenRemoteRepo.uri, "credentials(PasswordCredentials)")
@@ -354,6 +353,31 @@ class MavenPublishHttpIntegTest extends AbstractMavenPublishIntegTest {
         failure.assertHasCause("The following Gradle properties are missing for 'maven' credentials:")
         failure.assertHasErrorOutput("- mavenUsername")
         failure.assertHasErrorOutput("- mavenPassword")
+    }
+
+    @ToBeFixedForConfigurationCache
+    @Issue("https://github.com/gradle/gradle/issues/14902")
+    def "does not fail when publishing is set to always up to date"() {
+        given:
+        buildFile << publicationBuild(version, group, mavenRemoteRepo.uri, """
+        credentials {
+            username 'foo'
+            password 'bar'
+        }
+        """)
+        server.authenticationScheme = AuthScheme.BASIC
+        PasswordCredentials credentials = new DefaultPasswordCredentials('foo', 'bar')
+        expectPublishModuleWithCredentials(module, credentials)
+
+        when:
+        buildFile << """
+        tasks.withType(PublishToMavenRepository).configureEach {
+            outputs.upToDateWhen { true }
+        }
+        """
+
+        then:
+        succeeds 'publish'
     }
 
     private static String publicationBuild(String version, String group, URI uri, PasswordCredentials credentials = null) {

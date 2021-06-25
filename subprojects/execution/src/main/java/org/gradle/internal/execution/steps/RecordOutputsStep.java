@@ -16,9 +16,7 @@
 
 package org.gradle.internal.execution.steps;
 
-import org.gradle.internal.execution.Context;
-import org.gradle.internal.execution.CurrentSnapshotResult;
-import org.gradle.internal.execution.Step;
+import org.gradle.internal.execution.UnitOfWork;
 import org.gradle.internal.execution.history.OutputFilesRepository;
 
 public class RecordOutputsStep<C extends Context> implements Step<C, CurrentSnapshotResult> {
@@ -34,9 +32,9 @@ public class RecordOutputsStep<C extends Context> implements Step<C, CurrentSnap
     }
 
     @Override
-    public CurrentSnapshotResult execute(C context) {
-        CurrentSnapshotResult result = delegate.execute(context);
-        outputFilesRepository.recordOutputs(result.getFinalOutputs().values());
+    public CurrentSnapshotResult execute(UnitOfWork work, C context) {
+        CurrentSnapshotResult result = delegate.execute(work, context);
+        outputFilesRepository.recordOutputs(result.getOutputFilesProduceByWork().values());
         return result;
     }
 }

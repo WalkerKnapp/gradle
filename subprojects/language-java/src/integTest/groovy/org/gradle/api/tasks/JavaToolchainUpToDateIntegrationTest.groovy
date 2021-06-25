@@ -41,7 +41,7 @@ class JavaToolchainUpToDateIntegrationTest extends AbstractPluginIntegrationTest
     }
 
     def "compile and test not up-to-date once toolchain changed"() {
-        def someJdk = AvailableJavaHomes.getDifferentJdk()
+        def someJdk = AvailableJavaHomes.getDifferentVersion()
         buildscriptWithToolchain(someJdk)
         file("src/main/java/Foo.java") << """
             /** foo */
@@ -62,7 +62,6 @@ class JavaToolchainUpToDateIntegrationTest extends AbstractPluginIntegrationTest
         outputContains("Task :javadoc UP-TO-DATE")
 
         when:
-        println "3rd time"
         buildscriptWithToolchain(Jvm.current())
         runWithToolchainConfigured(Jvm.current())
 
@@ -79,14 +78,14 @@ class JavaToolchainUpToDateIntegrationTest extends AbstractPluginIntegrationTest
         buildFile << """
             apply plugin: "java"
 
-            ${jcenterRepository()}
+            ${mavenCentralRepository()}
             dependencies {
                 testImplementation 'junit:junit:4.13'
             }
 
             java {
                 toolchain {
-                    languageVersion = JavaVersion.toVersion(${someJdk.javaVersion.majorVersion})
+                    languageVersion = JavaLanguageVersion.of(${someJdk.javaVersion.majorVersion})
                 }
             }
         """
@@ -94,7 +93,6 @@ class JavaToolchainUpToDateIntegrationTest extends AbstractPluginIntegrationTest
 
     def runWithToolchainConfigured(Jvm jvm) {
         result = executer
-            .withArgument("-Porg.gradle.java.installations.auto-detect=false")
             .withArgument("-Porg.gradle.java.installations.paths=" + jvm.javaHome.absolutePath)
             .withTasks("check", "javadoc")
             .run()

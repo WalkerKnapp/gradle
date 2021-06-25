@@ -15,47 +15,36 @@
  */
 package org.gradle.configuration;
 
-import org.gradle.StartParameter;
 import org.gradle.api.internal.GradleInternal;
 import org.gradle.execution.ProjectConfigurer;
-import org.gradle.initialization.BuildLoader;
 import org.gradle.initialization.ModelConfigurationListener;
 import org.gradle.initialization.ProjectsEvaluatedNotifier;
-import org.gradle.internal.build.BuildStateRegistry;
+import org.gradle.internal.buildtree.BuildModelParameters;
 import org.gradle.internal.operations.BuildOperationExecutor;
-import org.gradle.util.IncubationLogger;
+import org.gradle.util.internal.IncubationLogger;
 
 public class DefaultProjectsPreparer implements ProjectsPreparer {
-    private final BuildLoader buildLoader;
     private final BuildOperationExecutor buildOperationExecutor;
     private final ProjectConfigurer projectConfigurer;
-    private final BuildStateRegistry buildRegistry;
+    private final BuildModelParameters buildModelParameters;
     private final ModelConfigurationListener modelConfigurationListener;
 
     public DefaultProjectsPreparer(
         ProjectConfigurer projectConfigurer,
-        BuildStateRegistry buildRegistry,
-        BuildLoader buildLoader,
+        BuildModelParameters buildModelParameters,
         ModelConfigurationListener modelConfigurationListener,
         BuildOperationExecutor buildOperationExecutor
     ) {
         this.projectConfigurer = projectConfigurer;
-        this.buildRegistry = buildRegistry;
-        this.buildLoader = buildLoader;
+        this.buildModelParameters = buildModelParameters;
         this.modelConfigurationListener = modelConfigurationListener;
         this.buildOperationExecutor = buildOperationExecutor;
     }
 
     @Override
     public void prepareProjects(GradleInternal gradle) {
-        maybeInformAboutIncubatingMode(gradle);
-
-        buildLoader.load(gradle.getSettings(), gradle);
-
-        if (gradle.isRootBuild()) {
-            buildRegistry.beforeConfigureRootBuild();
-        }
-        if (gradle.getStartParameter().isConfigureOnDemand()) {
+        if (buildModelParameters.isConfigureOnDemand() && gradle.isRootBuild()) {
+            IncubationLogger.incubatingFeatureUsed("Configuration on demand");
             projectConfigurer.configure(gradle.getRootProject());
         } else {
             projectConfigurer.configureHierarchy(gradle.getRootProject());
@@ -63,13 +52,5 @@ public class DefaultProjectsPreparer implements ProjectsPreparer {
         }
 
         modelConfigurationListener.onConfigure(gradle);
-    }
-
-    private void maybeInformAboutIncubatingMode(GradleInternal gradle) {
-        StartParameter startParameter = gradle.getStartParameter();
-
-        if (startParameter.isConfigureOnDemand()) {
-            IncubationLogger.incubatingFeatureUsed("Configuration on demand");
-        }
     }
 }

@@ -16,13 +16,12 @@
 
 package org.gradle.api.internal.tasks.compile.incremental.processing;
 
+import org.gradle.api.internal.tasks.compile.incremental.compilerapi.deps.GeneratedResource;
 import org.gradle.internal.serialize.AbstractSerializer;
 import org.gradle.internal.serialize.BaseSerializerFactory;
 import org.gradle.internal.serialize.Decoder;
 import org.gradle.internal.serialize.Encoder;
 import org.gradle.internal.serialize.Serializer;
-
-import java.io.EOFException;
 
 public class GeneratedResourceSerializer extends AbstractSerializer<GeneratedResource> {
     private static final Serializer<GeneratedResource.Location> LOCATION_SERIALIZER = new BaseSerializerFactory().getSerializerFor(GeneratedResource.Location.class);
@@ -33,7 +32,7 @@ public class GeneratedResourceSerializer extends AbstractSerializer<GeneratedRes
     }
 
     @Override
-    public GeneratedResource read(Decoder decoder) throws EOFException, Exception {
+    public GeneratedResource read(Decoder decoder) throws Exception {
         return new GeneratedResource(LOCATION_SERIALIZER.read(decoder), stringSerializer.read(decoder));
     }
 

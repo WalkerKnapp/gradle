@@ -17,10 +17,12 @@
 package org.gradle.internal.hash;
 
 import com.google.common.primitives.Ints;
+import com.google.common.primitives.Longs;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.io.Serializable;
+import java.math.BigInteger;
 
 /**
  * An immutable hash code. Must be 4-255 bytes long.
@@ -53,6 +55,11 @@ public class HashCode implements Serializable, Comparable<HashCode> {
 
     public static HashCode fromInt(int value) {
         byte[] bytes = Ints.toByteArray(value); // Big-endian
+        return fromBytesNoCopy(bytes);
+    }
+
+    public static HashCode fromLong(long value) {
+        byte[] bytes = Longs.toByteArray(value); // Big-endian
         return fromBytesNoCopy(bytes);
     }
 
@@ -154,11 +161,28 @@ public class HashCode implements Serializable, Comparable<HashCode> {
 
     @Override
     public String toString() {
-        StringBuilder sb = new StringBuilder(2 * bytes.length);
+        StringBuilder sb = toStringBuilder(2 * bytes.length);
+        return sb.toString();
+    }
+
+    public String toZeroPaddedString(int length) {
+        StringBuilder sb = toStringBuilder(length);
+        while (sb.length() < length) {
+            sb.insert(0, '0');
+        }
+        return sb.toString();
+    }
+
+    private StringBuilder toStringBuilder(int capacity) {
+        StringBuilder sb = new StringBuilder(capacity);
         for (byte b : bytes) {
             sb.append(HEX_DIGITS[(b >> 4) & 0xf]).append(HEX_DIGITS[b & 0xf]);
         }
-        return sb.toString();
+        return sb;
+    }
+
+    public String toCompactString() {
+        return new BigInteger(1, bytes).toString(36);
     }
 
     // Package private accessor used by MessageDigestHasher.putHash for performance reasons

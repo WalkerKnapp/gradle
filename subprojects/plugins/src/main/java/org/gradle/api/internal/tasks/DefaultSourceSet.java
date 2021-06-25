@@ -25,12 +25,12 @@ import org.gradle.api.model.ObjectFactory;
 import org.gradle.api.plugins.JavaPlugin;
 import org.gradle.api.tasks.SourceSet;
 import org.gradle.api.tasks.SourceSetOutput;
-import org.gradle.util.GUtil;
+import org.gradle.util.internal.GUtil;
 
 import javax.annotation.Nullable;
 
 import static org.gradle.api.internal.lambdas.SerializableLambdas.spec;
-import static org.gradle.util.ConfigureUtil.configure;
+import static org.gradle.util.internal.ConfigureUtil.configure;
 
 public abstract class DefaultSourceSet implements SourceSet {
     private final String name;
@@ -140,23 +140,18 @@ public abstract class DefaultSourceSet implements SourceSet {
         return baseName;
     }
 
-    @Override
-    public String getCompileConfigurationName() {
-        return configurationNameOf(JavaPlugin.COMPILE_CONFIGURATION_NAME);
-    }
-
     private String configurationNameOf(String baseName) {
         return StringUtils.uncapitalize(getTaskBaseName() + StringUtils.capitalize(baseName));
     }
 
     @Override
-    public String getRuntimeConfigurationName() {
-        return configurationNameOf(JavaPlugin.RUNTIME_CONFIGURATION_NAME);
+    public String getCompileOnlyConfigurationName() {
+        return configurationNameOf(JavaPlugin.COMPILE_ONLY_CONFIGURATION_NAME);
     }
 
     @Override
-    public String getCompileOnlyConfigurationName() {
-        return configurationNameOf(JavaPlugin.COMPILE_ONLY_CONFIGURATION_NAME);
+    public String getCompileOnlyApiConfigurationName() {
+        return configurationNameOf(JavaPlugin.COMPILE_ONLY_API_CONFIGURATION_NAME);
     }
 
     @Override

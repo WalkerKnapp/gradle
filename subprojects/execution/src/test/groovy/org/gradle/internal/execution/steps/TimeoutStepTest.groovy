@@ -17,21 +17,25 @@
 package org.gradle.internal.execution.steps
 
 import org.gradle.api.InvalidUserDataException
-import org.gradle.internal.execution.Result
 import org.gradle.internal.execution.timeout.Timeout
 import org.gradle.internal.execution.timeout.TimeoutHandler
+import org.gradle.internal.operations.CurrentBuildOperationRef
+import org.gradle.internal.operations.DefaultBuildOperationRef
+import org.gradle.internal.operations.OperationIdentifier
 
 import java.time.Duration
 import java.time.temporal.ChronoUnit
 
 class TimeoutStepTest extends ContextInsensitiveStepSpec {
     def timeoutHandler = Mock(TimeoutHandler)
-    def step = new TimeoutStep<>(timeoutHandler, delegate)
+    def buildOperationRef = new DefaultBuildOperationRef(new OperationIdentifier(1), new OperationIdentifier(2))
+    def currentBuildOperationRef = new CurrentBuildOperationRef()
+    def step = new TimeoutStep<>(timeoutHandler, currentBuildOperationRef, delegate)
     def delegateResult = Mock(Result)
 
     def "negative timeout is reported"() {
         when:
-        step.execute(context)
+        step.execute(work, context)
 
         then:
         thrown InvalidUserDataException
@@ -42,7 +46,7 @@ class TimeoutStepTest extends ContextInsensitiveStepSpec {
 
     def "executing without timeout succeeds"() {
         when:
-        def result = step.execute(context)
+        def result = step.execute(work, context)
 
         then:
         result == delegateResult
@@ -50,7 +54,7 @@ class TimeoutStepTest extends ContextInsensitiveStepSpec {
         _ * work.timeout >> Optional.empty()
 
         then:
-        1 * delegate.execute(context) >> delegateResult
+        1 * delegate.execute(work, context) >> delegateResult
         0 * _
     }
 
@@ -59,7 +63,7 @@ class TimeoutStepTest extends ContextInsensitiveStepSpec {
         def timeout = Mock(Timeout)
 
         when:
-        def result = step.execute(context)
+        def result = step.execute(work, context)
 
         then:
         result == delegateResult
@@ -67,10 +71,10 @@ class TimeoutStepTest extends ContextInsensitiveStepSpec {
         _ * work.timeout >> Optional.of(duration)
 
         then:
-        timeoutHandler.start(_ as Thread, duration) >> timeout
+        timeoutHandler.start(_ as Thread, duration, work, null) >> timeout
 
         then:
-        1 * delegate.execute(context) >> delegateResult
+        1 * delegate.execute(work, context) >> delegateResult
 
         then:
         1 * timeout.stop() >> false
@@ -82,16 +86,17 @@ class TimeoutStepTest extends ContextInsensitiveStepSpec {
         def timeout = Mock(Timeout)
 
         when:
-        step.execute(context)
+        currentBuildOperationRef.set(buildOperationRef)
+        step.execute(work, context)
 
         then:
         _ * work.timeout >> Optional.of(duration)
 
         then:
-        1 * timeoutHandler.start(_ as Thread, duration) >> timeout
+        1 * timeoutHandler.start(_ as Thread, duration, work, buildOperationRef) >> timeout
 
         then:
-        1 * delegate.execute(context) >> delegateResult
+        1 * delegate.execute(work, context) >> delegateResult
 
         then:
         1 * timeout.stop() >> true

@@ -16,19 +16,24 @@
 
 package org.gradle.api.internal.tasks.compile.incremental.recomp;
 
-import org.gradle.api.internal.tasks.compile.incremental.processing.GeneratedResource;
+import org.gradle.api.internal.tasks.compile.incremental.compilerapi.deps.GeneratedResource;
 
-import java.io.File;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.Set;
 
 public class RecompilationSpec {
-    private final Collection<String> classesToCompile = new LinkedHashSet<>();
+    private final Set<String> classesToCompile = new LinkedHashSet<>();
     private final Collection<String> classesToProcess = new LinkedHashSet<>();
     private final Collection<GeneratedResource> resourcesToGenerate = new LinkedHashSet<>();
     private final Set<String> relativeSourcePathsToCompile = new LinkedHashSet<>();
+    private final PreviousCompilation previousCompilation;
     private String fullRebuildCause;
+
+    public RecompilationSpec(PreviousCompilation previousCompilation) {
+        this.previousCompilation = previousCompilation;
+    }
 
     @Override
     public String toString() {
@@ -43,23 +48,47 @@ public class RecompilationSpec {
             '}';
     }
 
-    public Collection<String> getClassesToCompile() {
-        return classesToCompile;
+    public void addClassesToCompile(Collection<String> classes) {
+        classesToCompile.addAll(classes);
+    }
+
+    public Set<String> getClassesToCompile() {
+        return Collections.unmodifiableSet(classesToCompile);
+    }
+
+    public PreviousCompilation getPreviousCompilation() {
+        return previousCompilation;
+    }
+
+    public void addRelativeSourcePathsToCompile(Collection<String> paths) {
+        relativeSourcePathsToCompile.addAll(paths);
+    }
+
+    public void addRelativeSourcePathToCompile(String path) {
+        relativeSourcePathsToCompile.add(path);
     }
 
     /**
      * @return the relative paths of files we clearly know to recompile
      */
     public Set<String> getRelativeSourcePathsToCompile() {
-        return relativeSourcePathsToCompile;
+        return Collections.unmodifiableSet(relativeSourcePathsToCompile);
+    }
+
+    public void addClassesToProcess(Collection<String> classes) {
+        classesToProcess.addAll(classes);
     }
 
     public Collection<String> getClassesToProcess() {
-        return classesToProcess;
+        return Collections.unmodifiableCollection(classesToProcess);
+    }
+
+    public void addResourcesToGenerate(Collection<GeneratedResource> resources) {
+        resourcesToGenerate.addAll(resources);
     }
 
     public Collection<GeneratedResource> getResourcesToGenerate() {
-        return resourcesToGenerate;
+        return Collections.unmodifiableCollection(resourcesToGenerate);
     }
 
     public boolean isBuildNeeded() {
@@ -74,8 +103,8 @@ public class RecompilationSpec {
         return fullRebuildCause;
     }
 
-    public void setFullRebuildCause(String description, File file) {
-        fullRebuildCause = description != null ? description : "'" + file.getName() + "' was changed";
+    public void setFullRebuildCause(String description) {
+        fullRebuildCause = description;
     }
 
 }

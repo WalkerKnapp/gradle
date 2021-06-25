@@ -17,7 +17,6 @@
 package org.gradle.api.internal;
 
 import org.gradle.StartParameter;
-import org.gradle.api.initialization.ProjectDescriptor;
 import org.gradle.api.initialization.Settings;
 import org.gradle.api.internal.initialization.ClassLoaderScope;
 import org.gradle.api.internal.plugins.PluginAwareInternal;
@@ -26,6 +25,8 @@ import org.gradle.caching.configuration.internal.BuildCacheConfigurationInternal
 import org.gradle.groovy.scripts.ScriptSource;
 import org.gradle.initialization.DefaultProjectDescriptor;
 import org.gradle.initialization.IncludedBuildSpec;
+import org.gradle.internal.management.DependencyResolutionManagementInternal;
+import org.gradle.internal.service.ServiceRegistry;
 
 import java.io.File;
 import java.util.List;
@@ -41,9 +42,9 @@ public interface SettingsInternal extends Settings, PluginAwareInternal {
 
     ProjectRegistry<DefaultProjectDescriptor> getProjectRegistry();
 
-    ProjectDescriptor getDefaultProject();
+    DefaultProjectDescriptor getDefaultProject();
 
-    void setDefaultProject(ProjectDescriptor defaultProject);
+    void setDefaultProject(DefaultProjectDescriptor defaultProject);
 
     @Override
     GradleInternal getGradle();
@@ -66,6 +67,12 @@ public interface SettingsInternal extends Settings, PluginAwareInternal {
 
     File getBuildSrcDir();
 
+    ServiceRegistry getServices();
+
     @Override
     BuildCacheConfigurationInternal getBuildCache();
+
+    void preventFromFurtherMutation();
+
+    DependencyResolutionManagementInternal getDependencyResolutionManagement();
 }

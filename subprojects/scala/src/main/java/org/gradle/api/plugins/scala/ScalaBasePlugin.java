@@ -19,7 +19,6 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableSet;
 import org.codehaus.groovy.runtime.InvokerHelper;
 import org.gradle.api.Action;
-import org.gradle.api.Incubating;
 import org.gradle.api.InvalidUserCodeException;
 import org.gradle.api.Plugin;
 import org.gradle.api.Project;
@@ -37,26 +36,25 @@ import org.gradle.api.attributes.Usage;
 import org.gradle.api.file.FileCollection;
 import org.gradle.api.file.SourceDirectorySet;
 import org.gradle.api.internal.artifacts.configurations.ConfigurationInternal;
-import org.gradle.api.internal.tasks.DefaultScalaSourceSet;
 import org.gradle.api.internal.tasks.scala.DefaultScalaPluginExtension;
 import org.gradle.api.model.ObjectFactory;
 import org.gradle.api.plugins.Convention;
 import org.gradle.api.plugins.JavaBasePlugin;
-import org.gradle.api.plugins.JavaPluginConvention;
-import org.gradle.api.plugins.jvm.JvmEcosystemUtilities;
+import org.gradle.api.plugins.JavaPluginExtension;
 import org.gradle.api.plugins.internal.JvmPluginsHelper;
+import org.gradle.api.plugins.jvm.internal.JvmEcosystemUtilities;
 import org.gradle.api.reporting.ReportingExtension;
 import org.gradle.api.specs.Spec;
 import org.gradle.api.tasks.ScalaRuntime;
-import org.gradle.api.tasks.ScalaSourceSet;
+import org.gradle.api.tasks.ScalaSourceDirectorySet;
 import org.gradle.api.tasks.SourceSet;
 import org.gradle.api.tasks.TaskProvider;
 import org.gradle.api.tasks.compile.CompileOptions;
 import org.gradle.api.tasks.scala.IncrementalCompileOptions;
 import org.gradle.api.tasks.scala.ScalaCompile;
 import org.gradle.api.tasks.scala.ScalaDoc;
+import org.gradle.internal.deprecation.DeprecatableConfiguration;
 import org.gradle.jvm.tasks.Jar;
-import org.gradle.language.scala.internal.toolchain.DefaultScalaToolProvider;
 
 import javax.inject.Inject;
 import java.io.File;
@@ -67,6 +65,8 @@ import static org.gradle.api.internal.lambdas.SerializableLambdas.spec;
 
 /**
  * <p>A {@link Plugin} which compiles and tests Scala sources.</p>
+ *
+ * @see <a href="https://docs.gradle.org/current/userguide/scala_plugin.html">Scala plugin reference</a>
  */
 public class ScalaBasePlugin implements Plugin<Project> {
 
@@ -75,7 +75,7 @@ public class ScalaBasePlugin implements Plugin<Project> {
      *
      * @since 6.0
      */
-    public static final String DEFAULT_ZINC_VERSION = DefaultScalaToolProvider.DEFAULT_ZINC_VERSION;
+    public static final String DEFAULT_ZINC_VERSION = "1.3.5";
     private static final String DEFAULT_SCALA_ZINC_VERSION = "2.12";
 
     @VisibleForTesting
@@ -86,9 +86,7 @@ public class ScalaBasePlugin implements Plugin<Project> {
      *
      * @since 6.4
      */
-    @Incubating
     public static final String SCALA_COMPILER_PLUGINS_CONFIGURATION_NAME = "scalaCompilerPlugins";
-
 
     private final ObjectFactory objectFactory;
     private final JvmEcosystemUtilities jvmEcosystemUtilities;
@@ -125,6 +123,9 @@ public class ScalaBasePlugin implements Plugin<Project> {
         Configuration zinc = project.getConfigurations().create(ZINC_CONFIGURATION_NAME);
         zinc.setVisible(false);
         zinc.setDescription("The Zinc incremental compiler to be used for this Scala project.");
+        ((DeprecatableConfiguration) zinc).deprecateForConsumption(deprecation -> deprecation
+            .willBecomeAnErrorInGradle8()
+            .withUpgradeGuideSection(7, "plugin_configuration_consumption"));
 
         zinc.getResolutionStrategy().eachDependency(rule -> {
             if (rule.getRequested().getGroup().equals("com.typesafe.zinc") && rule.getRequested().getName().equals("zinc")) {
@@ -163,14 +164,16 @@ public class ScalaBasePlugin implements Plugin<Project> {
         });
     }
 
-    private static void configureSourceSetDefaults(final Project project, final Usage incrementalAnalysisUsage, final ObjectFactory objectFactory) {
-        project.getConvention().getPlugin(JavaPluginConvention.class).getSourceSets().all(new Action<SourceSet>() {
+    @SuppressWarnings("deprecation")
+    private void configureSourceSetDefaults(final Project project, final Usage incrementalAnalysisUsage, final ObjectFactory objectFactory) {
+        project.getExtensions().getByType(JavaPluginExtension.class).getSourceSets().all(new Action<SourceSet>() {
             @Override
             public void execute(final SourceSet sourceSet) {
                 String displayName = (String) InvokerHelper.invokeMethod(sourceSet, "getDisplayName", null);
                 Convention sourceSetConvention = (Convention) InvokerHelper.getProperty(sourceSet, "convention");
-                DefaultScalaSourceSet scalaSourceSet = new DefaultScalaSourceSet(displayName, objectFactory);
+                org.gradle.api.internal.tasks.DefaultScalaSourceSet scalaSourceSet = new  org.gradle.api.internal.tasks.DefaultScalaSourceSet(displayName, objectFactory);
                 sourceSetConvention.getPlugins().put("scala", scalaSourceSet);
+                sourceSet.getExtensions().add(ScalaSourceDirectorySet.class, "scala", scalaSourceSet.getScala());
 
                 final SourceDirectorySet scalaDirectorySet = scalaSourceSet.getScala();
                 scalaDirectorySet.srcDir(project.file("src/" + sourceSet.getName() + "/scala"));
@@ -198,16 +201,16 @@ public class ScalaBasePlugin implements Plugin<Project> {
         });
     }
 
+    @SuppressWarnings("deprecation")
     private static void configureScalaCompile(final Project project, final SourceSet sourceSet, final Configuration incrementalAnalysis, final Usage incrementalAnalysisUsage) {
-        Convention scalaConvention = (Convention) InvokerHelper.getProperty(sourceSet, "convention");
-        final ScalaSourceSet scalaSourceSet = scalaConvention.findPlugin(ScalaSourceSet.class);
+        final ScalaSourceDirectorySet scalaSourceSet = sourceSet.getExtensions().getByType(ScalaSourceDirectorySet.class);
 
         final TaskProvider<ScalaCompile> scalaCompile = project.getTasks().register(sourceSet.getCompileTaskName("scala"), ScalaCompile.class, new Action<ScalaCompile>() {
             @Override
             public void execute(ScalaCompile scalaCompile) {
-                JvmPluginsHelper.configureForSourceSet(sourceSet, scalaSourceSet.getScala(), scalaCompile, scalaCompile.getOptions(), project);
-                scalaCompile.setDescription("Compiles the " + scalaSourceSet.getScala() + ".");
-                scalaCompile.setSource(scalaSourceSet.getScala());
+                JvmPluginsHelper.configureForSourceSet(sourceSet, scalaSourceSet, scalaCompile, scalaCompile.getOptions(), project);
+                scalaCompile.setDescription("Compiles the " + scalaSourceSet + ".");
+                scalaCompile.setSource(scalaSourceSet);
 
                 scalaCompile.getAnalysisMappingFile().set(project.getLayout().getBuildDirectory().file("tmp/scala/compilerAnalysis/" + scalaCompile.getName() + ".mapping"));
 
@@ -229,17 +232,17 @@ public class ScalaBasePlugin implements Plugin<Project> {
                     @Override
                     public void execute(ArtifactView.ViewConfiguration viewConfiguration) {
                         viewConfiguration.lenient(true);
-                        viewConfiguration.componentFilter(new Spec<ComponentIdentifier>() {
-                            @Override
-                            public boolean isSatisfiedBy(ComponentIdentifier element) {
-                                return element instanceof ProjectComponentIdentifier;
-                            }
-                        });
+                        viewConfiguration.componentFilter(new IsProjectComponent());
                     }
                 }).getFiles());
+
+                // See https://github.com/gradle/gradle/issues/14434.  We do this so that the incrementalScalaAnalysisForXXX configuration
+                // is resolved during task graph calculation.  It is not an input, but if we leave it to be resolved during task execution,
+                // it can potentially block trying to resolve project dependencies.
+                scalaCompile.dependsOn(scalaCompile.getAnalysisFiles());
             }
         });
-        JvmPluginsHelper.configureOutputDirectoryForSourceSet(sourceSet, scalaSourceSet.getScala(), project, scalaCompile, scalaCompile.map(new Transformer<CompileOptions, ScalaCompile>() {
+        JvmPluginsHelper.configureOutputDirectoryForSourceSet(sourceSet, scalaSourceSet, project, scalaCompile, scalaCompile.map(new Transformer<CompileOptions, ScalaCompile>() {
             @Override
             public CompileOptions transform(ScalaCompile scalaCompile) {
                 return scalaCompile.getOptions();
@@ -287,8 +290,7 @@ public class ScalaBasePlugin implements Plugin<Project> {
                 scalaDoc.getConventionMapping().map("destinationDir", new Callable<File>() {
                     @Override
                     public File call() throws Exception {
-                        File docsDir = project.getConvention().getPlugin(JavaPluginConvention.class).getDocsDir();
-                        return project.file(docsDir.getPath() + "/scaladoc");
+                        return project.getExtensions().getByType(JavaPluginExtension.class).getDocsDir().dir("scaladoc").get().getAsFile();
                     }
                 });
                 scalaDoc.getConventionMapping().map("title", new Callable<String>() {
@@ -324,6 +326,13 @@ public class ScalaBasePlugin implements Plugin<Project> {
                     details.closestMatch(javaRuntime);
                 }
             }
+        }
+    }
+
+    private static class IsProjectComponent implements Spec<ComponentIdentifier> {
+        @Override
+        public boolean isSatisfiedBy(ComponentIdentifier element) {
+            return element instanceof ProjectComponentIdentifier;
         }
     }
 }

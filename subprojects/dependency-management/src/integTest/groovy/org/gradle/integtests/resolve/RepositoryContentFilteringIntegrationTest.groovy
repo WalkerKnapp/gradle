@@ -19,7 +19,6 @@ package org.gradle.integtests.resolve
 import org.gradle.integtests.fixtures.AbstractHttpDependencyResolutionTest
 import org.gradle.integtests.fixtures.resolve.ResolveTestFixture
 import org.gradle.test.fixtures.file.TestFile
-import spock.lang.Unroll
 
 class RepositoryContentFilteringIntegrationTest extends AbstractHttpDependencyResolutionTest {
     ResolveTestFixture resolve
@@ -35,7 +34,6 @@ class RepositoryContentFilteringIntegrationTest extends AbstractHttpDependencyRe
         resolve.prepare()
     }
 
-    @Unroll
     def "can exclude a module from a repository using #notation"() {
         def mod = ivyHttpRepo.module('org', 'foo', '1.0').publish()
 
@@ -70,7 +68,6 @@ class RepositoryContentFilteringIntegrationTest extends AbstractHttpDependencyRe
         ]
     }
 
-    @Unroll
     def "can include a module from a repository using #notation"() {
         def mod = ivyHttpRepo.module('org', 'foo', '1.0').publish()
 
@@ -105,7 +102,6 @@ class RepositoryContentFilteringIntegrationTest extends AbstractHttpDependencyRe
         ]
     }
 
-    @Unroll
     def "doesn't try to list module versions in repository when rule excludes group using #notation"() {
         def mod = ivyHttpRepo.module('org', 'foo', '1.0').publish()
         def ivyDirectoryList = ivyHttpRepo.directoryList('org', 'foo')
@@ -142,7 +138,6 @@ class RepositoryContentFilteringIntegrationTest extends AbstractHttpDependencyRe
         ]
     }
 
-    @Unroll
     def "doesn't try to list module versions in repository when rule includes group using #notation"() {
         def mod = ivyHttpRepo.module('org', 'foo', '1.0').publish()
         def ivyDirectoryList = ivyHttpRepo.directoryList('org', 'foo')
@@ -179,7 +174,6 @@ class RepositoryContentFilteringIntegrationTest extends AbstractHttpDependencyRe
         ]
     }
 
-    @Unroll
     def "can exclude a specific module using #notation"() {
         def mod1 = ivyHttpRepo.module('org', 'foo', '1.0').publish()
         def mod2Ivy = ivyHttpRepo.module('org', 'bar', '1.0').publish()
@@ -223,7 +217,6 @@ class RepositoryContentFilteringIntegrationTest extends AbstractHttpDependencyRe
         ]
     }
 
-    @Unroll
     def "can include a specific module using #notation"() {
         def mod1 = ivyHttpRepo.module('org', 'foo', '1.0').publish()
         def mod2Ivy = ivyHttpRepo.module('org', 'bar', '1.0').publish()
@@ -273,7 +266,6 @@ class RepositoryContentFilteringIntegrationTest extends AbstractHttpDependencyRe
      * repositories while for tests, we would be more lenient. This can be achieved by checking the name
      * of the configuration being resolved, in the rule.
      */
-    @Unroll
     def "can filter by configuration name (#notation)"() {
         def mod = ivyHttpRepo.module('org', 'foo', '1.0').publish()
 
@@ -310,7 +302,6 @@ class RepositoryContentFilteringIntegrationTest extends AbstractHttpDependencyRe
         ]
     }
 
-    @Unroll
     def "two configurations can use the same repositories with filtering and do not interfere with each other"() {
         def mod = mavenHttpRepo.module('org', 'foo', '1.0').publish()
 
@@ -392,7 +383,6 @@ class RepositoryContentFilteringIntegrationTest extends AbstractHttpDependencyRe
         }
     }
 
-    @Unroll
     def "can exclude by module version using #notation"() {
         def modIvy = ivyHttpRepo.module('org', 'foo', '1.1').publish()
         def modMaven = mavenHttpRepo.module('org', 'foo', '1.0').publish()
@@ -426,14 +416,17 @@ class RepositoryContentFilteringIntegrationTest extends AbstractHttpDependencyRe
         where:
         notation << [
                 "excludeVersion('org', 'foo', '1.1')",
+                "excludeVersion('org', 'foo', '[1.0,)')",
+                "excludeVersion('org', 'foo', '[1.0,1.2)')",
+                "excludeVersion('org', 'foo', '(,1.1]')",
+                "excludeVersion('org', 'foo', '(,1.2]')",
                 "excludeVersionByRegex('or.+', 'f.+', '1\\\\.[1-2]')"
         ]
     }
 
-    @Unroll
     def "can include by module version using #notation"() {
-        def modIvy = ivyHttpRepo.module('org', 'foo', '1.1').publish()
-        def modMaven = mavenHttpRepo.module('org', 'foo', '1.0').publish()
+        def modIvy = ivyHttpRepo.module('org', 'foo', '1.0').publish()
+        def modMaven = mavenHttpRepo.module('org', 'foo', '1.1').publish()
 
         given:
         repositories {
@@ -449,8 +442,8 @@ class RepositoryContentFilteringIntegrationTest extends AbstractHttpDependencyRe
         """
 
         when:
-        modIvy.ivy.expectGet()
-        modIvy.artifact.expectGet()
+        modMaven.pom.expectGet()
+        modMaven.artifact.expectGet()
 
         run 'checkDeps'
 
@@ -463,8 +456,12 @@ class RepositoryContentFilteringIntegrationTest extends AbstractHttpDependencyRe
 
         where:
         notation << [
-                "includeVersion('org', 'foo', '1.0')",
-                "includeVersionByRegex('or.+', 'fo.+', '.+0')",
+                "includeVersion('org', 'foo', '1.1')",
+                "includeVersion('org', 'foo', '[1.1,)')",
+                "includeVersion('org', 'foo', '[1.1,1.3)')",
+                "includeVersion('org', 'foo', '(,1.1]')",
+                "includeVersion('org', 'foo', '(,1.2]')",
+                "includeVersionByRegex('or.+', 'f.+', '1\\\\.[1-3]')"
         ]
     }
 
@@ -497,7 +494,6 @@ class RepositoryContentFilteringIntegrationTest extends AbstractHttpDependencyRe
         }
     }
 
-    @Unroll
     def "can declare that a repository only contains snapshots (unique = #unique)"() {
         def snapshotModule = mavenHttpRepo.module('org', 'foo', '1.0-SNAPSHOT')
         if (!unique) {
@@ -656,6 +652,49 @@ class RepositoryContentFilteringIntegrationTest extends AbstractHttpDependencyRe
 
         expect:
         succeeds("help")
+    }
+
+    def "can filter dynamic versions using #notation"() {
+        def modIvy = ivyHttpRepo.module('org', 'foo', '1.1').publish()
+        def modMaven = mavenHttpRepo.module('org', 'foo', '1.0').publish()
+
+        given:
+        repositories {
+            maven("""content { details ->
+                $notation
+            }""")
+            ivy("""content { details ->
+                $notation
+            }""")
+        }
+        buildFile << """
+            dependencies {
+                conf "org:foo:1.+"
+            }
+        """
+
+        when:
+        ivyHttpRepo.directoryList('org', 'foo').expectGet()
+        mavenHttpRepo.getModuleMetaData('org', 'foo').expectGet()
+        modMaven.pom.expectGet()
+        modMaven.artifact.expectGet()
+
+        run 'checkDeps'
+
+        then:
+        resolve.expectGraph {
+            root(':', ':test:') {
+                edge('org:foo:1.+', 'org:foo:1.0')
+            }
+        }
+
+        where:
+        notation << [
+            "excludeVersion('org', 'foo', '1.1')",
+            "excludeVersionByRegex('org', 'foo', '1\\\\.1')",
+            "includeVersion('org', 'foo', '1.0')",
+            "includeVersionByRegex('org', 'foo', '1\\\\.0')",
+        ]
     }
 
     static String checkConfIsUnresolved() {

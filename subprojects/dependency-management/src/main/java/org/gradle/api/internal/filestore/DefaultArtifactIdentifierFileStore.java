@@ -17,12 +17,16 @@
 package org.gradle.api.internal.filestore;
 
 import org.gradle.api.Namer;
-import org.gradle.api.internal.file.TemporaryFileProvider;
+import org.gradle.api.internal.artifacts.ivyservice.ArtifactCacheMetadata;
+import org.gradle.api.internal.file.temp.TemporaryFileProvider;
 import org.gradle.internal.component.external.model.ModuleComponentArtifactIdentifier;
 import org.gradle.internal.file.FileAccessTimeJournal;
 import org.gradle.internal.hash.ChecksumService;
 import org.gradle.internal.resource.local.GroupedAndNamedUniqueFileStore;
+import org.gradle.internal.service.scopes.Scopes;
+import org.gradle.internal.service.scopes.ServiceScope;
 
+import javax.inject.Inject;
 import java.io.File;
 
 public class DefaultArtifactIdentifierFileStore extends GroupedAndNamedUniqueFileStore<ModuleComponentArtifactIdentifier> implements ArtifactIdentifierFileStore {
@@ -44,7 +48,30 @@ public class DefaultArtifactIdentifierFileStore extends GroupedAndNamedUniqueFil
 
     private static final Namer<ModuleComponentArtifactIdentifier> NAMER = ModuleComponentArtifactIdentifier::getFileName;
 
-    public DefaultArtifactIdentifierFileStore(File baseDir, TemporaryFileProvider temporaryFileProvider, FileAccessTimeJournal fileAccessTimeJournal, ChecksumService checksumService) {
+    private DefaultArtifactIdentifierFileStore(File baseDir, TemporaryFileProvider temporaryFileProvider, FileAccessTimeJournal fileAccessTimeJournal, ChecksumService checksumService) {
         super(baseDir, temporaryFileProvider, fileAccessTimeJournal, GROUPER, NAMER, checksumService);
+    }
+
+    @ServiceScope(Scopes.Build.class)
+    public static class Factory {
+        private final TemporaryFileProvider temporaryFileProvider;
+        private final FileAccessTimeJournal fileAccessTimeJournal;
+        private final ChecksumService checksumService;
+
+        @Inject
+        public Factory(TemporaryFileProvider temporaryFileProvider, FileAccessTimeJournal fileAccessTimeJournal, ChecksumService checksumService) {
+            this.temporaryFileProvider = temporaryFileProvider;
+            this.fileAccessTimeJournal = fileAccessTimeJournal;
+            this.checksumService = checksumService;
+        }
+
+        public DefaultArtifactIdentifierFileStore create(ArtifactCacheMetadata artifactCacheMetadata) {
+            return new DefaultArtifactIdentifierFileStore(
+                artifactCacheMetadata.getFileStoreDirectory(),
+                temporaryFileProvider,
+                fileAccessTimeJournal,
+                checksumService
+            );
+        }
     }
 }

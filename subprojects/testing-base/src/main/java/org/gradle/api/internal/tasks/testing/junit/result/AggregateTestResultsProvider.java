@@ -17,9 +17,7 @@
 package org.gradle.api.internal.tasks.testing.junit.result;
 
 import com.google.common.base.Preconditions;
-import com.google.common.base.Predicate;
 import com.google.common.collect.ArrayListMultimap;
-import com.google.common.collect.Iterables;
 import com.google.common.collect.Multimap;
 import org.gradle.api.Action;
 import org.gradle.api.specs.Spec;
@@ -32,7 +30,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
 
-import static org.gradle.util.CollectionUtils.any;
+import static org.gradle.util.internal.CollectionUtils.any;
 
 public class AggregateTestResultsProvider implements TestResultsProvider {
     private final Iterable<TestResultsProvider> providers;
@@ -99,20 +97,28 @@ public class AggregateTestResultsProvider implements TestResultsProvider {
     }
 
     @Override
-    public boolean hasOutput(long id, final TestOutputEvent.Destination destination) {
-        return Iterables.any(
-                classOutputProviders.get(id),
-                new Predicate<DelegateProvider>() {
-                    @Override
-                    public boolean apply(DelegateProvider delegateProvider) {
-                        return delegateProvider.provider.hasOutput(delegateProvider.id, destination);
-                    }
-                });
+    public boolean hasOutput(long classId, final TestOutputEvent.Destination destination) {
+        for (DelegateProvider delegateProvider : classOutputProviders.get(classId)) {
+            if (delegateProvider.provider.hasOutput(delegateProvider.id, destination)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     @Override
-    public void writeAllOutput(long id, TestOutputEvent.Destination destination, Writer writer) {
-        for (DelegateProvider delegateProvider : classOutputProviders.get(id)) {
+    public boolean hasOutput(long classId, final long testId, final TestOutputEvent.Destination destination) {
+        for (DelegateProvider delegateProvider : classOutputProviders.get(classId)) {
+            if (delegateProvider.provider.hasOutput(delegateProvider.id, testId, destination)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    @Override
+    public void writeAllOutput(long classId, TestOutputEvent.Destination destination, Writer writer) {
+        for (DelegateProvider delegateProvider : classOutputProviders.get(classId)) {
             delegateProvider.provider.writeAllOutput(delegateProvider.id, destination, writer);
         }
     }
@@ -128,8 +134,8 @@ public class AggregateTestResultsProvider implements TestResultsProvider {
     }
 
     @Override
-    public void writeNonTestOutput(long id, TestOutputEvent.Destination destination, Writer writer) {
-        for (DelegateProvider delegateProvider : classOutputProviders.get(id)) {
+    public void writeNonTestOutput(long classId, TestOutputEvent.Destination destination, Writer writer) {
+        for (DelegateProvider delegateProvider : classOutputProviders.get(classId)) {
             delegateProvider.provider.writeNonTestOutput(delegateProvider.id, destination, writer);
         }
     }

@@ -18,14 +18,15 @@ package org.gradle.internal.resource.transfer;
 
 import com.google.common.io.Files;
 import org.apache.commons.io.IOUtils;
+import org.apache.commons.lang.StringUtils;
 import org.gradle.api.UncheckedIOException;
 import org.gradle.api.internal.artifacts.ivyservice.ArtifactCacheLockingManager;
 import org.gradle.api.internal.artifacts.ivyservice.resolutionstrategy.ExternalResourceCachePolicy;
-import org.gradle.api.internal.file.TemporaryFileProvider;
+import org.gradle.api.internal.file.temp.TemporaryFileProvider;
 import org.gradle.cache.internal.ProducerGuard;
 import org.gradle.internal.hash.ChecksumService;
 import org.gradle.internal.hash.HashCode;
-import org.gradle.internal.hash.HashValue;
+import org.gradle.internal.hash.Hashing;
 import org.gradle.internal.resource.ExternalResource;
 import org.gradle.internal.resource.ExternalResourceName;
 import org.gradle.internal.resource.ExternalResourceReadResult;
@@ -39,8 +40,8 @@ import org.gradle.internal.resource.local.LocallyAvailableResource;
 import org.gradle.internal.resource.local.LocallyAvailableResourceCandidates;
 import org.gradle.internal.resource.metadata.ExternalResourceMetaData;
 import org.gradle.internal.resource.metadata.ExternalResourceMetaDataCompare;
-import org.gradle.util.BuildCommencedTimeProvider;
-import org.gradle.util.GFileUtils;
+import org.gradle.util.internal.BuildCommencedTimeProvider;
+import org.gradle.util.internal.GFileUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -159,11 +160,8 @@ public class DefaultCacheAwareExternalResourceAccessor implements CacheAwareExte
             ExternalResourceReadResult<HashCode> result = resource.withContentIfPresent(inputStream -> {
                 try {
                     String sha = IOUtils.toString(inputStream, StandardCharsets.US_ASCII);
-                    if (sha.length() < 40) {
-                        // servers may return sha-1 with leading 0 stripped, which is not
-                        // supported by HashCode.fromString
-                        return HashCode.fromBytes(HashValue.parse(sha).asByteArray());
-                    }
+                    // Servers may return SHA-1 with leading zeros stripped
+                    sha = StringUtils.leftPad(sha, Hashing.sha1().getHexDigits(), '0');
                     return HashCode.fromString(sha);
                 } catch (IOException e) {
                     throw new UncheckedIOException(e);

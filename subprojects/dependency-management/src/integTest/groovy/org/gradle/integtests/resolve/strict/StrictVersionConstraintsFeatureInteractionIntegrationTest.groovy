@@ -236,7 +236,7 @@ class StrictVersionConstraintsFeatureInteractionIntegrationTest extends Abstract
 
         then:
         failure.assertHasCause """Cannot find a version of 'org:bar' that satisfies the version constraints:
-   Dependency path ':test:unspecified' --> 'test:foo:unspecified' --> 'org:bar:2.0'
+   Dependency path ':test:unspecified' --> 'test:foo:unspecified' (conf) --> 'org:bar:2.0'
    Constraint path ':test:unspecified' --> 'org:bar:{strictly 1.0}'"""
     }
 
@@ -301,7 +301,7 @@ class StrictVersionConstraintsFeatureInteractionIntegrationTest extends Abstract
 
         buildFile << """
             configurations.conf.resolutionStrategy.dependencySubstitution {
-                substitute module("org:old") because "better foo than old" with module("org:foo:2.0")
+                substitute module("org:old") because "better foo than old" using module("org:foo:2.0")
             }
             dependencies {
                 conf('org:foo') {
@@ -351,7 +351,7 @@ class StrictVersionConstraintsFeatureInteractionIntegrationTest extends Abstract
             import org.gradle.api.internal.artifacts.ivyservice.ivyresolve.strategy.*
             import org.gradle.api.internal.*
 
-            def VERSIONED_COMPARATOR = new DefaultVersionComparator(new FeaturePreviews())
+            def VERSIONED_COMPARATOR = new DefaultVersionComparator()
             def VERSION_SCHEME = new DefaultVersionSelectorScheme(VERSIONED_COMPARATOR, new VersionParser())
 
             configurations.all {

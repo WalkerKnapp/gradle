@@ -19,7 +19,7 @@ package org.gradle.testkit.runner.enduser
 import org.gradle.testkit.runner.BaseGradleRunnerIntegrationTest
 import org.gradle.testkit.runner.fixtures.NonCrossVersion
 import org.gradle.testkit.runner.internal.DefaultGradleRunner
-import org.gradle.util.TextUtil
+import org.gradle.util.internal.TextUtil
 import org.gradle.util.UsesNativeServices
 
 @NonCrossVersion
@@ -29,7 +29,7 @@ abstract class BaseTestKitEndUserIntegrationTest extends BaseGradleRunnerIntegra
     def setup() {
         requireIsolatedTestKitDir = true
         executer.beforeExecute {
-            usingInitScript(file("testKitDirInit.gradle") << """
+            usingInitScript(file("tempDirInit.gradle") << """
                 allprojects {
                     tasks.withType(Test) {
                         systemProperty "$DefaultGradleRunner.TEST_KIT_DIR_SYS_PROP", "${TextUtil.normaliseFileSeparators(testKitDir.absolutePath)}"

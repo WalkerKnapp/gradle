@@ -15,11 +15,13 @@
  */
 package org.gradle.integtests.fixtures.executer;
 
+import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Sets;
+import com.google.common.io.ByteStreams;
 import com.google.common.io.CharSource;
 import groovy.lang.Closure;
 import groovy.lang.DelegatesTo;
@@ -34,6 +36,7 @@ import org.gradle.api.logging.configuration.ConsoleOutput;
 import org.gradle.api.logging.configuration.WarningMode;
 import org.gradle.integtests.fixtures.RepoScriptBlockUtil;
 import org.gradle.integtests.fixtures.daemon.DaemonLogsAnalyzer;
+import org.gradle.integtests.fixtures.validation.ValidationServicesFixture;
 import org.gradle.internal.ImmutableActionSet;
 import org.gradle.internal.MutableActionSet;
 import org.gradle.internal.UncheckedException;
@@ -55,16 +58,21 @@ import org.gradle.test.fixtures.ResettableExpectations;
 import org.gradle.test.fixtures.file.TestDirectoryProvider;
 import org.gradle.test.fixtures.file.TestFile;
 import org.gradle.testfixtures.internal.NativeServicesTestFixture;
-import org.gradle.util.ClosureBackedAction;
-import org.gradle.util.CollectionUtils;
+import org.gradle.util.internal.ClosureBackedAction;
+import org.gradle.util.internal.CollectionUtils;
+import org.gradle.util.internal.GFileUtils;
 import org.gradle.util.GradleVersion;
+import org.gradle.util.internal.TextUtil;
 
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.io.PipedInputStream;
 import java.io.PipedOutputStream;
+import java.net.URL;
 import java.nio.charset.Charset;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -86,8 +94,8 @@ import static org.gradle.integtests.fixtures.executer.AbstractGradleExecuter.Cli
 import static org.gradle.integtests.fixtures.executer.AbstractGradleExecuter.CliDaemonArgument.NO_DAEMON;
 import static org.gradle.integtests.fixtures.executer.OutputScrapingExecutionResult.STACK_TRACE_ELEMENT;
 import static org.gradle.internal.service.scopes.DefaultGradleUserHomeScopeServiceRegistry.REUSE_USER_HOME_SERVICES;
-import static org.gradle.util.CollectionUtils.collect;
-import static org.gradle.util.CollectionUtils.join;
+import static org.gradle.util.internal.CollectionUtils.collect;
+import static org.gradle.util.internal.CollectionUtils.join;
 
 public abstract class AbstractGradleExecuter implements GradleExecuter, ResettableExpectations {
 
@@ -95,6 +103,7 @@ public abstract class AbstractGradleExecuter implements GradleExecuter, Resettab
         .displayName("Global services")
         .parent(newCommandLineProcessLogging())
         .parent(NativeServicesTestFixture.getInstance())
+        .parent(ValidationServicesFixture.getServices())
         .provider(new GlobalScopeServices(true))
         .build();
 
@@ -160,6 +169,9 @@ public abstract class AbstractGradleExecuter implements GradleExecuter, Resettab
     protected WarningMode warningMode = WarningMode.All;
     private boolean showStacktrace = true;
     private boolean renderWelcomeMessage;
+    private boolean disableToolchainDownload = true;
+    private boolean disableToolchainDetection = true;
+
 
     private int expectedGenericDeprecationWarnings;
     private final List<String> expectedDeprecationWarnings = new ArrayList<>();
@@ -169,9 +181,9 @@ public abstract class AbstractGradleExecuter implements GradleExecuter, Resettab
     private final MutableActionSet<GradleExecuter> beforeExecute = new MutableActionSet<>();
     private ImmutableActionSet<GradleExecuter> afterExecute = ImmutableActionSet.empty();
 
-    private final TestDirectoryProvider testDirectoryProvider;
+    protected final TestDirectoryProvider testDirectoryProvider;
     protected final GradleVersion gradleVersion;
-    private final GradleDistribution distribution;
+    protected final GradleDistribution distribution;
 
     private boolean debug = Boolean.getBoolean(DEBUG_SYSPROP);
     private boolean debugLauncher = Boolean.getBoolean(LAUNCHER_DEBUG_SYSPROP);
@@ -181,7 +193,7 @@ public abstract class AbstractGradleExecuter implements GradleExecuter, Resettab
 
     private boolean noExplicitTmpDir;
     protected boolean noExplicitNativeServicesDir;
-    private boolean fullDeprecationStackTrace = true;
+    private boolean fullDeprecationStackTrace;
     private boolean checkDeprecations = true;
     private boolean checkDaemonCrash = true;
 
@@ -239,6 +251,8 @@ public abstract class AbstractGradleExecuter implements GradleExecuter, Resettab
         expectedDeprecationWarnings.clear();
         stackTraceChecksOn = true;
         renderWelcomeMessage = false;
+        disableToolchainDownload = true;
+        disableToolchainDetection = true;
         debug = Boolean.getBoolean(DEBUG_SYSPROP);
         debugLauncher = Boolean.getBoolean(LAUNCHER_DEBUG_SYSPROP);
         profiler = System.getProperty(PROFILE_SYSPROP, "");
@@ -351,8 +365,8 @@ public abstract class AbstractGradleExecuter implements GradleExecuter, Resettab
         if (noExplicitNativeServicesDir) {
             executer.withNoExplicitNativeServicesDir();
         }
-        if (!fullDeprecationStackTrace) {
-            executer.withFullDeprecationStackTraceDisabled();
+        if (fullDeprecationStackTrace) {
+            executer.withFullDeprecationStackTraceEnabled();
         }
         if (defaultLocale != null) {
             executer.withDefaultLocale(defaultLocale);
@@ -411,12 +425,20 @@ public abstract class AbstractGradleExecuter implements GradleExecuter, Resettab
             executer.withWelcomeMessageEnabled();
         }
 
+        if (!disableToolchainDetection) {
+            executer.withToolchainDetectionEnabled();
+        }
+        if (!disableToolchainDownload) {
+            executer.withToolchainDownloadEnabled();
+        }
+
         executer.withTestConsoleAttached(consoleAttachment);
 
         return executer;
     }
 
     @Override
+    @Deprecated
     public GradleExecuter usingBuildScript(File buildScript) {
         this.buildScript = buildScript;
         return this;
@@ -429,6 +451,7 @@ public abstract class AbstractGradleExecuter implements GradleExecuter, Resettab
     }
 
     @Override
+    @Deprecated
     public GradleExecuter usingSettingsFile(File settingsFile) {
         this.settingsFile = settingsFile;
         return this;
@@ -813,6 +836,19 @@ public abstract class AbstractGradleExecuter implements GradleExecuter, Resettab
     }
 
     @Override
+    public GradleExecuter withToolchainDetectionEnabled() {
+        disableToolchainDetection = false;
+        return this;
+    }
+
+    @Override
+    public GradleExecuter withToolchainDownloadEnabled() {
+        withToolchainDetectionEnabled();
+        disableToolchainDownload = false;
+        return this;
+    }
+
+    @Override
     public GradleExecuter withRepositoryMirrors() {
         beforeExecute(gradleExecuter -> usingInitScript(RepoScriptBlockUtil.createMirrorInitScript()));
         return this;
@@ -984,11 +1020,18 @@ public abstract class AbstractGradleExecuter implements GradleExecuter, Resettab
         }
 
         if (consoleType != null) {
-            allArgs.add("--console=" + consoleType.toString().toLowerCase());
+            allArgs.add("--console=" + TextUtil.toLowerCaseLocaleSafe(consoleType.toString()));
         }
 
         if (warningMode != null) {
-            allArgs.add("--warning-mode=" + warningMode.toString().toLowerCase(Locale.ENGLISH));
+            allArgs.add("--warning-mode=" + TextUtil.toLowerCaseLocaleSafe(warningMode.toString()));
+        }
+
+        if (disableToolchainDownload) {
+            allArgs.add("-Porg.gradle.java.installations.auto-download=false");
+        }
+        if (disableToolchainDetection) {
+            allArgs.add("-Porg.gradle.java.installations.auto-detect=false");
         }
 
         allArgs.addAll(args);
@@ -1254,6 +1297,7 @@ public abstract class AbstractGradleExecuter implements GradleExecuter, Resettab
                 int i = 0;
                 boolean insideVariantDescriptionBlock = false;
                 boolean insideKotlinCompilerFlakyStacktrace = false;
+                boolean sawVmPluginLoadFailure = false;
                 while (i < lines.size()) {
                     String line = lines.get(i);
                     if (insideVariantDescriptionBlock && line.contains("]")) {
@@ -1266,9 +1310,32 @@ public abstract class AbstractGradleExecuter implements GradleExecuter, Resettab
                     if (line.contains("Compilation with Kotlin compile daemon was not successful")) {
                         insideKotlinCompilerFlakyStacktrace = true;
                         i++;
-                    } else if (insideKotlinCompilerFlakyStacktrace &&
-                        (line.contains("java.rmi.UnmarshalException") || line.contains("java.io.EOFException"))) {
+                    } else if (line.contains("Trying to create VM plugin `org.codehaus.groovy.vmplugin.v9.Java9` by checking `java.lang.Module`")) {
+                        // a groovy warning when running on Java < 9
+                        // https://issues.apache.org/jira/browse/GROOVY-9933
+                        i++; // full stracktrace skipped in next branch
+                        sawVmPluginLoadFailure = true;
+                    } else if (line.contains("java.lang.ClassNotFoundException: java.lang.Module") && sawVmPluginLoadFailure) {
+                        // a groovy warning when running on Java < 9
+                        // https://issues.apache.org/jira/browse/GROOVY-9933
                         i++;
+                        i = skipStackTrace(lines, i);
+                    } else if (insideKotlinCompilerFlakyStacktrace &&
+                        (line.contains("java.rmi.UnmarshalException") ||
+                            line.contains("java.io.EOFException")) ||
+                        // Verbose logging by Jetty when connector is shutdown
+                        // https://github.com/eclipse/jetty.project/issues/3529
+                        line.contains("java.nio.channels.CancelledKeyException")) {
+                        i++;
+                        i = skipStackTrace(lines, i);
+                    } else if (line.contains("com.amazonaws.http.IdleConnectionReaper")) {
+                        /*
+                        2021-01-05T08:15:51.329+0100 [DEBUG] [com.amazonaws.http.IdleConnectionReaper] Reaper thread:
+                        java.lang.InterruptedException: sleep interrupted
+                            at java.base/java.lang.Thread.sleep(Native Method)
+                            at com.amazonaws.http.IdleConnectionReaper.run(IdleConnectionReaper.java:188)
+                         */
+                        i += 2;
                         i = skipStackTrace(lines, i);
                     } else if (line.matches(".*use(s)? or override(s)? a deprecated API\\.")) {
                         // A javac warning, ignore
@@ -1278,7 +1345,7 @@ public abstract class AbstractGradleExecuter implements GradleExecuter, Resettab
                         i++;
                     } else if (isDeprecationMessageInHelpDescription(line)) {
                         i++;
-                    } else if (expectedDeprecationWarnings.remove(line)) {
+                    } else if (expectedDeprecationWarnings.removeIf(warning -> line.contains(warning))) {
                         // Deprecation warning is expected
                         i++;
                         i = skipStackTrace(lines, i);
@@ -1416,8 +1483,38 @@ public abstract class AbstractGradleExecuter implements GradleExecuter, Resettab
     }
 
     @Override
-    public GradleExecuter withFullDeprecationStackTraceDisabled() {
-        fullDeprecationStackTrace = false;
+    public GradleExecuter withFullDeprecationStackTraceEnabled() {
+        fullDeprecationStackTrace = true;
+        return this;
+    }
+
+    @Override
+    public GradleExecuter withFileLeakDetection(String... args) {
+        String leakDetectorUrl = "https://repo1.maven.org/maven2/org/kohsuke/file-leak-detector/1.13/file-leak-detector-1.13-jar-with-dependencies.jar";
+        this.beforeExecute(executer -> {
+            File leakDetectorJar = new File(this.gradleUserHomeDir, "file-leak-detector-1.13-jar-with-dependencies.jar");
+            if (!leakDetectorJar.exists()) {
+                // Need to download the jar
+                GFileUtils.parentMkdirs(leakDetectorJar);
+                GFileUtils.touch(leakDetectorJar);
+                try (OutputStream out = Files.newOutputStream(leakDetectorJar.toPath());
+                     InputStream in = new URL(leakDetectorUrl).openStream()) {
+                    ByteStreams.copy(in, out);
+                } catch (IOException e) {
+                    throw new RuntimeException("Couldn't download " + leakDetectorUrl, e);
+                }
+            }
+
+            String joinedArgs;
+            if (args.length == 0) {
+                // Default arguments to pass to the java agent
+                joinedArgs = "http=19999";
+            } else {
+                joinedArgs = Joiner.on(',').join(args);
+            }
+            withBuildJvmOpts("-javaagent:" + leakDetectorJar + "=" + joinedArgs);
+        });
+
         return this;
     }
 

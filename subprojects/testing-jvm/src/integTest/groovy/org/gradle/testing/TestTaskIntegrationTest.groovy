@@ -19,6 +19,7 @@ package org.gradle.testing
 import org.gradle.integtests.fixtures.ToBeFixedForConfigurationCache
 import org.gradle.integtests.fixtures.TargetCoverage
 import org.gradle.test.fixtures.file.TestFile
+import org.gradle.testing.fixture.JUnitCoverage
 import org.gradle.testing.fixture.JUnitMultiVersionIntegrationSpec
 import org.gradle.util.Requires
 import org.gradle.util.TestPrecondition
@@ -113,7 +114,7 @@ class TestTaskIntegrationTest extends JUnitMultiVersionIntegrationSpec {
         and:
         buildFile << """
             apply plugin: 'java'
-            ${jcenterRepository()}
+            ${mavenCentralRepository()}
             dependencies { testImplementation 'junit:junit:4.13' }
             test {
                 maxParallelForks = $maxParallelForks
@@ -139,7 +140,7 @@ class TestTaskIntegrationTest extends JUnitMultiVersionIntegrationSpec {
         buildFile << """
             allprojects {
                 apply plugin: 'java'
-                ${jcenterRepository()}
+                ${mavenCentralRepository()}
             }
             dependencies {
                 testImplementation 'junit:junit:4.13'
@@ -180,7 +181,7 @@ class TestTaskIntegrationTest extends JUnitMultiVersionIntegrationSpec {
     def "re-runs tests when resources are renamed"() {
         buildFile << """
             apply plugin: 'java'
-            ${jcenterRepository()}
+            ${mavenCentralRepository()}
 
             dependencies {
                 testImplementation 'junit:junit:4.13'
@@ -224,7 +225,7 @@ class TestTaskIntegrationTest extends JUnitMultiVersionIntegrationSpec {
                 void apply(Project project) {
                     project.apply plugin: 'java'
                     Test test = (Test) project.tasks.getByName("test")
-                    if (test.reports.junitXml.destination.exists()) {
+                    if (test.reports.junitXml.outputLocation.asFile.get().exists()) {
                         println 'JUnit XML report exists!'
                     }
                 }
@@ -235,6 +236,53 @@ class TestTaskIntegrationTest extends JUnitMultiVersionIntegrationSpec {
 
         expect:
         succeeds("help")
+    }
+
+    @Unroll
+    def "reports failure of TestExecuter regardless of filters"() {
+        given:
+        file('src/test/java/MyTest.java') << standaloneTestClass()
+        buildFile << """
+            import org.gradle.api.internal.tasks.testing.*
+
+            apply plugin: 'java'
+
+            ${mavenCentralRepository()}
+            dependencies {
+                testImplementation 'junit:junit:${JUnitCoverage.NEWEST}'
+            }
+
+            test {
+                doFirst {
+                    testExecuter = new TestExecuter<JvmTestExecutionSpec>() {
+                        @Override
+                        void execute(JvmTestExecutionSpec testExecutionSpec, TestResultProcessor resultProcessor) {
+                            DefaultTestSuiteDescriptor suite = new DefaultTestSuiteDescriptor(testExecutionSpec.path, testExecutionSpec.path)
+                            resultProcessor.started(suite, new TestStartEvent(System.currentTimeMillis()))
+                            try {
+                                throw new RuntimeException("boom!")
+                            } finally {
+                                resultProcessor.completed(suite.getId(), new TestCompleteEvent(System.currentTimeMillis()))
+                            }
+                        }
+
+                        @Override
+                        void stopNow() {
+                            // do nothing
+                        }
+                    }
+                }
+            }
+        """
+
+        when:
+        fails("test", *extraArgs)
+
+        then:
+        result.assertHasCause('boom!')
+
+        where:
+        extraArgs << [[], ["--tests", "MyTest"]]
     }
 
     private static String standaloneTestClass() {
@@ -259,7 +307,7 @@ class TestTaskIntegrationTest extends JUnitMultiVersionIntegrationSpec {
         """
             apply plugin: 'java'
 
-            ${jcenterRepository()}
+            ${mavenCentralRepository()}
 
             dependencies {
                 testImplementation 'junit:junit:4.13'

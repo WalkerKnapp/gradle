@@ -43,23 +43,27 @@ public class JavaGradlePluginProjectInitDescriptor extends JvmGradlePluginProjec
 
     @Override
     public BuildInitTestFramework getDefaultTestFramework() {
-        return BuildInitTestFramework.JUNIT;
+        return BuildInitTestFramework.JUNIT_JUPITER;
     }
 
     @Override
     public Set<BuildInitTestFramework> getTestFrameworks() {
-        return ImmutableSet.of(BuildInitTestFramework.JUNIT);
+        return ImmutableSet.of(BuildInitTestFramework.JUNIT_JUPITER);
     }
 
     @Override
-    public void generate(InitSettings settings, BuildScriptBuilder buildScriptBuilder, TemplateFactory templateFactory) {
-        super.generate(settings, buildScriptBuilder, templateFactory);
-        buildScriptBuilder.testImplementationDependency("Use JUnit test framework for unit tests", "junit:junit:" + libraryVersionProvider.getVersion("junit"));
+    public void generateProjectBuildScript(String projectName, InitSettings settings, BuildScriptBuilder buildScriptBuilder) {
+        super.generateProjectBuildScript(projectName, settings, buildScriptBuilder);
+        buildScriptBuilder.testImplementationDependency(
+            "Use JUnit Jupiter for testing.",
+            "org.junit.jupiter:junit-jupiter:" + libraryVersionProvider.getVersion("junit-jupiter")
+        );
     }
 
     @Override
     protected TemplateOperation sourceTemplate(InitSettings settings, TemplateFactory templateFactory, String pluginId, String pluginClassName) {
         return templateFactory.fromSourceTemplate("plugin/java/Plugin.java.template", t -> {
+            t.subproject(settings.getSubprojects().get(0));
             t.sourceSet("main");
             t.className(pluginClassName);
             t.binding("pluginId", pluginId);
@@ -69,6 +73,7 @@ public class JavaGradlePluginProjectInitDescriptor extends JvmGradlePluginProjec
     @Override
     protected TemplateOperation testTemplate(InitSettings settings, TemplateFactory templateFactory, String pluginId, String testClassName) {
         return templateFactory.fromSourceTemplate("plugin/java/junit/PluginTest.java.template", t -> {
+            t.subproject(settings.getSubprojects().get(0));
             t.sourceSet("test");
             t.className(testClassName);
             t.binding("pluginId", pluginId);
@@ -78,6 +83,7 @@ public class JavaGradlePluginProjectInitDescriptor extends JvmGradlePluginProjec
     @Override
     protected TemplateOperation functionalTestTemplate(InitSettings settings, TemplateFactory templateFactory, String pluginId, String testClassName) {
         return templateFactory.fromSourceTemplate("plugin/java/junit/PluginFunctionalTest.java.template", t -> {
+            t.subproject(settings.getSubprojects().get(0));
             t.sourceSet("functionalTest");
             t.className(testClassName);
             t.binding("pluginId", pluginId);

@@ -16,7 +16,6 @@
 
 package org.gradle.api.internal.tasks.compile.processing
 
-import com.sun.tools.javac.code.Symbol
 import org.gradle.api.internal.tasks.compile.incremental.processing.AnnotationProcessingResult
 import org.gradle.api.internal.tasks.compile.incremental.processing.AnnotationProcessorResult
 import org.gradle.api.internal.tasks.compile.incremental.processing.IncrementalAnnotationProcessorType
@@ -24,11 +23,12 @@ import spock.lang.Specification
 
 import javax.annotation.processing.Processor
 import javax.annotation.processing.RoundEnvironment
+import javax.lang.model.element.Element
+import javax.lang.model.element.ExecutableElement
+import javax.lang.model.element.Name
 import javax.lang.model.element.TypeElement
-import javax.tools.JavaFileObject
 import java.lang.annotation.Retention
 import java.lang.annotation.RetentionPolicy
-import com.sun.tools.javac.util.Name
 
 class AggregatingProcessorTest extends Specification {
 
@@ -80,13 +80,13 @@ class AggregatingProcessorTest extends Specification {
         result.getAggregatedTypes() == ["A", "B"] as Set
     }
 
-    def "ignores aggregated types which have no source"() {
+    def "doesn't aggregated types which have source when annotation isn't at top level"() {
         given:
         delegate.getSupportedAnnotationTypes() >> annotationTypes.collect { it.getQualifiedName().toString() }
         roundEnvironment = Stub(RoundEnvironment) {
             getRootElements() >> ([type("A"), type("B"), type("C")] as Set)
             getElementsAnnotatedWith(_ as TypeElement) >> { TypeElement annotationType ->
-                [type("A"), type("B", false), type("C")] as Set
+                [method(type("A")), type("C")] as Set
             }
         }
 
@@ -124,8 +124,14 @@ class AggregatingProcessorTest extends Specification {
         }
     }
 
-    TypeElement type(String name, boolean withSource = true) {
-        def stub = Stub(Symbol.ClassSymbol) {
+    Element method(Element parent) {
+        Stub(ExecutableElement) {
+            getEnclosingElement() >> parent
+        }
+    }
+
+    TypeElement type(String name) {
+        Stub(TypeElement) {
             getEnclosingElement() >> null
             getQualifiedName() >> {
                 Stub(Name) {
@@ -133,10 +139,6 @@ class AggregatingProcessorTest extends Specification {
                 }
             }
         }
-        if (withSource) {
-            stub.sourcefile = Stub(JavaFileObject)
-        }
-        stub
     }
 
 

@@ -123,7 +123,7 @@ class DependencyConstraintsIntegrationTest extends AbstractPolyglotIntegrationSp
 
         then:
         failure.assertHasCause("""Module 'org:foo' has been rejected:
-   Dependency path ':test:unspecified' --> 'org:bar:1.0' --> 'org:foo:1.1'
+   Dependency path ':test:unspecified' --> 'org:bar:1.0' (runtime) --> 'org:foo:1.1'
    Constraint path ':test:unspecified' --> 'org:foo:{reject all versions}'""")
     }
 
@@ -421,7 +421,6 @@ class DependencyConstraintsIntegrationTest extends AbstractPolyglotIntegrationSp
         }
     }
 
-    @ToBeFixedForConfigurationCache(because = "composite builds")
     void "dependency constraints defined for a build are applied when resolving a configuration that uses that build as an included build"() {
         given:
         resolve.expectDefaultConfiguration('default')

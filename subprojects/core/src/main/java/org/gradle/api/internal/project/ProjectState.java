@@ -18,7 +18,7 @@ package org.gradle.api.internal.project;
 
 import org.gradle.api.Project;
 import org.gradle.api.artifacts.component.ProjectComponentIdentifier;
-import org.gradle.internal.Factory;
+import org.gradle.api.internal.initialization.ClassLoaderScope;
 import org.gradle.internal.build.BuildState;
 import org.gradle.internal.model.ModelContainer;
 import org.gradle.internal.resources.ResourceLock;
@@ -26,12 +26,14 @@ import org.gradle.util.Path;
 
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
+import java.util.function.Consumer;
+import java.util.function.Function;
 
 /**
  * Encapsulates the identity and state of a particular project in a build tree.
  */
 @ThreadSafe
-public interface ProjectState extends ModelContainer {
+public interface ProjectState extends ModelContainer<ProjectInternal> {
     /**
      * Returns the containing build of this project.
      */
@@ -64,9 +66,19 @@ public interface ProjectState extends ModelContainer {
     ProjectComponentIdentifier getComponentIdentifier();
 
     /**
-     * This state object should own the project instantiation. This method is currently here to allow transition towards that.
+     * Creates the mutable model for this project.
      */
-    void attachMutableModel(ProjectInternal project);
+    void createMutableModel(ClassLoaderScope selfClassLoaderScope, ClassLoaderScope baseClassLoaderScope);
+
+    /**
+     * Configures the mutable model for this project, if not already.
+     */
+    void ensureConfigured();
+
+    /**
+     * Configure the mutable model for this project and discovers any registered tasks, if not already done.
+     */
+    void ensureTasksDiscovered();
 
     /**
      * Returns the mutable model for this project. This should not be used directly. This property is here to help with migration away from direct usage.
@@ -74,7 +86,7 @@ public interface ProjectState extends ModelContainer {
     ProjectInternal getMutableModel();
 
     /**
-     * Returns the lock that will be acquired when accessing the mutable state of this project via {@link #withMutableState(Runnable)} and {@link #withMutableState(Factory)}.
+     * Returns the lock that will be acquired when accessing the mutable state of this project via {@link #applyToMutableState(Consumer)} and {@link #fromMutableState(Function)}.
      * A caller can optionally acquire this lock before calling one of these accessor methods, in order to avoid those methods blocking.
      *
      * <p>Note that the lock may be shared between projects.

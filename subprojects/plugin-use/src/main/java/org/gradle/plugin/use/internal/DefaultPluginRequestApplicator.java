@@ -17,7 +17,9 @@
 package org.gradle.plugin.use.internal;
 
 import org.gradle.api.GradleException;
+import org.gradle.api.InvalidUserCodeException;
 import org.gradle.api.artifacts.dsl.RepositoryHandler;
+import org.gradle.api.internal.DocumentationRegistry;
 import org.gradle.api.internal.initialization.ClassLoaderScope;
 import org.gradle.api.internal.initialization.ScriptHandlerInternal;
 import org.gradle.api.internal.plugins.ClassloaderBackedPluginDescriptorLocator;
@@ -40,7 +42,7 @@ import org.gradle.plugin.use.resolve.internal.PluginResolution;
 import org.gradle.plugin.use.resolve.internal.PluginResolutionResult;
 import org.gradle.plugin.use.resolve.internal.PluginResolveContext;
 import org.gradle.plugin.use.resolve.internal.PluginResolver;
-import org.gradle.util.TextUtil;
+import org.gradle.util.internal.TextUtil;
 
 import javax.annotation.Nullable;
 import java.util.Collections;
@@ -51,7 +53,7 @@ import java.util.Map;
 
 import static com.google.common.collect.Maps.newLinkedHashMap;
 import static org.gradle.internal.classpath.CachedClasspathTransformer.StandardTransform.BuildLogic;
-import static org.gradle.util.CollectionUtils.collect;
+import static org.gradle.util.internal.CollectionUtils.collect;
 
 public class DefaultPluginRequestApplicator implements PluginRequestApplicator {
     private final PluginRegistry pluginRegistry;
@@ -148,19 +150,26 @@ public class DefaultPluginRequestApplicator implements PluginRequestApplicator {
     }
 
     private void addPluginArtifactRepositories(RepositoryHandler repositories) {
+        if (pluginRepositoriesProvider.isExclusiveContentInUse() && !repositories.isEmpty()) {
+            throw new InvalidUserCodeException("When using exclusive repository content in 'settings.pluginManagement.repositories', you cannot add repositories to 'buildscript.repositories'.\n" +
+                "See the documentation in " + new DocumentationRegistry().getDocumentationFor("declaring_repositories", "declaring_content_exclusively_found_in_one_repository") + ".");
+        }
         repositories.addAll(pluginRepositoriesProvider.getPluginRepositories());
     }
 
     private void defineScriptHandlerClassScope(ScriptHandlerInternal scriptHandler, ClassLoaderScope classLoaderScope, Iterable<PluginImplementation<?>> pluginsFromOtherLoaders) {
-        ClassPath classPath = scriptHandler.getScriptClassPath();
-        ClassPath cachedClassPath = cachedClasspathTransformer.transform(classPath, BuildLogic);
-        classLoaderScope.export(cachedClassPath);
+        exportBuildLogicClassPathTo(classLoaderScope, scriptHandler.getNonInstrumentedScriptClassPath());
 
         for (PluginImplementation<?> pluginImplementation : pluginsFromOtherLoaders) {
             classLoaderScope.export(pluginImplementation.asClass().getClassLoader());
         }
 
         classLoaderScope.lock();
+    }
+
+    private void exportBuildLogicClassPathTo(ClassLoaderScope classLoaderScope, ClassPath classPath) {
+        ClassPath cachedClassPath = cachedClasspathTransformer.transform(classPath, BuildLogic);
+        classLoaderScope.export(cachedClassPath);
     }
 
     private PluginResolver wrapInAlreadyInClasspathResolver(ClassLoaderScope classLoaderScope) {

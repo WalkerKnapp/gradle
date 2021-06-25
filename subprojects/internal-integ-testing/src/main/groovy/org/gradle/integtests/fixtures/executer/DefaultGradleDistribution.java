@@ -98,11 +98,11 @@ public class DefaultGradleDistribution implements GradleDistribution {
         }
 
         // 3.x - 4.6 works on Java 7 - 8
-        if(isSameOrOlder("4.6")) {
+        if (isSameOrOlder("4.6")) {
             return javaVersion.compareTo(JavaVersion.VERSION_1_7) >= 0 && javaVersion.compareTo(JavaVersion.VERSION_1_8) <= 0;
         }
 
-        if (isSameOrOlder("4.10")) {
+        if (isSameOrOlder("4.11")) {
             return javaVersion.compareTo(JavaVersion.VERSION_1_7) >= 0 && javaVersion.compareTo(JavaVersion.VERSION_1_10) <= 0;
         }
 
@@ -115,7 +115,19 @@ public class DefaultGradleDistribution implements GradleDistribution {
             return javaVersion.compareTo(JavaVersion.VERSION_1_8) >= 0 && javaVersion.compareTo(JavaVersion.VERSION_13) <= 0;
         }
 
-        return javaVersion.compareTo(JavaVersion.VERSION_1_8) >= 0 && maybeEnforceHighestVersion(javaVersion, JavaVersion.VERSION_13);
+        // 6.7 added official support for JDK15
+        if (isSameOrOlder("6.6.1")) {
+            return javaVersion.compareTo(JavaVersion.VERSION_1_8) >= 0 && javaVersion.compareTo(JavaVersion.VERSION_14) <= 0;
+        }
+
+        // 7.0 added official support for JDK16
+        // milestone 2 was published with Groovy 3 upgrade and without asm upgrade yet
+        // subsequent milestones and RCs will support JDK16
+        if (isSameOrOlder("7.0-milestone-2")) {
+            return javaVersion.compareTo(JavaVersion.VERSION_1_8) >= 0 && javaVersion.compareTo(JavaVersion.VERSION_15) <= 0;
+        }
+
+        return javaVersion.compareTo(JavaVersion.VERSION_1_8) >= 0 && maybeEnforceHighestVersion(javaVersion, JavaVersion.VERSION_16);
     }
 
     @Override
@@ -269,6 +281,11 @@ public class DefaultGradleDistribution implements GradleDistribution {
     @Override
     public boolean isToolingApiLogsConfigureSummary() {
         return isSameOrNewer("2.14");
+    }
+
+    @Override
+    public boolean isToolingApiHasExecutionPhaseBuildOperation() {
+        return isSameOrNewer("7.1-rc-1");
     }
 
     @Override

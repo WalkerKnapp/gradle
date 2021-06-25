@@ -18,7 +18,7 @@ package org.gradle.execution.taskgraph
 
 import groovy.transform.NotYetImplemented
 import org.gradle.integtests.fixtures.AbstractIntegrationSpec
-import org.gradle.util.TextUtil
+import org.gradle.util.internal.TextUtil
 
 import static org.gradle.integtests.fixtures.executer.TaskOrderSpecs.any
 
@@ -53,9 +53,9 @@ class RuleTaskBridgingIntegrationTest extends AbstractIntegrationSpec implements
         output.contains "as map: ModelMap<Task> 'tasks'"
         (
             // testing against full distribution
-            output.contains("as container: [task ':buildEnvironment', task ':components', task ':dependencies', task ':dependencyInsight', task ':dependentComponents', task ':help', task ':init', task ':model', task ':outgoingVariants', task ':prepareKotlinBuildScriptModel', task ':projects', task ':properties', task ':tasks', task ':wrapper']")
+            output.contains("as container: [task ':buildEnvironment', task ':components', task ':dependencies', task ':dependencyInsight', task ':dependentComponents', task ':help', task ':init', task ':javaToolchains', task ':model', task ':outgoingVariants', task ':prepareKotlinBuildScriptModel', task ':projects', task ':properties', task ':tasks', task ':wrapper']")
             // testing against reduced distribution
-            || output.contains("as container: [task ':buildEnvironment', task ':components', task ':dependencies', task ':dependencyInsight', task ':dependentComponents', task ':help', task ':model', task ':outgoingVariants', task ':prepareKotlinBuildScriptModel', task ':projects', task ':properties', task ':tasks']")
+            || output.contains("as container: [task ':buildEnvironment', task ':components', task ':dependencies', task ':dependencyInsight', task ':dependentComponents', task ':help', task ':javaToolchains', task ':model', task ':outgoingVariants', task ':prepareKotlinBuildScriptModel', task ':projects', task ':properties', task ':tasks']")
         )
         output.contains "as model element: ModelMap<Task> 'tasks'"
         output.contains "name: tasks"

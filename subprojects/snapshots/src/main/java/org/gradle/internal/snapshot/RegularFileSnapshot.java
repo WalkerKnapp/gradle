@@ -23,11 +23,11 @@ import org.gradle.internal.hash.HashCode;
 import java.util.Optional;
 
 /**
- * A complete snapshot of a regular file.
+ * A snapshot of a regular file.
  *
- * The snapshot includes the content hash of the file.
+ * The snapshot includes the content hash of the file and its metadata.
  */
-public class RegularFileSnapshot extends AbstractCompleteFileSystemLocationSnapshot {
+public class RegularFileSnapshot extends AbstractFileSystemLocationSnapshot implements FileSystemLeafSnapshot {
     private final HashCode contentHash;
     private final FileMetadata metadata;
 
@@ -53,22 +53,36 @@ public class RegularFileSnapshot extends AbstractCompleteFileSystemLocationSnaps
     }
 
     @Override
-    public boolean isContentAndMetadataUpToDate(CompleteFileSystemLocationSnapshot other) {
+    public boolean isContentAndMetadataUpToDate(FileSystemLocationSnapshot other) {
+        return isContentUpToDate(other) && metadata.equals(((RegularFileSnapshot) other).metadata);
+    }
+
+    @Override
+    public boolean isContentUpToDate(FileSystemLocationSnapshot other) {
         if (!(other instanceof RegularFileSnapshot)) {
             return false;
         }
-        RegularFileSnapshot otherSnapshot = (RegularFileSnapshot) other;
-        return metadata.equals(otherSnapshot.metadata) && contentHash.equals(otherSnapshot.contentHash);
+        return contentHash.equals(((RegularFileSnapshot) other).contentHash);
     }
 
     @Override
-    public void accept(FileSystemSnapshotVisitor visitor) {
-        visitor.visitFile(this);
+    public void accept(FileSystemLocationSnapshotVisitor visitor) {
+        visitor.visitRegularFile(this);
     }
 
     @Override
-    public Optional<FileSystemNode> invalidate(VfsRelativePath relativePath, CaseSensitivity caseSensitivity, SnapshotHierarchy.NodeDiffListener diffListener) {
+    public <T> T accept(FileSystemLocationSnapshotTransformer<T> transformer) {
+        return transformer.visitRegularFile(this);
+    }
+
+    @Override
+    public Optional<FileSystemNode> invalidate(VfsRelativePath targetPath, CaseSensitivity caseSensitivity, SnapshotHierarchy.NodeDiffListener diffListener) {
         diffListener.nodeRemoved(this);
         return Optional.empty();
+    }
+
+    @Override
+    public String toString() {
+        return String.format("%s@%s/%s", super.toString(), getHash(), getName());
     }
 }

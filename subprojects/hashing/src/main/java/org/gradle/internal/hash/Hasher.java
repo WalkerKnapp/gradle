@@ -68,25 +68,14 @@ public interface Hasher {
     void putHash(HashCode hashCode);
 
     /**
+     * Puts a hashable value into the hasher.
+     */
+    void put(Hashable hashable);
+
+    /**
      * Feed a {@code null} value into the hasher.
      */
     void putNull();
-
-    /**
-     * Marks this hash code as invalid. Further values fed into the hasher will be ignored,
-     * {@link #isValid()} will return {@code false}, and {@link #hash()} will throw an exception.
-     */
-    void markAsInvalid(String invalidReason);
-
-    /**
-     * Whether the build cache hash is valid.
-     */
-    boolean isValid();
-
-    /**
-     * Reason why the hash is not valid.
-     */
-    String getInvalidReason();
 
     /**
      * Returns the combined hash.

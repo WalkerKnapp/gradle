@@ -20,11 +20,11 @@ import org.gradle.integtests.fixtures.executer.GradleContextualExecuter
 import org.gradle.internal.enterprise.core.GradleEnterprisePluginManager
 import org.gradle.testkit.runner.BuildResult
 import org.gradle.testkit.runner.GradleRunner
-import org.gradle.util.VersionNumber
+import org.gradle.util.internal.VersionNumber
 import org.junit.Assume
 import spock.lang.Unroll
 
-
+// https://plugins.gradle.org/plugin/com.gradle.enterprise
 class BuildScanPluginSmokeTest extends AbstractSmokeTest {
 
     private static final List<String> UNSUPPORTED = [
@@ -54,7 +54,15 @@ class BuildScanPluginSmokeTest extends AbstractSmokeTest {
         "3.3.2",
         "3.3.3",
         "3.3.4",
-        "3.4"
+        "3.4",
+        "3.4.1",
+        "3.5",
+        "3.5.1",
+        "3.5.2",
+        "3.6",
+        "3.6.1",
+        "3.6.2",
+        "3.6.3"
     ]
 
     private static final VersionNumber FIRST_VERSION_SUPPORTING_CONFIGURATION_CACHE = VersionNumber.parse("3.4")
@@ -81,7 +89,8 @@ class BuildScanPluginSmokeTest extends AbstractSmokeTest {
         usePluginVersion version
 
         and:
-        def output = buildAndFail().output
+        def output = runner("--stacktrace")
+            .buildAndFail().output
 
         then:
         output.contains(GradleEnterprisePluginManager.OLD_SCAN_PLUGIN_VERSION_MESSAGE)
@@ -132,7 +141,7 @@ class BuildScanPluginSmokeTest extends AbstractSmokeTest {
 
         buildFile << """
             apply plugin: 'java'
-            ${jcenterRepository()}
+            ${mavenCentralRepository()}
 
             dependencies {
                 testImplementation 'junit:junit:4.13'

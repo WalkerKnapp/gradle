@@ -21,6 +21,8 @@ import org.gradle.api.Transformer;
 import org.gradle.api.UncheckedIOException;
 import org.gradle.api.specs.Spec;
 import org.gradle.internal.Cast;
+import org.gradle.internal.Factory;
+import org.gradle.internal.IoActions;
 import org.gradle.internal.UncheckedException;
 import org.gradle.internal.io.StreamByteBuffer;
 
@@ -55,6 +57,15 @@ import java.util.regex.Pattern;
 import static java.util.Arrays.asList;
 import static java.util.Collections.emptyList;
 
+/**
+ * This class is only here to maintain binary compatibility with existing plugins.
+ * <p>
+ * Plugins should prefer external collection frameworks over this class.
+ * Internally, all code should use {@link org.gradle.util.internal.GUtil}.
+ *
+ * @deprecated Will be removed in Gradle 8.0.
+ */
+@Deprecated
 public class GUtil {
     private static final Pattern WORD_SEPARATOR = Pattern.compile("\\W+");
     private static final Pattern UPPER_LOWER = Pattern.compile("(?m)([A-Z]*)([a-z0-9]*)");
@@ -151,9 +162,18 @@ public class GUtil {
         }
         return true;
     }
-
-    public static <T> T elvis(@Nullable T object, T defaultValue) {
+    /**
+     * Prefer {@link #getOrDefault(Object, Factory)} if the value is expensive to compute or
+     * would trigger early configuration.
+     */
+    @Nullable
+    public static <T> T elvis(@Nullable T object, @Nullable T defaultValue) {
         return isTrue(object) ? object : defaultValue;
+    }
+
+    @Nullable
+    public static <T> T getOrDefault(@Nullable T object, Factory<T> defaultValueSupplier) {
+        return isTrue(object) ? object : defaultValueSupplier.create();
     }
 
     public static <V, T extends Collection<? super V>> T addToCollection(T dest, boolean failOnNull, Iterable<? extends V> src) {
@@ -241,9 +261,10 @@ public class GUtil {
         Properties properties = new Properties();
         try {
             properties.load(inputStream);
-            inputStream.close();
         } catch (IOException e) {
             throw new UncheckedIOException(e);
+        } finally {
+            IoActions.closeQuietly(inputStream);
         }
         return properties;
     }
@@ -297,7 +318,7 @@ public class GUtil {
     }
 
     /**
-     * Converts an arbitrary string to a camel-case string which can be used in a Java identifier. Eg, with_underscores -> withUnderscores
+     * Converts an arbitrary string to a camel-case string which can be used in a Java identifier. Eg, with_underscores -&gt; withUnderscores
      */
     public static String toCamelCase(CharSequence string) {
         return toCamelCase(string, false);
@@ -340,7 +361,7 @@ public class GUtil {
     }
 
     /**
-     * Converts an arbitrary string to upper case identifier with words separated by _. Eg, camelCase -> CAMEL_CASE
+     * Converts an arbitrary string to upper case identifier with words separated by _. Eg, camelCase -&gt; CAMEL_CASE
      */
     public static String toConstant(CharSequence string) {
         if (string == null) {
@@ -350,7 +371,7 @@ public class GUtil {
     }
 
     /**
-     * Converts an arbitrary string to space-separated words. Eg, camelCase -> camel case, with_underscores -> with underscores
+     * Converts an arbitrary string to space-separated words. Eg, camelCase -&gt; camel case, with_underscores -&gt; with underscores
      */
     public static String toWords(CharSequence string) {
         return toWords(string, ' ');

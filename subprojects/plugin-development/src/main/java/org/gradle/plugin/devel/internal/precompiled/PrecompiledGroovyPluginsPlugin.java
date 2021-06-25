@@ -21,9 +21,8 @@ import org.gradle.api.Project;
 import org.gradle.api.file.DirectoryProperty;
 import org.gradle.api.file.FileTree;
 import org.gradle.api.file.SourceDirectorySet;
-import org.gradle.api.internal.plugins.DslObject;
 import org.gradle.api.plugins.GroovyBasePlugin;
-import org.gradle.api.tasks.GroovySourceSet;
+import org.gradle.api.tasks.GroovySourceDirectorySet;
 import org.gradle.api.tasks.SourceSet;
 import org.gradle.api.tasks.TaskContainer;
 import org.gradle.api.tasks.TaskProvider;
@@ -65,7 +64,8 @@ public abstract class PrecompiledGroovyPluginsPlugin implements Plugin<Project> 
         TaskProvider<ExtractPluginRequestsTask> extractPluginRequests = tasks.register("extractPluginRequests", ExtractPluginRequestsTask.class, task -> {
             task.getScriptPlugins().convention(scriptPlugins);
             task.getScriptFiles().from(scriptPluginFiles.getFiles());
-            task.getExtractedPluginRequestsClassesDirectory().convention(buildDir.dir("groovy-dsl-plugins/plugin-requests"));
+            task.getExtractedPluginRequestsClassesDirectory().convention(buildDir.dir("groovy-dsl-plugins/output/plugin-requests"));
+            task.getExtractedPluginRequestsClassesStagingDirectory().convention(buildDir.dir("groovy-dsl-plugins/output/plugin-requests-staging"));
         });
 
         TaskProvider<GeneratePluginAdaptersTask> generatePluginAdapters = tasks.register("generatePluginAdapters", GeneratePluginAdaptersTask.class, task -> {
@@ -80,12 +80,13 @@ public abstract class PrecompiledGroovyPluginsPlugin implements Plugin<Project> 
             task.getPrecompiledGroovyScriptsOutputDirectory().convention(buildDir.dir("groovy-dsl-plugins/output/plugin-classes"));
 
             SourceDirectorySet javaSource = pluginSourceSet.getJava();
-            SourceDirectorySet groovySource = new DslObject(pluginSourceSet).getConvention().getPlugin(GroovySourceSet.class).getGroovy();
+            SourceDirectorySet groovySource = pluginSourceSet.getExtensions().getByType(GroovySourceDirectorySet.class);
             task.getClasspath().from(pluginSourceSet.getCompileClasspath(), javaSource.getClassesDirectory(), groovySource.getClassesDirectory());
         });
 
         pluginSourceSet.getJava().srcDir(generatePluginAdapters.flatMap(GeneratePluginAdaptersTask::getPluginAdapterSourcesOutputDirectory));
         pluginSourceSet.getOutput().dir(precompilePlugins.flatMap(CompileGroovyScriptPluginsTask::getPrecompiledGroovyScriptsOutputDirectory));
+        pluginSourceSet.getOutput().dir(extractPluginRequests.flatMap(ExtractPluginRequestsTask::getExtractedPluginRequestsClassesStagingDirectory));
     }
 
     private void declarePluginMetadata(GradlePluginDevelopmentExtension pluginExtension, List<PrecompiledGroovyScript> scriptPlugins) {

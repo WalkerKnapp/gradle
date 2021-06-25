@@ -23,6 +23,7 @@ import org.gradle.api.attributes.HasAttributes;
 import org.gradle.api.internal.attributes.ImmutableAttributes;
 import org.gradle.internal.DisplayName;
 import org.gradle.internal.component.external.model.maven.MavenDependencyDescriptor;
+import org.gradle.internal.deprecation.DeprecationMessageBuilder;
 
 import javax.annotation.Nullable;
 import java.util.List;
@@ -80,7 +81,7 @@ public interface ConfigurationMetadata extends HasAttributes {
     boolean isCanBeConsumed();
 
     @Nullable
-    List<String> getConsumptionAlternatives();
+    DeprecationMessageBuilder.WithDocumentation getConsumptionDeprecation();
 
     boolean isCanBeResolved();
 
@@ -100,4 +101,6 @@ public interface ConfigurationMetadata extends HasAttributes {
      * that may not be directly defined in the metadata (e.g. the default 'jar' artifact).
      */
     boolean requiresMavenArtifactDiscovery();
+
+    boolean isExternalVariant();
 }

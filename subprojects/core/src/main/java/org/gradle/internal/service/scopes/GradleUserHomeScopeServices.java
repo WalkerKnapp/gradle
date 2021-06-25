@@ -24,11 +24,13 @@ import org.gradle.api.internal.changedetection.state.GradleUserHomeScopeFileTime
 import org.gradle.api.internal.classpath.ModuleRegistry;
 import org.gradle.api.internal.file.FileCollectionFactory;
 import org.gradle.api.internal.file.FileResolver;
-import org.gradle.api.internal.file.TemporaryFileProvider;
+import org.gradle.api.internal.file.temp.GradleUserHomeTemporaryFileProvider;
+import org.gradle.api.internal.file.temp.TemporaryFileProvider;
 import org.gradle.api.internal.initialization.loadercache.ClassLoaderCache;
 import org.gradle.api.internal.initialization.loadercache.DefaultClassLoaderCache;
 import org.gradle.api.model.ObjectFactory;
 import org.gradle.cache.CacheRepository;
+import org.gradle.cache.FileLockManager;
 import org.gradle.cache.GlobalCache;
 import org.gradle.cache.GlobalCacheLocations;
 import org.gradle.cache.internal.CacheRepositoryServices;
@@ -46,6 +48,9 @@ import org.gradle.groovy.scripts.internal.DefaultScriptSourceHasher;
 import org.gradle.groovy.scripts.internal.RegistryAwareClassLoaderHierarchyHasher;
 import org.gradle.groovy.scripts.internal.ScriptSourceHasher;
 import org.gradle.initialization.ClassLoaderRegistry;
+import org.gradle.initialization.ClassLoaderScopeRegistry;
+import org.gradle.initialization.ClassLoaderScopeRegistryListenerManager;
+import org.gradle.initialization.DefaultClassLoaderScopeRegistry;
 import org.gradle.initialization.GradleUserHomeDirProvider;
 import org.gradle.internal.classloader.ClasspathHasher;
 import org.gradle.internal.classloader.DefaultHashingClassLoaderFactory;
@@ -57,6 +62,7 @@ import org.gradle.internal.classpath.ClasspathWalker;
 import org.gradle.internal.classpath.DefaultCachedClasspathTransformer;
 import org.gradle.internal.classpath.DefaultClasspathTransformerCacheFactory;
 import org.gradle.internal.concurrent.ExecutorFactory;
+import org.gradle.internal.event.DefaultListenerManager;
 import org.gradle.internal.event.ListenerManager;
 import org.gradle.internal.execution.timeout.TimeoutHandler;
 import org.gradle.internal.execution.timeout.impl.DefaultTimeoutHandler;
@@ -67,6 +73,7 @@ import org.gradle.internal.jvm.JavaModuleDetector;
 import org.gradle.internal.jvm.inspection.JvmVersionDetector;
 import org.gradle.internal.logging.LoggingManagerInternal;
 import org.gradle.internal.logging.events.OutputEventListener;
+import org.gradle.internal.operations.CurrentBuildOperationRef;
 import org.gradle.internal.reflect.Instantiator;
 import org.gradle.internal.remote.MessagingServer;
 import org.gradle.internal.service.ServiceRegistration;
@@ -99,19 +106,18 @@ public class GradleUserHomeScopeServices extends WorkerSharedUserHomeScopeServic
         registration.addProvider(new GradleUserHomeCleanupServices());
         registration.add(ClasspathWalker.class);
         registration.add(ClasspathBuilder.class);
+        registration.add(GradleUserHomeTemporaryFileProvider.class);
         for (PluginServiceRegistry plugin : globalServices.getAll(PluginServiceRegistry.class)) {
             plugin.registerGradleUserHomeServices(registration);
         }
     }
 
-    ListenerManager createListenerManager(ListenerManager parent) {
+    DefaultListenerManager createListenerManager(DefaultListenerManager parent) {
         return parent.createChild(Scopes.UserHome.class);
     }
 
-    GradleUserHomeScopeFileTimeStampInspector createFileTimestampInspector(CacheScopeMapping cacheScopeMapping, ListenerManager listenerManager) {
-        GradleUserHomeScopeFileTimeStampInspector timeStampInspector = new GradleUserHomeScopeFileTimeStampInspector(cacheScopeMapping);
-        listenerManager.addListener(timeStampInspector);
-        return timeStampInspector;
+    GradleUserHomeScopeFileTimeStampInspector createFileTimestampInspector(CacheScopeMapping cacheScopeMapping) {
+        return new GradleUserHomeScopeFileTimeStampInspector(cacheScopeMapping);
     }
 
     ScriptSourceHasher createScriptSourceHasher() {
@@ -136,6 +142,18 @@ public class GradleUserHomeScopeServices extends WorkerSharedUserHomeScopeServic
         return cache;
     }
 
+    protected ClassLoaderScopeRegistryListenerManager createClassLoaderScopeRegistryListenerManager(ListenerManager listenerManager) {
+        return new ClassLoaderScopeRegistryListenerManager(listenerManager);
+    }
+
+    protected ClassLoaderScopeRegistry createClassLoaderScopeRegistry(
+        ClassLoaderRegistry classLoaderRegistry,
+        ClassLoaderCache classLoaderCache,
+        ClassLoaderScopeRegistryListenerManager listenerManager
+    ) {
+        return new DefaultClassLoaderScopeRegistry(classLoaderRegistry, classLoaderCache, listenerManager.getBroadcaster());
+    }
+
     ClasspathTransformerCacheFactory createClasspathTransformerCache(
         CacheScopeMapping cacheScopeMapping,
         UsedGradleVersions usedGradleVersions
@@ -158,7 +176,8 @@ public class GradleUserHomeScopeServices extends WorkerSharedUserHomeScopeServic
         ClasspathWalker classpathWalker,
         ClasspathBuilder classpathBuilder,
         ExecutorFactory executorFactory,
-        GlobalCacheLocations globalCacheLocations
+        GlobalCacheLocations globalCacheLocations,
+        FileLockManager fileLockManager
     ) {
         return new DefaultCachedClasspathTransformer(
             cacheRepository,
@@ -168,7 +187,9 @@ public class GradleUserHomeScopeServices extends WorkerSharedUserHomeScopeServic
             classpathBuilder,
             fileSystemAccess,
             executorFactory,
-            globalCacheLocations);
+            globalCacheLocations,
+            fileLockManager
+        );
     }
 
     ExecFactory createExecFactory(ExecFactory parent, FileResolver fileResolver, FileCollectionFactory fileCollectionFactory, Instantiator instantiator, ObjectFactory objectFactory, JavaModuleDetector javaModuleDetector) {
@@ -220,8 +241,7 @@ public class GradleUserHomeScopeServices extends WorkerSharedUserHomeScopeServic
         return new DefaultFileAccessTimeJournal(cacheRepository, cacheDecoratorFactory);
     }
 
-    TimeoutHandler createTimeoutHandler(ExecutorFactory executorFactory) {
-        return new DefaultTimeoutHandler(executorFactory.createScheduled("execution timeouts", 1));
+    TimeoutHandler createTimeoutHandler(ExecutorFactory executorFactory, CurrentBuildOperationRef currentBuildOperationRef) {
+        return new DefaultTimeoutHandler(executorFactory.createScheduled("execution timeouts", 1), currentBuildOperationRef);
     }
-
 }

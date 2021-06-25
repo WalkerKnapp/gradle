@@ -22,7 +22,7 @@ plugins {
 // end::use-pmd-plugin[]
 
 codenarc {
-    toolVersion = "0.25.2"
+    toolVersion = "2.0.0"
 }
 
 repositories {
@@ -37,8 +37,8 @@ dependencies {
 // tag::customize-checkstyle-report[]
 tasks.withType<Checkstyle>().configureEach {
     reports {
-        xml.isEnabled = false
-        html.isEnabled = true
+        xml.required.set(false)
+        html.required.set(true)
         html.stylesheet = resources.text.fromFile("config/xsl/checkstyle-custom.xsl")
     }
 }
@@ -48,7 +48,7 @@ tasks.withType<Checkstyle>().configureEach {
 pmd {
     isConsoleOutput = true
     toolVersion = "6.21.0"
-    rulePriority = 5
+    rulesMinimumPriority.set(5)
     ruleSets = listOf("category/java/errorprone.xml", "category/java/bestpractices.xml")
 }
 // end::customize-pmd[]

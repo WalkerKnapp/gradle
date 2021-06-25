@@ -18,14 +18,13 @@ package org.gradle.api
 
 import org.gradle.integtests.fixtures.AbstractIntegrationSpec
 import org.gradle.integtests.fixtures.ToBeFixedForConfigurationCache
-import org.gradle.integtests.fixtures.FluidDependenciesResolveRunner
 import org.gradle.integtests.fixtures.executer.GradleContextualExecuter
 import org.gradle.integtests.fixtures.executer.ProjectLifecycleFixture
+import org.gradle.integtests.fixtures.extensions.FluidDependenciesResolveTest
 import org.junit.Rule
-import org.junit.runner.RunWith
 import spock.lang.IgnoreIf
 
-@RunWith(FluidDependenciesResolveRunner)
+@FluidDependenciesResolveTest
 class ConfigurationOnDemandIntegrationTest extends AbstractIntegrationSpec {
 
     @Rule ProjectLifecycleFixture fixture = new ProjectLifecycleFixture(executer, temporaryFolder)
@@ -72,18 +71,14 @@ class ConfigurationOnDemandIntegrationTest extends AbstractIntegrationSpec {
     }
 
     def "evaluates only project referenced in the task list"() {
-        // The util project's classloaders will be created eagerly because util:impl
-        // will be evaluated before it
-        executer.withEagerClassLoaderCreationCheckDisabled()
-
         settingsFile << "include 'api', 'impl', 'util', 'util:impl'"
         buildFile << "allprojects { task foo }"
 
         when:
-        run(":foo", ":util:impl:foo")
+        run(":util:impl:foo")
 
         then:
-        fixture.assertProjectsConfigured(":", ":util:impl")
+        fixture.assertProjectsConfigured(":", ":util", ":util:impl")
     }
 
     def "does not show configuration on demand incubating message in a regular mode"() {
@@ -389,6 +384,7 @@ task two(type: SomeTask)
 
 class SomeTask extends DefaultTask {
     @org.gradle.api.tasks.options.Option(description="some value")
+    @Input
     String value
 }
 """
@@ -515,5 +511,24 @@ allprojects {
         then:
         result.assertTasksExecuted(":a:one")
         fixture.assertProjectsConfigured(":", ":b", ":b:child", ":a")
+    }
+
+    def "extra properties defined in parent project are accessible to child"() {
+        settingsFile << "include 'a', 'a:child'"
+        file('a/build.gradle') << """
+ext.foo = "Moo!!!"
+"""
+        file('a/child/build.gradle') << """
+task printExt {
+    doLast {
+        println "The Foo says " + foo
+    }
+}
+"""
+        when:
+        run(":a:child:printExt")
+
+        then:
+        outputContains("The Foo says Moo!!!")
     }
 }

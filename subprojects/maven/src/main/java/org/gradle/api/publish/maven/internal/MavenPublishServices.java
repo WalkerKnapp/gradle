@@ -21,18 +21,16 @@ import org.gradle.api.internal.artifacts.mvnsettings.LocalMavenRepositoryLocator
 import org.gradle.api.internal.artifacts.repositories.transport.RepositoryTransportFactory;
 import org.gradle.api.internal.component.ArtifactType;
 import org.gradle.api.internal.component.ComponentTypeRegistry;
-import org.gradle.api.publication.maven.internal.MavenFactory;
-import org.gradle.api.publication.maven.internal.MavenVersionRangeMapper;
-import org.gradle.api.publication.maven.internal.VersionRangeMapper;
-import org.gradle.api.publication.maven.internal.pom.DefaultMavenFactory;
 import org.gradle.api.publish.internal.validation.DuplicatePublicationTracker;
+import org.gradle.api.publish.maven.internal.dependencies.MavenVersionRangeMapper;
+import org.gradle.api.publish.maven.internal.dependencies.VersionRangeMapper;
 import org.gradle.api.publish.maven.internal.publisher.MavenDuplicatePublicationTracker;
 import org.gradle.api.publish.maven.internal.publisher.MavenPublishers;
 import org.gradle.internal.service.ServiceRegistration;
 import org.gradle.internal.service.scopes.AbstractPluginServiceRegistry;
 import org.gradle.maven.MavenModule;
 import org.gradle.maven.MavenPomArtifact;
-import org.gradle.util.BuildCommencedTimeProvider;
+import org.gradle.util.internal.BuildCommencedTimeProvider;
 
 public class MavenPublishServices extends AbstractPluginServiceRegistry {
     @Override
@@ -45,10 +43,6 @@ public class MavenPublishServices extends AbstractPluginServiceRegistry {
             // TODO There should be a more explicit way to execute an action against existing services
             componentTypeRegistry.maybeRegisterComponentType(MavenModule.class)
                     .registerArtifactType(MavenPomArtifact.class, ArtifactType.MAVEN_POM);
-        }
-
-        public MavenFactory createMavenFactory(VersionRangeMapper versionRangeMapper) {
-            return new DefaultMavenFactory(versionRangeMapper);
         }
 
         public VersionRangeMapper createVersionRangeMapper(VersionSelectorScheme versionSelectorScheme) {

@@ -22,11 +22,12 @@ import org.gradle.cache.GlobalCache;
 import org.gradle.internal.classpath.ClassPath;
 import org.gradle.internal.classpath.DefaultClassPath;
 import org.gradle.internal.installation.GradleInstallation;
-import org.gradle.util.GUtil;
+import org.gradle.util.internal.GUtil;
 
 import javax.annotation.Nullable;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -260,7 +261,9 @@ public class DefaultModuleRegistry implements ModuleRegistry, GlobalCache {
             if (entry == null) {
                 throw new IllegalStateException("Did not find " + entryName + " in " + jarFile.getAbsolutePath());
             }
-            return GUtil.loadProperties(zipFile.getInputStream(entry));
+            try (InputStream is = zipFile.getInputStream(entry)) {
+                return GUtil.loadProperties(is);
+            }
         } catch (IOException e) {
             throw new UncheckedIOException(String.format("Could not load properties for module '%s' from %s", name, jarFile), e);
         }

@@ -26,7 +26,6 @@ import org.hamcrest.Matcher
 import spock.lang.Issue
 import spock.lang.Unroll
 
-import static org.gradle.integtests.fixtures.RepoScriptBlockUtil.jcenterRepository
 import static org.gradle.util.Matchers.matchesRegexp
 
 class ArtifactTransformIntegrationTest extends AbstractHttpDependencyResolutionTest implements ArtifactTransformTestFixture {
@@ -149,7 +148,7 @@ class ArtifactTransformIntegrationTest extends AbstractHttpDependencyResolutionT
 
                     classpath 'org.apache.commons:commons-math3:3.6.1'
                 }
-                ${jcenterRepository()}
+                ${mavenCentralRepository()}
                 println(
                     configurations.classpath.incoming.artifactView {
                             attributes.attribute(artifactType, "size")
@@ -948,6 +947,76 @@ class ArtifactTransformIntegrationTest extends AbstractHttpDependencyResolutionT
         then:
         output.count("Transforming") == 1
         output.contains("files: [lib.jar]")
+    }
+
+    @Issue("https://github.com/gradle/gradle/issues/16962")
+    def "transforms registering the input as an output can use normalization"() {
+        file("input1.jar").text = "jar"
+        file("input2.jar").text = "jar"
+        buildFile("""
+            configurations {
+                api1 {
+                    attributes { attribute usage, 'api' }
+                }
+                api2 {
+                    attributes { attribute usage, 'api' }
+                }
+            }
+
+            abstract class IdentityTransform implements TransformAction<TransformParameters.None> {
+                @Classpath
+                @InputArtifact
+                abstract Provider<FileSystemLocation> getInputArtifact()
+
+                void transform(TransformOutputs outputs) {
+                    println "Selecting input artifact \${inputArtifact.get().asFile}"
+                    outputs.file(inputArtifact)
+                }
+            }
+
+            dependencies {
+                registerTransform(IdentityTransform) {
+                    from.attribute(artifactType, 'jar')
+                    to.attribute(artifactType, 'transformed')
+                }
+            }
+
+            task producer1(type: Jar)
+            task producer2(type: Jar)
+            tasks.withType(Jar).configureEach {
+                destinationDirectory = layout.buildDirectory.dir("produced")
+                archiveBaseName = name
+            }
+
+            ["api1", "api2"].each { conf ->
+                tasks.register("resolve\$conf", Copy) {
+                    duplicatesStrategy = 'INCLUDE'
+                    def artifacts = configurations."\$conf".incoming.artifactView {
+                        attributes { it.attribute(artifactType, 'transformed') }
+                    }.artifacts
+                    from artifacts.artifactFiles
+                    into "\${buildDir}/libs1"
+                    doLast {
+                        println "files: " + artifacts.collect { it.file.name }
+                        println "ids: " + artifacts.collect { it.id }
+                        println "components: " + artifacts.collect { it.id.componentIdentifier }
+                        println "variants: " + artifacts.collect { it.variant.attributes }
+                    }
+                }
+            }
+
+            dependencies {
+                api1 files(producer1)
+                api2 files(producer2)
+            }
+        """)
+
+        when:
+        run "resolveapi1", "resolveapi2"
+        then:
+        executedAndNotSkipped(":resolveapi1", ":resolveapi2")
+        outputContains("ids: [producer1.jar (producer1.jar)]")
+        outputContains("ids: [producer2.jar (producer2.jar)]")
     }
 
     def "transform can generate multiple output files for a single input"() {
@@ -2048,6 +2117,7 @@ Found the following transforms:
             }
 """
         then:
+        executer.expectDeprecationWarning("Registering artifact transforms extending ArtifactTransform has been deprecated. This is scheduled to be removed in Gradle 8.0. Implement TransformAction instead.")
         fails "help"
 
         and:
@@ -2119,12 +2189,8 @@ Found the following transforms:
         fails "resolve"
         then:
         Matcher<String> matchesCannotIsolate = matchesRegexp("Could not isolate parameters Custom\\\$Parameters_Decorated@.* of artifact transform Custom")
-        if (scheduled) {
-            failure.assertThatDescription(matchesCannotIsolate)
-        } else {
-            failure.assertHasDescription("Execution failed for task ':resolve'.")
-            failure.assertThatCause(matchesCannotIsolate)
-        }
+        failure.assertHasDescription("Execution failed for task ':resolve'.")
+        failure.assertThatCause(matchesCannotIsolate)
         failure.assertHasCause("Could not serialize value of type CustomType")
 
         where:
@@ -2565,6 +2631,29 @@ Found the following transforms:
         output.contains("> Dependency: task ':app:dependent' -> task ':app:resolve'")
         output.contains("> Transform lib1.jar (project :lib) with FileSizer")
         output.contains("> Task :app:resolve")
+    }
+
+    def "emits deprecation warning when old style transform is registered"() {
+        buildFile << """
+            dependencies {
+                registerTransform {
+                    from.attribute(artifactType, 'jar')
+                    to.attribute(artifactType, 'size')
+                    artifactTransform(OldStyleTransform)
+                }
+            }
+
+            class OldStyleTransform extends ArtifactTransform {
+                List<File> transform(File input) {
+                    return []
+                }
+            }
+        """
+
+        when:
+        executer.expectDeprecationWarning("Registering artifact transforms extending ArtifactTransform has been deprecated. This is scheduled to be removed in Gradle 8.0. Implement TransformAction instead.")
+        then:
+        succeeds "help"
     }
 
     def declareTransform(String transformImplementation) {

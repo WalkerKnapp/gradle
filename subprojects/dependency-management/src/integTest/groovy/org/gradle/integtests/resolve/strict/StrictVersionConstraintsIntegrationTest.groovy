@@ -271,8 +271,8 @@ class StrictVersionConstraintsIntegrationTest extends AbstractModuleDependencyRe
         then:
         failure.assertHasCause """Cannot find a version of 'org:c' that satisfies the version constraints:
    Dependency path ':test:unspecified' --> 'org:c:2.0'
-   Dependency path ':test:unspecified' --> 'org:a:1.0' --> 'org:c:{strictly 1.0}'
-   Dependency path ':test:unspecified' --> 'org:a:1.0' --> 'org:b:1.0' --> 'org:c:2.0'"""
+   Dependency path ':test:unspecified' --> 'org:a:1.0' (runtime) --> 'org:c:{strictly 1.0}'
+   Dependency path ':test:unspecified' --> 'org:a:1.0' (runtime) --> 'org:b:1.0' (runtime) --> 'org:c:2.0'"""
     }
 
     def "strict from selected and later evicted modules are ignored"() {
@@ -502,6 +502,36 @@ class StrictVersionConstraintsIntegrationTest extends AbstractModuleDependencyRe
         }
     }
 
+    @ToBeFixedForConfigurationCache(because = "configuration as input")
+    def "incompatible strict constraint and local project fail to resolve"() {
+        given:
+
+        settingsFile << "\ninclude 'foo'"
+        buildFile << """
+            project(':foo') {
+                configurations.create('default')
+                group = 'org'
+                version = '1.2'
+            }
+            dependencies {
+                constraints {
+                    conf('org:foo') {
+                       version { strictly '1.0' }
+                    }
+                }
+                conf(project(':foo'))
+            }
+        """
+
+        when:
+        fails ':checkDeps'
+
+        then:
+        failure.assertHasCause("""Cannot find a version of 'org:foo' that satisfies the version constraints:
+   Dependency path ':test:unspecified' --> 'project :foo'
+   Constraint path ':test:unspecified' --> 'org:foo:{strictly 1.0}'""")
+    }
+
     @RequiredFeature(feature = GradleMetadataResolveRunner.GRADLE_METADATA, value = "true")
     @ToBeFixedForConfigurationCache
     def "original version constraint is not ignored if there is another parent"() {
@@ -547,8 +577,8 @@ class StrictVersionConstraintsIntegrationTest extends AbstractModuleDependencyRe
 
         then:
         failure.assertHasCause """Cannot find a version of 'org:foo' that satisfies the version constraints:
-   Dependency path ':test:unspecified' --> 'org:x1:1.0' --> 'org:bar:1.0' --> 'org:foo:2.0'
-   Constraint path ':test:unspecified' --> 'org:x1:1.0' --> 'org:foo:{strictly 1.0}'"""
+   Dependency path ':test:unspecified' --> 'org:x1:1.0' (runtime) --> 'org:bar:1.0' (runtime) --> 'org:foo:2.0'
+   Constraint path ':test:unspecified' --> 'org:x1:1.0' (runtime) --> 'org:foo:{strictly 1.0}'"""
     }
 
     @RequiredFeature(feature = GradleMetadataResolveRunner.GRADLE_METADATA, value = "true")

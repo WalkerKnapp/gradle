@@ -37,6 +37,7 @@ import org.gradle.api.internal.artifacts.dsl.dependencies.DependencyLockingProvi
 import org.gradle.api.internal.artifacts.ivyservice.dependencysubstitution.DependencySubstitutionRules;
 import org.gradle.api.internal.artifacts.ivyservice.moduleconverter.DefaultRootComponentMetadataBuilder;
 import org.gradle.api.internal.artifacts.ivyservice.moduleconverter.LocalComponentMetadataBuilder;
+import org.gradle.api.internal.artifacts.ivyservice.moduleconverter.RootComponentMetadataBuilder;
 import org.gradle.api.internal.artifacts.ivyservice.resolutionstrategy.CapabilitiesResolutionInternal;
 import org.gradle.api.internal.artifacts.ivyservice.resolutionstrategy.DefaultCapabilitiesResolution;
 import org.gradle.api.internal.artifacts.ivyservice.resolutionstrategy.DefaultResolutionStrategy;
@@ -48,9 +49,9 @@ import org.gradle.api.internal.project.ProjectStateRegistry;
 import org.gradle.api.internal.tasks.TaskResolver;
 import org.gradle.api.model.ObjectFactory;
 import org.gradle.configuration.internal.UserCodeApplicationContext;
-import org.gradle.initialization.ProjectAccessListener;
 import org.gradle.internal.Factory;
 import org.gradle.internal.event.ListenerManager;
+import org.gradle.internal.model.CalculatedValueContainerFactory;
 import org.gradle.internal.operations.BuildOperationExecutor;
 import org.gradle.internal.reflect.Instantiator;
 import org.gradle.internal.typeconversion.NotationParser;
@@ -69,9 +70,9 @@ public class DefaultConfigurationContainer extends AbstractValidatingNamedDomain
     private final DomainObjectContext context;
     private final ListenerManager listenerManager;
     private final DependencyMetaDataProvider dependencyMetaDataProvider;
-    private final ProjectAccessListener projectAccessListener;
     private final FileCollectionFactory fileCollectionFactory;
     private final BuildOperationExecutor buildOperationExecutor;
+    private final CalculatedValueContainerFactory calculatedValueContainerFactory;
     private final UserCodeApplicationContext userCodeApplicationContext;
     private final NotationParser<Object, ConfigurablePublishArtifact> artifactNotationParser;
     private final NotationParser<Object, Capability> capabilityNotationParser;
@@ -89,7 +90,6 @@ public class DefaultConfigurationContainer extends AbstractValidatingNamedDomain
                                          DomainObjectContext context,
                                          ListenerManager listenerManager,
                                          DependencyMetaDataProvider dependencyMetaDataProvider,
-                                         ProjectAccessListener projectAccessListener,
                                          LocalComponentMetadataBuilder localComponentMetadataBuilder,
                                          FileCollectionFactory fileCollectionFactory,
                                          DependencySubstitutionRules globalDependencySubstitutionRules,
@@ -102,6 +102,7 @@ public class DefaultConfigurationContainer extends AbstractValidatingNamedDomain
                                          ComponentSelectorConverter componentSelectorConverter,
                                          DependencyLockingProvider dependencyLockingProvider,
                                          ProjectStateRegistry projectStateRegistry,
+                                         CalculatedValueContainerFactory calculatedValueContainerFactory,
                                          DocumentationRegistry documentationRegistry,
                                          CollectionCallbackActionDecorator callbackDecorator,
                                          UserCodeApplicationContext userCodeApplicationContext,
@@ -114,9 +115,9 @@ public class DefaultConfigurationContainer extends AbstractValidatingNamedDomain
         this.context = context;
         this.listenerManager = listenerManager;
         this.dependencyMetaDataProvider = dependencyMetaDataProvider;
-        this.projectAccessListener = projectAccessListener;
         this.fileCollectionFactory = fileCollectionFactory;
         this.buildOperationExecutor = buildOperationExecutor;
+        this.calculatedValueContainerFactory = calculatedValueContainerFactory;
         this.userCodeApplicationContext = userCodeApplicationContext;
         this.domainObjectCollectionFactory = domainObjectCollectionFactory;
         this.artifactNotationParser = new PublishArtifactNotationParserFactory(instantiator, dependencyMetaDataProvider, taskResolver).create();
@@ -134,9 +135,7 @@ public class DefaultConfigurationContainer extends AbstractValidatingNamedDomain
 
     @Override
     protected Configuration doCreate(String name) {
-        DefaultConfiguration configuration = instantiator.newInstance(DefaultConfiguration.class, context, name, this, resolver,
-            listenerManager, dependencyMetaDataProvider, resolutionStrategyFactory, projectAccessListener,
-            fileCollectionFactory, buildOperationExecutor, instantiator, artifactNotationParser, capabilityNotationParser, attributesFactory, rootComponentMetadataBuilder, documentationRegistry, userCodeApplicationContext, context, projectStateRegistry, domainObjectCollectionFactory);
+        DefaultConfiguration configuration = newConfiguration(name, this, rootComponentMetadataBuilder);
         configuration.addMutationValidator(rootComponentMetadataBuilder.getValidator());
         return configuration;
     }
@@ -163,19 +162,30 @@ public class DefaultConfigurationContainer extends AbstractValidatingNamedDomain
 
     @Override
     public ConfigurationInternal detachedConfiguration(Dependency... dependencies) {
-        String name = DETACHED_CONFIGURATION_DEFAULT_NAME + detachedConfigurationDefaultNameCounter.getAndIncrement();
+        String name = nextDetachedConfigurationName();
         DetachedConfigurationsProvider detachedConfigurationsProvider = new DetachedConfigurationsProvider();
-        DefaultConfiguration detachedConfiguration = instantiator.newInstance(DefaultConfiguration.class,
-            context, name, detachedConfigurationsProvider, resolver,
-            listenerManager, dependencyMetaDataProvider, resolutionStrategyFactory, projectAccessListener,
-            fileCollectionFactory, buildOperationExecutor, instantiator, artifactNotationParser, capabilityNotationParser, attributesFactory,
-            rootComponentMetadataBuilder.withConfigurationsProvider(detachedConfigurationsProvider), documentationRegistry, userCodeApplicationContext, context, projectStateRegistry, domainObjectCollectionFactory);
+        DefaultConfiguration detachedConfiguration = newConfiguration(name, detachedConfigurationsProvider, rootComponentMetadataBuilder.withConfigurationsProvider(detachedConfigurationsProvider));
+        copyAllTo(detachedConfiguration, dependencies);
+        detachedConfigurationsProvider.setTheOnlyConfiguration(detachedConfiguration);
+        return detachedConfiguration;
+    }
+
+    private String nextDetachedConfigurationName() {
+        return DETACHED_CONFIGURATION_DEFAULT_NAME + detachedConfigurationDefaultNameCounter.getAndIncrement();
+    }
+
+    private void copyAllTo(DefaultConfiguration detachedConfiguration, Dependency[] dependencies) {
         DomainObjectSet<Dependency> detachedDependencies = detachedConfiguration.getDependencies();
         for (Dependency dependency : dependencies) {
             detachedDependencies.add(dependency.copy());
         }
-        detachedConfigurationsProvider.setTheOnlyConfiguration(detachedConfiguration);
-        return detachedConfiguration;
+    }
+
+    private DefaultConfiguration newConfiguration(String name, ConfigurationsProvider detachedConfigurationsProvider, RootComponentMetadataBuilder componentMetadataBuilder) {
+        return instantiator.newInstance(DefaultConfiguration.class, context, name, detachedConfigurationsProvider, resolver, listenerManager,
+            dependencyMetaDataProvider, resolutionStrategyFactory, fileCollectionFactory, buildOperationExecutor, instantiator, artifactNotationParser,
+            capabilityNotationParser, attributesFactory, componentMetadataBuilder, documentationRegistry, userCodeApplicationContext,
+            context, projectStateRegistry, domainObjectCollectionFactory, calculatedValueContainerFactory);
     }
 
     /**

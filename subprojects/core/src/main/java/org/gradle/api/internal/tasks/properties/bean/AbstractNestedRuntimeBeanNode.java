@@ -33,7 +33,7 @@ import org.gradle.internal.Factory;
 import org.gradle.internal.UncheckedException;
 import org.gradle.internal.deprecation.DeprecationLogger;
 import org.gradle.internal.reflect.PropertyMetadata;
-import org.gradle.internal.reflect.TypeValidationContext;
+import org.gradle.internal.reflect.validation.TypeValidationContext;
 
 import javax.annotation.Nullable;
 import java.lang.reflect.InvocationTargetException;
@@ -130,14 +130,7 @@ public abstract class AbstractNestedRuntimeBeanNode extends RuntimeBeanNode<Obje
         @Nullable
         @Override
         public Object call() {
-            Object value = valueSupplier.get();
-            // Replace absent Provider with null.
-            // This is required for allowing optional provider properties - all code which unpacks providers calls Provider.get() and would fail if an optional provider is passed.
-            // Returning null from a Callable is ignored, and PropertyValue is a callable.
-            if (value instanceof Provider && !((Provider<?>) value).isPresent()) {
-                return null;
-            }
-            return value;
+            return valueSupplier.get();
         }
 
         @Nullable

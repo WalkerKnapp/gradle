@@ -21,7 +21,6 @@ import org.gradle.api.tasks.Internal;
 import org.gradle.api.tasks.Optional;
 import org.gradle.api.tasks.OutputFile;
 import org.gradle.api.tasks.TaskAction;
-import org.gradle.api.tasks.diagnostics.internal.ProjectReportGenerator;
 import org.gradle.api.tasks.diagnostics.internal.ReportGenerator;
 import org.gradle.api.tasks.diagnostics.internal.ReportRenderer;
 import org.gradle.initialization.BuildClientMetaData;
@@ -38,7 +37,12 @@ import java.util.TreeSet;
 
 /**
  * The base class for all project report tasks.
+ *
+ * Preserved for backward compatibility.
+ *
+ * @deprecated Use {@link ProjectBasedReportTask} instead.
  */
+@Deprecated
 public abstract class AbstractReportTask extends ConventionTask {
     private File outputFile;
 
@@ -63,20 +67,35 @@ public abstract class AbstractReportTask extends ConventionTask {
 
     @TaskAction
     public void generate() {
-        ProjectReportGenerator projectReportGenerator = project -> {
-            generate(project);
-
-            if (shouldCreateReportFile()) {
-                project.getLogger().lifecycle("See the report at: {}", new ConsoleRenderer().asClickableFileUrl(getOutputFile()));
+        reportGenerator().generateReport(
+            new TreeSet<>(getProjects()),
+            project -> {
+                generate(project);
+                logClickableOutputFileUrl();
             }
-        };
-
-        ReportGenerator reportGenerator = new ReportGenerator(getRenderer(), getClientMetaData(), getOutputFile(),
-                getTextOutputFactory(), projectReportGenerator);
-        reportGenerator.generateReport(new TreeSet<>(getProjects()));
+        );
     }
 
-    private boolean shouldCreateReportFile() {
+    ReportGenerator reportGenerator() {
+        return new ReportGenerator(
+            getRenderer(),
+            getClientMetaData(),
+            getOutputFile(),
+            getTextOutputFactory()
+        );
+    }
+
+    void logClickableOutputFileUrl() {
+        if (shouldCreateReportFile()) {
+            getLogger().lifecycle("See the report at: {}", clickableOutputFileUrl());
+        }
+    }
+
+    String clickableOutputFileUrl() {
+        return new ConsoleRenderer().asClickableFileUrl(getOutputFile());
+    }
+
+    boolean shouldCreateReportFile() {
         return getOutputFile() != null;
     }
 

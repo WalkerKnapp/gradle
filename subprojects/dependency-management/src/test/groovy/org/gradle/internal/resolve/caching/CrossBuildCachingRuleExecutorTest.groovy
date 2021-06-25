@@ -37,7 +37,7 @@ import org.gradle.internal.service.ServiceRegistry
 import org.gradle.internal.snapshot.ValueSnapshot
 import org.gradle.internal.snapshot.ValueSnapshotter
 import org.gradle.internal.snapshot.impl.StringValueSnapshot
-import org.gradle.util.BuildCommencedTimeProvider
+import org.gradle.util.internal.BuildCommencedTimeProvider
 import org.gradle.util.TestUtil
 import spock.lang.Specification
 import spock.lang.Subject
@@ -154,7 +154,7 @@ class CrossBuildCachingRuleExecutorTest extends Specification {
             1 * store.put(keyHash, _)
             snapshot
         }
-        1 * store.get(_) >> null
+        1 * store.getIfPresent(_) >> null
         0 * _
         result.length == 6
     }
@@ -171,7 +171,7 @@ class CrossBuildCachingRuleExecutorTest extends Specification {
             def snapshot = new StringValueSnapshot(it.toString())
             snapshot
         }
-        1 * store.get(_) >> Stub(CrossBuildCachingRuleExecutor.CachedEntry) {
+        1 * store.getIfPresent(_) >> Stub(CrossBuildCachingRuleExecutor.CachedEntry) {
             getResult() >> new Result(length: 123)
         }
         1 * validator.isValid(_, _) >> true
@@ -196,7 +196,7 @@ class CrossBuildCachingRuleExecutorTest extends Specification {
             keyHash = hasher.hash()
             snapshot
         }
-        1 * store.get(_) >> Stub(CrossBuildCachingRuleExecutor.CachedEntry) {
+        1 * store.getIfPresent(_) >> Stub(CrossBuildCachingRuleExecutor.CachedEntry) {
             getResult() >> new Result(length: 123)
         }
         1 * validator.isValid(_, _) >> false
@@ -221,7 +221,7 @@ class CrossBuildCachingRuleExecutorTest extends Specification {
             def snapshot = new StringValueSnapshot(it.toString())
             snapshot
         }
-        1 * store.get(_) >> Mock(CrossBuildCachingRuleExecutor.CachedEntry) {
+        1 * store.getIfPresent(_) >> Mock(CrossBuildCachingRuleExecutor.CachedEntry) {
             getResult() >> new Result(length: 123)
             getImplicits() >> ImmutableMultimap.builder()
                 .putAll("SomeService", implicitInput)
@@ -255,7 +255,7 @@ class CrossBuildCachingRuleExecutorTest extends Specification {
             def snapshot = new StringValueSnapshot(it.toString())
             snapshot
         }
-        1 * store.get(_) >> Mock(CrossBuildCachingRuleExecutor.CachedEntry) {
+        1 * store.getIfPresent(_) >> Mock(CrossBuildCachingRuleExecutor.CachedEntry) {
             getResult() >> new Result(length: 123)
             getImplicits() >> ImmutableMultimap.builder()
                 .putAll("SomeService", implicitInput1, implicitInput2)

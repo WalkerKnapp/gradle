@@ -22,6 +22,7 @@ import com.nhaarman.mockito_kotlin.eq
 import com.nhaarman.mockito_kotlin.inOrder
 import com.nhaarman.mockito_kotlin.mock
 import com.nhaarman.mockito_kotlin.same
+import kotlinx.metadata.jvm.KmModuleVisitor
 
 import org.gradle.api.Action
 import org.gradle.api.NamedDomainObjectContainer
@@ -36,7 +37,6 @@ import org.gradle.api.artifacts.ExternalModuleDependency
 import org.gradle.api.artifacts.ProjectDependency
 import org.gradle.api.artifacts.dsl.DependencyConstraintHandler
 import org.gradle.api.artifacts.dsl.DependencyHandler
-import org.gradle.api.plugins.ApplicationPluginConvention
 import org.gradle.api.plugins.Convention
 import org.gradle.api.plugins.ExtensionContainer
 import org.gradle.api.reflect.TypeOf.parameterizedTypeOf
@@ -257,7 +257,7 @@ class ProjectAccessorsClassPathTest : AbstractDslTest() {
         require(
             compileToDirectory(
                 binDir,
-                "accessors",
+                "bin",
                 kotlinFilesIn(srcDir),
                 loggerFor<ProjectAccessorsClassPathTest>(),
                 classPath.asFiles
@@ -283,7 +283,7 @@ class ProjectAccessorsClassPathTest : AbstractDslTest() {
                     entry<SourceSetContainer, SourceSet>("main")
                 ),
                 conventions = listOf(
-                    entry<Project, ApplicationPluginConvention>("application")
+                    entry<Project, @kotlin.Suppress("deprecation") org.gradle.api.plugins.ApplicationPluginConvention>("application")
                 ),
                 tasks = listOf(
                     entry<TaskContainer, Delete>("clean")
@@ -318,7 +318,7 @@ class ProjectAccessorsClassPathTest : AbstractDslTest() {
         val tasks = mock<TaskContainer> {
             on { named(any<String>(), eq(Delete::class.java)) } doReturn clean
         }
-        val applicationPluginConvention = mock<ApplicationPluginConvention>()
+        val applicationPluginConvention = mock<@Suppress("deprecation") org.gradle.api.plugins.ApplicationPluginConvention>()
         val convention = mock<Convention> {
             on { plugins } doReturn mapOf("application" to applicationPluginConvention)
         }
@@ -327,7 +327,7 @@ class ProjectAccessorsClassPathTest : AbstractDslTest() {
             on { getExtensions() } doReturn extensions
             on { getDependencies() } doReturn dependencies
             on { getTasks() } doReturn tasks
-            on { getConvention() } doReturn convention
+            on { @Suppress("deprecation") getConvention() } doReturn convention
         }
 
         // when:
@@ -385,6 +385,13 @@ class ProjectAccessorsClassPathTest : AbstractDslTest() {
                         }
                     }
                 }
+
+                fun Project.canUseContainerElementAccessors() {
+                    sourceSets {
+                        main {
+                        }
+                    }
+                }
             """
         )
 
@@ -436,10 +443,12 @@ class ProjectAccessorsClassPathTest : AbstractDslTest() {
             verify(extensions).configure(eq("buildTypes"), any<Action<*>>())
 
             // val i
+            @Suppress("deprecation")
             verify(project).convention
             verify(convention).plugins
 
             // val j
+            @Suppress("deprecation")
             verify(project).convention
             verify(convention).plugins
 
@@ -487,10 +496,13 @@ class ProjectAccessorsClassPathTest : AbstractDslTest() {
 
         buildAccessorsFor(schema, classPath, srcDir, binDir)
 
+        dumpKotlinMetadataOf(binDir)
+
         eval(
             script = script,
             target = target,
             baseCacheDir = kotlinDslEvalBaseCacheDir,
+            baseTempDir = kotlinDslEvalBaseTempDir,
             scriptCompilationClassPath = DefaultClassPath.of(binDir) + classPath,
             scriptRuntimeClassPath = DefaultClassPath.of(binDir)
         )
@@ -500,6 +512,23 @@ class ProjectAccessorsClassPathTest : AbstractDslTest() {
     fun buildAccessorsFor(schema: TypedProjectSchema, classPath: ClassPath, srcDir: File, binDir: File) {
         withSynchronousIO {
             buildAccessorsFor(schema, classPath, srcDir, binDir)
+        }
+    }
+
+    private
+    fun dumpKotlinMetadataOf(moduleDir: File) {
+        withClassLoaderFor(DefaultClassPath.of(moduleDir)) {
+            visitMetadataOfModule(
+                moduleDir, moduleDir.name,
+                object : KmModuleVisitor() {
+                    override fun visitPackageParts(fqName: String, fileFacades: List<String>, multiFileClassParts: Map<String, String>) {
+                        fileFacades.forEach {
+                            val fileFacadeClassName = it.replace('/', '.')
+                            dumpFileFacadeHeaderOf(loadClass(fileFacadeClassName))
+                        }
+                    }
+                }
+            )
         }
     }
 }

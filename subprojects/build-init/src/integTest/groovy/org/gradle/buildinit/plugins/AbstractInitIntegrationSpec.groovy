@@ -22,9 +22,13 @@ import org.gradle.integtests.fixtures.AbstractIntegrationSpec
 import org.gradle.integtests.fixtures.DefaultTestExecutionResult
 import org.gradle.test.fixtures.file.TestFile
 
+import static org.hamcrest.MatcherAssert.assertThat
+import static org.hamcrest.Matchers.containsString
+import static org.hamcrest.Matchers.not
+
 abstract class AbstractInitIntegrationSpec extends AbstractIntegrationSpec {
     final def targetDir = testDirectory.createDir("some-thing")
-    final def subprojectDir = targetDir.file(subprojectName())
+    final def subprojectDir = subprojectName() ? targetDir.file(subprojectName()) : targetDir
 
     abstract String subprojectName()
 
@@ -48,11 +52,13 @@ abstract class AbstractInitIntegrationSpec extends AbstractIntegrationSpec {
         result.testClass(className).assertTestPassed(name)
     }
 
-    protected void commonFilesGenerated(BuildInitDsl scriptDsl) {
-        dslFixtureFor(scriptDsl).assertGradleFilesGenerated()
+    protected void commonFilesGenerated(BuildInitDsl scriptDsl, dslFixture = dslFixtureFor(scriptDsl)) {
+        dslFixture.assertGradleFilesGenerated()
         targetDir.file(".gitignore").assertIsFile()
         targetDir.file(".gitattributes").assertIsFile()
+        mavenCentralRepositoryDeclared(scriptDsl)
     }
+
     protected void commonJvmFilesGenerated(BuildInitDsl scriptDsl) {
         commonFilesGenerated(scriptDsl)
         subprojectDir.file("src/main/resources").assertIsDir()
@@ -78,4 +84,16 @@ abstract class AbstractInitIntegrationSpec extends AbstractIntegrationSpec {
         <packaging>jar</packaging>
       </project>"""
     }
+
+    private void mavenCentralRepositoryDeclared(BuildInitDsl scriptDsl) {
+        def scriptFile = subprojectDir.file(scriptDsl.fileNameFor("build"))
+        def scriptText = scriptFile.exists() ? scriptFile.text : ""
+        if (scriptText.contains("repositories")) {
+            assertThat(scriptText, containsString("mavenCentral()"))
+            assertThat(scriptText, containsString("Use Maven Central for resolving dependencies."))
+            assertThat(scriptText, not(containsString("jcenter()")))
+            assertThat(scriptText, not(containsString("Use JCenter for resolving dependencies.")))
+        }
+    }
+
 }

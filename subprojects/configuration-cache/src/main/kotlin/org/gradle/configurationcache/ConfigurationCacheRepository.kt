@@ -16,6 +16,7 @@
 
 package org.gradle.configurationcache
 
+import org.gradle.api.internal.BuildDefinition
 import org.gradle.cache.CacheBuilder
 import org.gradle.cache.CacheRepository
 import org.gradle.cache.FileLockManager
@@ -31,13 +32,18 @@ import org.gradle.internal.concurrent.Stoppable
 import org.gradle.internal.file.FileAccessTimeJournal
 import org.gradle.internal.file.impl.SingleDepthFileAccessTracker
 import org.gradle.internal.nativeintegration.filesystem.FileSystem
+import org.gradle.internal.service.scopes.Scopes
+import org.gradle.internal.service.scopes.ServiceScope
 import java.io.File
+import java.io.InputStream
+import java.io.OutputStream
 
 
+@ServiceScope(Scopes.BuildTree::class)
 internal
 class ConfigurationCacheRepository(
-    private val cacheRepository: CacheRepository,
-    private val cacheCleanupFactory: CleanupActionFactory,
+    cacheRepository: CacheRepository,
+    cacheCleanupFactory: CleanupActionFactory,
     private val fileAccessTimeJournal: FileAccessTimeJournal,
     private val startParameter: ConfigurationCacheStartParameter,
     private val fileSystem: FileSystem
@@ -51,7 +57,7 @@ class ConfigurationCacheRepository(
                 else -> {
                     when (val invalidReason = check(fingerprint)) {
                         null -> {
-                            fileAccessTracker.markAccessed(fingerprint) // Prevent cleanup before state load
+                            markAccessed(fingerprint) // Prevent cleanup before state load
                             CheckedFingerprint.Valid
                         }
                         else -> CheckedFingerprint.Invalid(invalidReason)
@@ -60,36 +66,91 @@ class ConfigurationCacheRepository(
             }
         }
 
-    fun useForStateLoad(cacheKey: String, action: (File) -> Unit) {
-        withBaseCacheDirFor(cacheKey) { cacheDir ->
-            val stateFile = cacheDir.stateFile
-            fileAccessTracker.markAccessed(stateFile)
-            action(stateFile)
-        }
+    sealed class CheckedFingerprint {
+        object NotFound : CheckedFingerprint()
+        object Valid : CheckedFingerprint()
+        class Invalid(val reason: String) : CheckedFingerprint()
     }
 
-    class Layout(val fingerprint: File, val state: File)
+    fun useForStateLoad(cacheKey: String, action: (ConfigurationCacheStateFile) -> Unit) {
+        withBaseCacheDirFor(cacheKey) { cacheDir ->
+            action(
+                ReadableConfigurationCacheStateFile(cacheDir.stateFile)
+            )
+        }
+    }
 
     fun useForStore(cacheKey: String, action: (Layout) -> Unit) {
         withBaseCacheDirFor(cacheKey) { cacheDir ->
             // TODO GlobalCache require(!cacheDir.isDirectory)
             cacheDir.mkdirs()
-            fileSystem.chmod(cacheDir, 448) // octal 0700
-            fileAccessTracker.markAccessed(cacheDir)
-            val layout = Layout(cacheDir.fingerprintFile, cacheDir.stateFile)
+            chmod(cacheDir, 448) // octal 0700
+            markAccessed(cacheDir)
+            val stateFiles = mutableListOf<File>()
+            val rootStateFile = WriteableConfigurationCacheStateFile(cacheDir.stateFile, stateFiles::add)
+            val layout = Layout(cacheDir.fingerprintFile, rootStateFile)
             try {
                 action(layout)
             } finally {
-                sequenceOf(layout.state, layout.fingerprint)
+                (sequenceOf(layout.fingerprint) + stateFiles.asSequence())
                     .filter(File::isFile)
-                    .forEach { fileSystem.chmod(it, 384) } // octal 0600
+                    .forEach {
+                        chmod(it, 384) // octal 0600
+                    }
             }
         }
     }
 
+    class Layout(
+        val fingerprint: File,
+        val state: ConfigurationCacheStateFile
+    )
+
+    override fun stop() {
+        cache.close()
+    }
+
     private
-    val cacheRootDir
-        get() = startParameter.rootDirectory.resolve(".gradle/configuration-cache")
+    inner class ReadableConfigurationCacheStateFile(
+        private val file: File
+    ) : ConfigurationCacheStateFile {
+
+        override fun outputStream(): OutputStream =
+            throw UnsupportedOperationException()
+
+        override fun inputStream(): InputStream =
+            file.also(::markAccessed).inputStream()
+
+        override fun stateFileForIncludedBuild(build: BuildDefinition): ConfigurationCacheStateFile =
+            ReadableConfigurationCacheStateFile(
+                includedBuildFileFor(file, build)
+            )
+    }
+
+    private
+    inner class WriteableConfigurationCacheStateFile(
+        private val file: File,
+        private val onFileAccess: (File) -> Unit
+    ) : ConfigurationCacheStateFile {
+
+        override fun outputStream(): OutputStream =
+            file.also(onFileAccess).outputStream()
+
+        override fun inputStream(): InputStream =
+            throw UnsupportedOperationException()
+
+        override fun stateFileForIncludedBuild(build: BuildDefinition): ConfigurationCacheStateFile =
+            WriteableConfigurationCacheStateFile(
+                includedBuildFileFor(file, build),
+                onFileAccess
+            )
+    }
+
+    private
+    fun includedBuildFileFor(parentStateFile: File, build: BuildDefinition) =
+        parentStateFile.run {
+            resolveSibling("$name.${build.name}")
+        }
 
     private
     val cleanupDepth = 1
@@ -98,25 +159,25 @@ class ConfigurationCacheRepository(
     val cleanupMaxAgeDays = LeastRecentlyUsedCacheCleanup.DEFAULT_MAX_AGE_IN_DAYS_FOR_RECREATABLE_CACHE_ENTRIES
 
     private
-    val cache by unsafeLazy {
-        cacheRepository.configurationCache()
-            .withOnDemandLockMode() // Don't need to lock anything until we use the caches
-            .withLruCacheCleanup()
-            .open()
-    }
+    val cache = cacheRepository
+        .cache(cacheBaseDir)
+        .withDisplayName("Configuration Cache")
+        .withOnDemandLockMode() // Don't need to lock anything until we use the caches
+        .withLruCacheCleanup(cacheCleanupFactory)
+        .open()
 
     private
-    fun CacheRepository.configurationCache() =
-        cache(cacheRootDir).withDisplayName("Configuration Cache")
+    val cacheBaseDir
+        get() = startParameter.cacheDir.resolve("configuration-cache")
 
     private
     fun CacheBuilder.withOnDemandLockMode() =
         withLockOptions(LockOptionsBuilder.mode(FileLockManager.LockMode.OnDemand))
 
     private
-    fun CacheBuilder.withLruCacheCleanup(): CacheBuilder =
+    fun CacheBuilder.withLruCacheCleanup(cleanupActionFactory: CleanupActionFactory): CacheBuilder =
         withCleanup(
-            cacheCleanupFactory.create(
+            cleanupActionFactory.create(
                 LeastRecentlyUsedCacheCleanup(
                     SingleDepthFilesFinder(cleanupDepth),
                     fileAccessTimeJournal,
@@ -125,26 +186,28 @@ class ConfigurationCacheRepository(
             )
         )
 
-    override fun stop() {
-        cache.close()
+    private
+    val fileAccessTracker by unsafeLazy {
+        SingleDepthFileAccessTracker(fileAccessTimeJournal, cache.baseDir, cleanupDepth)
     }
 
     private
-    val fileAccessTracker by unsafeLazy {
-        SingleDepthFileAccessTracker(fileAccessTimeJournal, cacheRootDir, cleanupDepth)
+    fun chmod(file: File, mode: Int) {
+        fileSystem.chmod(file, mode)
     }
 
-    sealed class CheckedFingerprint {
-        object NotFound : CheckedFingerprint()
-        object Valid : CheckedFingerprint()
-        class Invalid(val reason: String) : CheckedFingerprint()
+    private
+    fun markAccessed(stateFile: File) {
+        fileAccessTracker.markAccessed(stateFile)
     }
 
     private
     fun <T> withBaseCacheDirFor(cacheKey: String, action: (File) -> T): T =
-        cache.withFileLock(Factory {
-            action(cache.baseDirFor(cacheKey))
-        })
+        cache.withFileLock(
+            Factory {
+                action(cache.baseDirFor(cacheKey))
+            }
+        )
 
     private
     fun PersistentCache.baseDirFor(cacheKey: String) =

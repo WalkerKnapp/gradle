@@ -16,14 +16,20 @@
 
 package org.gradle.internal.operations
 
+import org.gradle.api.JavaVersion
 import org.gradle.integtests.fixtures.AbstractIntegrationSpec
-import org.gradle.integtests.fixtures.ToBeFixedForConfigurationCache
+import org.gradle.integtests.fixtures.executer.GradleContextualExecuter
 import org.gradle.util.Matchers
 import spock.lang.Issue
 
 class BuildOperationExecutorIntegrationTest extends AbstractIntegrationSpec {
 
     def "produces sensible error when there are failures both enqueuing and running operations" () {
+        if (JavaVersion.current().isJava9Compatible() && GradleContextualExecuter.isConfigCache()) {
+            // For java.util.concurrent.CountDownLatch being serialized reflectively by configuration cache
+            executer.withArgument('-Dorg.gradle.jvmargs=--add-opens java.base/java.util.concurrent=ALL-UNNAMED --add-opens java.base/java.util.concurrent.locks=ALL-UNNAMED')
+        }
+
         buildFile << """
             import org.gradle.internal.operations.BuildOperationExecutor
             import org.gradle.internal.operations.RunnableBuildOperation
@@ -76,7 +82,6 @@ class BuildOperationExecutorIntegrationTest extends AbstractIntegrationSpec {
     // We need to make sure that the build operation ids of nested builds started by a GradleBuild task do not overlap.
     // Since we currently have no specific scope for "one build and the builds it started via GradleBuild tasks", we use the global scope.
     @Issue("https://github.com/gradle/gradle/issues/2622")
-    @ToBeFixedForConfigurationCache(because = "GradleBuild task")
     def "build operations have unique ids within the global scope"() {
         when:
         settingsFile << ""

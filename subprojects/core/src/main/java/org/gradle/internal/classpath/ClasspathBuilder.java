@@ -19,11 +19,13 @@ package org.gradle.internal.classpath;
 import org.apache.tools.zip.ZipEntry;
 import org.apache.tools.zip.ZipOutputStream;
 import org.gradle.api.GradleException;
+import org.gradle.api.internal.file.temp.TemporaryFileProvider;
 import org.gradle.api.internal.file.archive.ZipCopyAction;
 import org.gradle.internal.service.scopes.Scopes;
 import org.gradle.internal.service.scopes.ServiceScope;
 
 import javax.annotation.Nullable;
+import javax.inject.Inject;
 import java.io.BufferedOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
@@ -36,9 +38,15 @@ import java.util.Set;
 @ServiceScope(Scopes.UserHome.class)
 public class ClasspathBuilder {
     private static final int BUFFER_SIZE = 8192;
+    private final TemporaryFileProvider temporaryFileProvider;
+
+    @Inject
+    ClasspathBuilder(final TemporaryFileProvider temporaryFileProvider) {
+        this.temporaryFileProvider = temporaryFileProvider;
+    }
 
     /**
-     * Creates a Jar file using the given action to add entries to the file.
+     * Creates a Jar file using the given action to add entries to the file. If the file already exists it will be replaced.
      */
     public void jar(File jarFile, Action action) {
         try {
@@ -50,7 +58,7 @@ public class ClasspathBuilder {
 
     private void buildJar(File jarFile, Action action) throws IOException {
         File parentDir = jarFile.getParentFile();
-        File tmpFile = File.createTempFile(jarFile.getName(), ".tmp");
+        File tmpFile = temporaryFileProvider.createTemporaryFile(jarFile.getName(), ".tmp");
         try {
             Files.createDirectories(parentDir.toPath());
             try (ZipOutputStream outputStream = new ZipOutputStream(new BufferedOutputStream(new FileOutputStream(tmpFile), BUFFER_SIZE))) {
@@ -83,6 +91,7 @@ public class ClasspathBuilder {
         public void put(String name, byte[] content) throws IOException {
             maybeAddParent(name);
             ZipEntry zipEntry = newZipEntryWithFixedTime(name);
+            outputStream.setEncoding("UTF-8");
             outputStream.putNextEntry(zipEntry);
             outputStream.write(content);
             outputStream.closeEntry();

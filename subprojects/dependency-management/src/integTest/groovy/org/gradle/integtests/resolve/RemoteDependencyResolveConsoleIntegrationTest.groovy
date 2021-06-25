@@ -25,7 +25,7 @@ import org.gradle.test.fixtures.ConcurrentTestUtil
 import org.gradle.test.fixtures.server.http.BlockingHttpServer
 import org.junit.Rule
 
-class RemoteDependencyResolveConsoleIntegrationTest extends AbstractDependencyResolutionTest implements RichConsoleStyling {
+class RemoteDependencyResolveConsoleIntegrationTest extends AbstractDependencyResolutionTest {
     @Rule
     BlockingHttpServer server = new BlockingHttpServer()
 
@@ -38,7 +38,7 @@ class RemoteDependencyResolveConsoleIntegrationTest extends AbstractDependencyRe
         def m2 = mavenRepo.module("test", "two", "1.2").publish()
 
         buildFile << """
-            repositories { 
+            repositories {
                 maven { url '${server.uri}' }
             }
             configurations { compile }
@@ -84,7 +84,7 @@ class RemoteDependencyResolveConsoleIntegrationTest extends AbstractDependencyRe
         ConcurrentTestUtil.poll {
             outputContainsProgress(build,
                 "> :resolve > Resolve dependencies of :compile",
-                "> one-1.2.pom > 1 KB/2 KB downloaded", "> two-1.2.pom > 1 KB/2 KB downloaded"
+                "> one-1.2.pom > 1 KiB/2 KiB downloaded", "> two-1.2.pom > 1 KiB/2 KiB downloaded"
             )
         }
 
@@ -110,7 +110,7 @@ class RemoteDependencyResolveConsoleIntegrationTest extends AbstractDependencyRe
         ConcurrentTestUtil.poll {
             outputContainsProgress(build,
                 "> :resolve > Resolve files of :compile",
-                "> one-1.2.jar > 1 KB/2 KB downloaded", "> two-1.2.jar > 1 KB/2 KB downloaded"
+                "> one-1.2.jar > 1 KiB/2 KiB downloaded", "> two-1.2.jar > 1 KiB/2 KiB downloaded"
             )
         }
 
@@ -121,12 +121,12 @@ class RemoteDependencyResolveConsoleIntegrationTest extends AbstractDependencyRe
 
     void outputContainsProgress(GradleHandle build, String taskProgressLine, String... progressOutputLines) {
         def output = LogContent.of(build.standardOutput).ansiCharsToColorText().withNormalizedEol()
-        assert output.contains(workInProgressLine(taskProgressLine)) ||
-            progressOutputLines.any { output.contains(workInProgressLine(taskProgressLine + " " + it)) }
+        assert output.contains(RichConsoleStyling.workInProgressLine(taskProgressLine)) ||
+            progressOutputLines.any { output.contains(RichConsoleStyling.workInProgressLine(taskProgressLine + " " + it)) }
 
         assert progressOutputLines.every {
-            output.contains(workInProgressLine(it)) ||
-                output.contains(workInProgressLine(taskProgressLine + " " + it))
+            output.contains(RichConsoleStyling.workInProgressLine(it)) ||
+                output.contains(RichConsoleStyling.workInProgressLine(taskProgressLine + " " + it))
         }
     }
 

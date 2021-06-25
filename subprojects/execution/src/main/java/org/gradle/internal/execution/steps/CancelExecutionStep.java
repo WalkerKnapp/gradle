@@ -18,35 +18,32 @@ package org.gradle.internal.execution.steps;
 
 import org.gradle.api.BuildCancelledException;
 import org.gradle.initialization.BuildCancellationToken;
-import org.gradle.internal.execution.Context;
-import org.gradle.internal.execution.Result;
-import org.gradle.internal.execution.Step;
+import org.gradle.internal.execution.UnitOfWork;
 
-public class CancelExecutionStep<C extends Context> implements Step<C, Result> {
+public class CancelExecutionStep<C extends Context, R extends Result> implements Step<C, R> {
     private final BuildCancellationToken cancellationToken;
-    private final Step<? super C, ? extends Result> delegate;
+    private final Step<? super C, ? extends R> delegate;
 
     public CancelExecutionStep(
         BuildCancellationToken cancellationToken,
-        Step<? super C, ? extends Result> delegate
+        Step<? super C, ? extends R> delegate
     ) {
         this.cancellationToken = cancellationToken;
         this.delegate = delegate;
     }
 
     @Override
-    public Result execute(C context) {
+    public R execute(UnitOfWork work, C context) {
         Thread thread = Thread.currentThread();
         Runnable interrupt = thread::interrupt;
         try {
             cancellationToken.addCallback(interrupt);
-            Result result = delegate.execute(context);
-            return result;
+            return delegate.execute(work, context);
         } finally {
             cancellationToken.removeCallback(interrupt);
             if (cancellationToken.isCancellationRequested()) {
                 Thread.interrupted();
-                throw new BuildCancelledException("Build cancelled while executing " + context.getWork().getDisplayName());
+                throw new BuildCancelledException("Build cancelled while executing " + work.getDisplayName());
             }
         }
     }

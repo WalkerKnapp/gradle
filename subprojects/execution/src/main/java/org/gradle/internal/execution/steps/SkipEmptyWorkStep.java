@@ -20,15 +20,14 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSortedMap;
 import org.gradle.caching.internal.origin.OriginMetadata;
 import org.gradle.internal.Try;
-import org.gradle.internal.execution.AfterPreviousExecutionContext;
-import org.gradle.internal.execution.CachingResult;
 import org.gradle.internal.execution.ExecutionOutcome;
-import org.gradle.internal.execution.Step;
+import org.gradle.internal.execution.ExecutionResult;
 import org.gradle.internal.execution.UnitOfWork;
 import org.gradle.internal.execution.caching.CachingState;
 import org.gradle.internal.execution.history.AfterPreviousExecutionState;
-import org.gradle.internal.fingerprint.FileCollectionFingerprint;
+import org.gradle.internal.snapshot.FileSystemSnapshot;
 
+import java.time.Duration;
 import java.util.Optional;
 
 public class SkipEmptyWorkStep<C extends AfterPreviousExecutionContext> implements Step<C, CachingResult> {
@@ -39,19 +38,29 @@ public class SkipEmptyWorkStep<C extends AfterPreviousExecutionContext> implemen
     }
 
     @Override
-    public CachingResult execute(C context) {
-        UnitOfWork work = context.getWork();
-        ImmutableSortedMap<String, FileCollectionFingerprint> outputFilesAfterPreviousExecution = context.getAfterPreviousExecutionState()
-            .map(AfterPreviousExecutionState::getOutputFileProperties)
+    public CachingResult execute(UnitOfWork work, C context) {
+        ImmutableSortedMap<String, FileSystemSnapshot> outputFilesAfterPreviousExecution = context.getAfterPreviousExecutionState()
+            .map(AfterPreviousExecutionState::getOutputFilesProducedByWork)
             .orElse(ImmutableSortedMap.of());
+        UnitOfWork.Identity identity = context.getIdentity();
         return work.skipIfInputsEmpty(outputFilesAfterPreviousExecution)
             .map(skippedOutcome -> {
-                work.getExecutionHistoryStore()
-                    .ifPresent(executionHistoryStore -> executionHistoryStore.remove(work.getIdentity()));
+                context.getHistory()
+                    .ifPresent(history -> history.remove(identity.getUniqueId()));
                 return (CachingResult) new CachingResult() {
                     @Override
-                    public Try<ExecutionOutcome> getOutcome() {
-                        return Try.successful(skippedOutcome);
+                    public Try<ExecutionResult> getExecutionResult() {
+                        return Try.successful(new ExecutionResult() {
+                            @Override
+                            public ExecutionOutcome getOutcome() {
+                                return skippedOutcome;
+                            }
+
+                            @Override
+                            public Object getOutput() {
+                                return work.loadRestoredOutput(context.getWorkspace());
+                            }
+                        });
                     }
 
                     @Override
@@ -65,7 +74,7 @@ public class SkipEmptyWorkStep<C extends AfterPreviousExecutionContext> implemen
                     }
 
                     @Override
-                    public ImmutableSortedMap<String, ? extends FileCollectionFingerprint> getFinalOutputs() {
+                    public ImmutableSortedMap<String, FileSystemSnapshot> getOutputFilesProduceByWork() {
                         return ImmutableSortedMap.of();
                     }
 
@@ -73,8 +82,13 @@ public class SkipEmptyWorkStep<C extends AfterPreviousExecutionContext> implemen
                     public Optional<OriginMetadata> getReusedOutputOriginMetadata() {
                         return Optional.empty();
                     }
+
+                    @Override
+                    public Duration getDuration() {
+                        return Duration.ZERO;
+                    }
                 };
             })
-            .orElseGet(() -> delegate.execute(context));
+            .orElseGet(() -> delegate.execute(work, context));
     }
 }

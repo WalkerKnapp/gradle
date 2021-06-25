@@ -36,7 +36,7 @@ class DefaultBuildOperationExecutorParallelExecutionTest extends ConcurrentSpec 
     WorkerLeaseRegistry.WorkerLeaseCompletion outerOperationCompletion
     WorkerLeaseRegistry.WorkerLease outerOperation
     BuildOperationListener operationListener = Mock(BuildOperationListener)
-    ExecutorFactory executorFactory = new DefaultExecutorFactory()
+    private ExecutorFactory executorFactory = new DefaultExecutorFactory()
 
     def setupBuildOperationExecutor(int maxThreads) {
         def parallelismConfiguration = new DefaultParallelismConfiguration(true, maxThreads)
@@ -199,7 +199,7 @@ class DefaultBuildOperationExecutorParallelExecutionTest extends ConcurrentSpec 
     def "operations are canceled when the generator fails"() {
         def buildQueue = Mock(BuildOperationQueue)
         def buildOperationQueueFactory = Mock(BuildOperationQueueFactory) {
-            create(_, _) >> { buildQueue }
+            create(_, _, _) >> { buildQueue }
         }
 
         def buildOperationExecutor = new DefaultBuildOperationExecutor(operationListener, Mock(Clock), new NoOpProgressLoggerFactory(),
@@ -224,10 +224,10 @@ class DefaultBuildOperationExecutorParallelExecutionTest extends ConcurrentSpec 
     def "multi-cause error when there are failures both enqueuing and running operations"() {
         def operationFailures = [new Exception("failed operation 1"), new Exception("failed operation 2")]
         def buildQueue = Mock(BuildOperationQueue) {
-            waitForCompletion() >> { throw new MultipleBuildOperationFailures("operations failed", operationFailures, null) }
+            waitForCompletion() >> { throw new MultipleBuildOperationFailures(operationFailures, null) }
         }
         def buildOperationQueueFactory = Mock(BuildOperationQueueFactory) {
-            create(_, _) >> { buildQueue }
+            create(_, _, _) >> { buildQueue }
         }
         def buildOperationExecutor = new DefaultBuildOperationExecutor(
             operationListener, Mock(Clock), new NoOpProgressLoggerFactory(),
@@ -302,7 +302,7 @@ class DefaultBuildOperationExecutorParallelExecutionTest extends ConcurrentSpec 
         async {
             buildOperationExecutor.run(new DefaultBuildOperationQueueTest.TestBuildOperation() {
                 void run(BuildOperationContext context) {
-                    operationState = buildOperationExecutor.getCurrentOperation()
+                    operationState = DefaultBuildOperationExecutorParallelExecutionTest.this.buildOperationExecutor.getCurrentOperation()
                     assert operationState.running
                     assert unmanaged.running
                     assert operationState.description.parentId.id < 0
@@ -368,7 +368,7 @@ class DefaultBuildOperationExecutorParallelExecutionTest extends ConcurrentSpec 
                 5.times {
                     queue.add(new DefaultBuildOperationQueueTest.TestBuildOperation() {
                         void run(BuildOperationContext context) {
-                            def myOperationState = buildOperationExecutor.getCurrentOperation()
+                            def myOperationState = DefaultBuildOperationExecutorParallelExecutionTest.this.buildOperationExecutor.getCurrentOperation()
                             assert parentOperationId == null || parentOperationId == myOperationState.description.parentId
                             parentOperationId = myOperationState.description.parentId
                             assert parentOperationId.id < 0

@@ -26,7 +26,7 @@ class JavaToolchainDownloadSoakTest extends AbstractIntegrationSpec {
 
             java {
                 toolchain {
-                    languageVersion = JavaVersion.VERSION_14
+                    languageVersion = JavaLanguageVersion.of(14)
                 }
             }
         """
@@ -35,8 +35,36 @@ class JavaToolchainDownloadSoakTest extends AbstractIntegrationSpec {
 
         when:
         result = executer
-            .withArguments("-Porg.gradle.java.installations.auto-detect=false", "--info")
+            .withArguments("--info", "-Porg.gradle.java.installations.auto-detect=false")
             .withTasks("compileJava")
+            .withToolchainDownloadEnabled()
+            .requireOwnGradleUserHomeDir()
+            .run()
+
+        then:
+        outputContains("Compiling with toolchain '${executer.gradleUserHomeDir.absolutePath}${File.separator}jdks${File.separator}jdk-14.")
+        javaClassFile("Foo.class").exists()
+    }
+
+    def "can download missing j9 jdk automatically"() {
+        buildFile << """
+            apply plugin: "java"
+
+            java {
+                toolchain {
+                    languageVersion = JavaLanguageVersion.of(14)
+                    implementation = JvmImplementation.J9
+                }
+            }
+        """
+
+        file("src/main/java/Foo.java") << "public class Foo {}"
+
+        when:
+        result = executer
+            .withArguments("--info", "-Porg.gradle.java.installations.auto-detect=false")
+            .withTasks("compileJava")
+            .withToolchainDownloadEnabled()
             .requireOwnGradleUserHomeDir()
             .run()
 

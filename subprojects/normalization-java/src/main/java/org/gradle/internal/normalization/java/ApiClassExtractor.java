@@ -16,7 +16,9 @@
 
 package org.gradle.internal.normalization.java;
 
+import org.gradle.internal.hash.Hasher;
 import org.gradle.internal.normalization.java.impl.ApiMemberSelector;
+import org.gradle.internal.normalization.java.impl.ApiMemberWriter;
 import org.gradle.internal.normalization.java.impl.MethodStubbingApiMemberAdapter;
 import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.ClassWriter;
@@ -34,10 +36,16 @@ public class ApiClassExtractor {
 
     private final Set<String> exportedPackages;
     private final boolean apiIncludesPackagePrivateMembers;
+    private final ApiMemberWriterFactory apiMemberWriterFactory;
 
     public ApiClassExtractor(Set<String> exportedPackages) {
+        this(exportedPackages, classWriter -> new ApiMemberWriter(new MethodStubbingApiMemberAdapter(classWriter)));
+    }
+
+    public ApiClassExtractor(Set<String> exportedPackages, ApiMemberWriterFactory apiMemberWriterFactory) {
         this.exportedPackages = exportedPackages.isEmpty() ? null : exportedPackages;
         this.apiIncludesPackagePrivateMembers = exportedPackages.isEmpty();
+        this.apiMemberWriterFactory = apiMemberWriterFactory;
     }
 
     private boolean shouldExtractApiClassFrom(ClassReader originalClassReader) {
@@ -71,12 +79,19 @@ public class ApiClassExtractor {
             return Optional.empty();
         }
         ClassWriter apiClassWriter = new ClassWriter(ClassWriter.COMPUTE_MAXS);
-        ApiMemberSelector visitor = new ApiMemberSelector(originalClassReader.getClassName(), new MethodStubbingApiMemberAdapter(apiClassWriter), apiIncludesPackagePrivateMembers);
+        ApiMemberSelector visitor = new ApiMemberSelector(originalClassReader.getClassName(), apiMemberWriterFactory.makeApiMemberWriter(apiClassWriter), apiIncludesPackagePrivateMembers);
         originalClassReader.accept(visitor, ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
         if (visitor.isPrivateInnerClass()) {
             return Optional.empty();
         }
         return Optional.of(apiClassWriter.toByteArray());
+    }
+
+    public void appendConfigurationToHasher(Hasher hasher) {
+        hasher.putString(getClass().getName());
+        if (exportedPackages != null) {
+            exportedPackages.forEach(hasher::putString);
+        }
     }
 
     private static String packageNameOf(String internalClassName) {

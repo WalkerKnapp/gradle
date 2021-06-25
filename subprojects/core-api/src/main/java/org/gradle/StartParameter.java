@@ -35,7 +35,6 @@ import org.gradle.initialization.UserHomeInitScriptFinder;
 import org.gradle.internal.DefaultTaskExecutionRequest;
 import org.gradle.internal.FileUtils;
 import org.gradle.internal.concurrent.DefaultParallelismConfiguration;
-import org.gradle.internal.deprecation.DeprecationLogger;
 import org.gradle.internal.logging.DefaultLoggingConfiguration;
 
 import javax.annotation.Nullable;
@@ -73,13 +72,11 @@ public class StartParameter implements LoggingConfiguration, ParallelismConfigur
     private boolean buildProjectDependencies = true;
     private File currentDir;
     private File projectDir;
-    protected boolean searchUpwards;
     private Map<String, String> projectProperties = new HashMap<>();
     private Map<String, String> systemPropertiesArgs = new HashMap<>();
     private File gradleUserHomeDir;
     protected File gradleHomeDir;
     private File settingsFile;
-    protected boolean useEmptySettings;
     private File buildFile;
     private List<File> initScripts = new ArrayList<>();
     private boolean dryRun;
@@ -188,9 +185,15 @@ public class StartParameter implements LoggingConfiguration, ParallelismConfigur
      * Creates a {@code StartParameter} with default values. This is roughly equivalent to running Gradle on the command-line with no arguments.
      */
     public StartParameter() {
-        BuildLayoutParameters layoutParameters = new BuildLayoutParameters();
+        this(new BuildLayoutParameters());
+    }
+
+    /**
+     * Creates a {@code StartParameter} initialized from the given {@link BuildLayoutParameters}.
+     * @since 7.0
+     */
+    protected StartParameter(BuildLayoutParameters layoutParameters) {
         gradleHomeDir = layoutParameters.getGradleInstallationHomeDir();
-        searchUpwards = layoutParameters.getSearchUpwards();
         currentDir = layoutParameters.getCurrentDir();
         projectDir = layoutParameters.getProjectDir();
         gradleUserHomeDir = layoutParameters.getGradleUserHomeDir();
@@ -211,12 +214,10 @@ public class StartParameter implements LoggingConfiguration, ParallelismConfigur
         p.buildFile = buildFile;
         p.projectDir = projectDir;
         p.settingsFile = settingsFile;
-        p.useEmptySettings = useEmptySettings;
         p.taskRequests = new ArrayList<>(taskRequests);
         p.excludedTaskNames = new LinkedHashSet<>(excludedTaskNames);
         p.buildProjectDependencies = buildProjectDependencies;
         p.currentDir = currentDir;
-        p.searchUpwards = searchUpwards;
         p.projectProperties = new HashMap<>(projectProperties);
         p.systemPropertiesArgs = new HashMap<>(systemPropertiesArgs);
         p.initScripts = new ArrayList<>(initScripts);
@@ -274,7 +275,11 @@ public class StartParameter implements LoggingConfiguration, ParallelismConfigur
      * Returns the build file to use to select the default project. Returns null when the build file is not used to select the default project.
      *
      * @return The build file. May be null.
+     *
+     * @deprecated Setting custom build file to select the default project has been deprecated.
+     * This method will be removed in Gradle 8.0.
      */
+    @Deprecated
     @Nullable
     public File getBuildFile() {
         return buildFile;
@@ -284,7 +289,12 @@ public class StartParameter implements LoggingConfiguration, ParallelismConfigur
      * Sets the build file to use to select the default project. Use null to disable selecting the default project using the build file.
      *
      * @param buildFile The build file. May be null.
+     *
+     * @deprecated Setting custom build file to select the default project has been deprecated.
+     * Please use {@link #setProjectDir(File)} to specify the directory of the default project instead.
+     * This method will be removed in Gradle 8.0.
      */
+    @Deprecated
     public void setBuildFile(@Nullable File buildFile) {
         if (buildFile == null) {
             this.buildFile = null;
@@ -293,43 +303,6 @@ public class StartParameter implements LoggingConfiguration, ParallelismConfigur
             this.buildFile = FileUtils.canonicalize(buildFile);
             setProjectDir(this.buildFile.getParentFile());
         }
-    }
-
-    /**
-     * Specifies that an empty settings script should be used.
-     *
-     * This means that even if a settings file exists in the conventional location, or has been previously specified by {@link #setSettingsFile(File)}, it will not be used.
-     *
-     * If {@link #setSettingsFile(File)} is called after this, it will supersede calling this method.
-     *
-     * @return this
-     */
-    public StartParameter useEmptySettings() {
-        DeprecationLogger.deprecateMethod(StartParameter.class, "useEmptySettings()")
-            .willBeRemovedInGradle7()
-            .withUpgradeGuideSection(6, "discontinued_methods")
-            .nagUser();
-        doUseEmptySettings();
-        return this;
-    }
-
-    protected void doUseEmptySettings() {
-        searchUpwards = false;
-        useEmptySettings = true;
-        settingsFile = null;
-    }
-
-    /**
-     * Returns whether an empty settings script will be used regardless of whether one exists in the default location.
-     *
-     * @return Whether to use empty settings or not.
-     */
-    public boolean isUseEmptySettings() {
-        DeprecationLogger.deprecateMethod(StartParameter.class, "isUseEmptySettings()")
-            .willBeRemovedInGradle7()
-            .withUpgradeGuideSection(6, "discontinued_methods")
-            .nagUser();
-        return useEmptySettings;
     }
 
     /**
@@ -418,22 +391,6 @@ public class StartParameter implements LoggingConfiguration, ParallelismConfigur
         }
     }
 
-    public boolean isSearchUpwards() {
-        DeprecationLogger.deprecateMethod(StartParameter.class, "isSearchUpwards()")
-            .willBeRemovedInGradle7()
-            .withUpgradeGuideSection(5, "search_upwards_related_apis_in_startparameter_have_been_deprecated")
-            .nagUser();
-        return searchUpwards;
-    }
-
-    public void setSearchUpwards(boolean searchUpwards) {
-        DeprecationLogger.deprecateMethod(StartParameter.class, "setSearchUpwards(boolean)")
-            .willBeRemovedInGradle7()
-            .withUpgradeGuideSection(5, "search_upwards_related_apis_in_startparameter_have_been_deprecated")
-            .nagUser();
-        this.searchUpwards = searchUpwards;
-    }
-
     public Map<String, String> getProjectProperties() {
         return projectProperties;
     }
@@ -497,12 +454,16 @@ public class StartParameter implements LoggingConfiguration, ParallelismConfigur
      * Sets the settings file to use for the build. Use null to use the default settings file.
      *
      * @param settingsFile The settings file to use. May be null.
+     *
+     * @deprecated Setting custom settings file for the build has been deprecated.
+     * Please use {@link #setProjectDir(File)} to specify the directory of the default project instead.
+     * This method will be removed in Gradle 8.0.
      */
+    @Deprecated
     public void setSettingsFile(@Nullable File settingsFile) {
         if (settingsFile == null) {
             this.settingsFile = null;
         } else {
-            this.useEmptySettings = false;
             this.settingsFile = FileUtils.canonicalize(settingsFile);
             currentDir = this.settingsFile.getParentFile();
         }
@@ -511,11 +472,14 @@ public class StartParameter implements LoggingConfiguration, ParallelismConfigur
     /**
      * Returns the explicit settings file to use for the build, or null.
      *
-     * Will return null if the default settings file is to be used. However, if {@link #isUseEmptySettings()} returns true, then no settings file at all will be used.
+     * Will return null if the default settings file is to be used.
      *
      * @return The settings file. May be null.
-     * @see #isUseEmptySettings()
+     *
+     * @deprecated Setting custom build file to select the default project has been deprecated.
+     * This method will be removed in Gradle 8.0.
      */
+    @Deprecated
     @Nullable
     public File getSettingsFile() {
         return settingsFile;
@@ -747,7 +711,6 @@ public class StartParameter implements LoggingConfiguration, ParallelismConfigur
             + "taskRequests=" + taskRequests
             + ", excludedTaskNames=" + excludedTaskNames
             + ", currentDir=" + currentDir
-            + ", searchUpwards=" + searchUpwards
             + ", projectProperties=" + projectProperties
             + ", systemPropertiesArgs=" + systemPropertiesArgs
             + ", gradleUserHomeDir=" + gradleUserHomeDir
@@ -877,7 +840,6 @@ public class StartParameter implements LoggingConfiguration, ParallelismConfigur
      *
      * @since 6.1
      */
-    @Incubating
     public List<String> getWriteDependencyVerifications() {
         return writeDependencyVerifications;
     }
@@ -889,7 +851,6 @@ public class StartParameter implements LoggingConfiguration, ParallelismConfigur
      * @param checksums the list of checksums to generate
      * @since 6.1
      */
-    @Incubating
     public void setWriteDependencyVerifications(List<String> checksums) {
         this.writeDependencyVerifications = checksums;
     }
@@ -916,7 +877,6 @@ public class StartParameter implements LoggingConfiguration, ParallelismConfigur
      * @param verificationMode if true, enables lenient dependency verification
      * @since 6.2
      */
-    @Incubating
     public void setDependencyVerificationMode(DependencyVerificationMode verificationMode) {
         this.verificationMode = verificationMode;
     }
@@ -926,7 +886,6 @@ public class StartParameter implements LoggingConfiguration, ParallelismConfigur
      *
      * @since 6.2
      */
-    @Incubating
     public DependencyVerificationMode getDependencyVerificationMode() {
         return verificationMode;
     }
@@ -937,7 +896,6 @@ public class StartParameter implements LoggingConfiguration, ParallelismConfigur
      * @param refresh If set to true, missing keys will be checked again. By default missing keys are cached for 24 hours.
      * @since 6.2
      */
-    @Incubating
     public void setRefreshKeys(boolean refresh) {
         isRefreshKeys = refresh;
     }
@@ -947,7 +905,6 @@ public class StartParameter implements LoggingConfiguration, ParallelismConfigur
      *
      * @since 6.2
      */
-    @Incubating
     public boolean isRefreshKeys() {
         return isRefreshKeys;
     }
@@ -962,7 +919,6 @@ public class StartParameter implements LoggingConfiguration, ParallelismConfigur
      * @return true if keys should be exported
      * @since 6.2
      */
-    @Incubating
     public boolean isExportKeys() {
         return isExportKeys;
     }
@@ -977,7 +933,6 @@ public class StartParameter implements LoggingConfiguration, ParallelismConfigur
      * @param exportKeys set to true if keys should be exported
      * @since 6.2
      */
-    @Incubating
     public void setExportKeys(boolean exportKeys) {
         isExportKeys = exportKeys;
     }

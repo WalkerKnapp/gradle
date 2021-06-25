@@ -17,9 +17,13 @@
 package org.gradle.jvm.toolchain.install.internal
 
 import net.rubygrapefruit.platform.SystemInfo
-import org.gradle.api.JavaVersion
-import org.gradle.internal.SystemProperties
+import org.gradle.api.internal.provider.Providers
+import org.gradle.api.provider.ProviderFactory
 import org.gradle.internal.os.OperatingSystem
+import org.gradle.jvm.toolchain.JavaLanguageVersion
+import org.gradle.jvm.toolchain.JvmImplementation
+import org.gradle.jvm.toolchain.JvmVendorSpec
+import org.gradle.jvm.toolchain.internal.DefaultJvmVendorSpec
 import org.gradle.jvm.toolchain.internal.DefaultToolchainSpec
 import org.gradle.util.TestUtil
 import org.junit.Rule
@@ -39,7 +43,7 @@ class AdoptOpenJdkRemoteBinaryTest extends Specification {
         def systemInfo = Mock(SystemInfo)
         systemInfo.architecture >> architecture
         def operatingSystem = OperatingSystem.forName(operatingSystemName)
-        def binary = new AdoptOpenJdkRemoteBinary(systemInfo, operatingSystem, Mock(AdoptOpenJdkDownloader))
+        def binary = new AdoptOpenJdkRemoteBinary(systemInfo, operatingSystem, Mock(AdoptOpenJdkDownloader), providerFactory())
 
         when:
         def uri = binary.toDownloadUri(spec)
@@ -68,7 +72,7 @@ class AdoptOpenJdkRemoteBinaryTest extends Specification {
         def systemInfo = Mock(SystemInfo)
         systemInfo.architecture >> architecture
         def operatingSystem = OperatingSystem.forName(operatingSystemName)
-        def binary = new AdoptOpenJdkRemoteBinary(systemInfo, operatingSystem, Mock(AdoptOpenJdkDownloader))
+        def binary = new AdoptOpenJdkRemoteBinary(systemInfo, operatingSystem, Mock(AdoptOpenJdkDownloader), providerFactory())
 
         when:
         def filename = binary.toFilename(spec)
@@ -97,14 +101,11 @@ class AdoptOpenJdkRemoteBinaryTest extends Specification {
         def systemInfo = Mock(SystemInfo)
         systemInfo.architecture >> SystemInfo.Architecture.amd64
         def operatingSystem = OperatingSystem.MAC_OS
-        def binary = new AdoptOpenJdkRemoteBinary(systemInfo, operatingSystem, Mock(AdoptOpenJdkDownloader))
+        def providerFactory = providerFactory(Providers.of(customBaseUrl))
+        def binary = new AdoptOpenJdkRemoteBinary(systemInfo, operatingSystem, Mock(AdoptOpenJdkDownloader), providerFactory)
 
         when:
-        def uri
-        def properties = ["org.gradle.jvm.toolchain.install.internal.adoptopenjdk.baseUri": customBaseUrl]
-        SystemProperties.getInstance().withSystemProperties(properties, {
-            uri = binary.toDownloadUri(spec)
-        })
+        def uri = binary.toDownloadUri(spec)
 
         then:
         uri.toString() == "http://foobar/v3/binary/latest/11/ga/mac/x64/jdk/hotspot/normal/adoptopenjdk"
@@ -120,11 +121,11 @@ class AdoptOpenJdkRemoteBinaryTest extends Specification {
         systemInfo.architecture >> SystemInfo.Architecture.amd64
         def operatingSystem = OperatingSystem.MAC_OS
         def downloader = Mock(AdoptOpenJdkDownloader)
-        def binary = new AdoptOpenJdkRemoteBinary(systemInfo, operatingSystem, downloader)
+        def binary = new AdoptOpenJdkRemoteBinary(systemInfo, operatingSystem, downloader, providerFactory())
 
         when:
         def targetFile = temporaryFolder.newFile("jdk")
-        def downloadFile = binary.download(spec, targetFile)
+        binary.download(spec, targetFile)
 
         then:
         1 * downloader.download(URI.create("https://api.adoptopenjdk.net/v3/binary/latest/12/ga/mac/x64/jdk/hotspot/normal/adoptopenjdk"), _)
@@ -137,7 +138,7 @@ class AdoptOpenJdkRemoteBinaryTest extends Specification {
         def systemInfo = Mock(SystemInfo)
         systemInfo.architecture >> SystemInfo.Architecture.amd64
         def operatingSystem = OperatingSystem.MAC_OS
-        def binary = new AdoptOpenJdkRemoteBinary(systemInfo, operatingSystem, Mock(AdoptOpenJdkDownloader))
+        def binary = new AdoptOpenJdkRemoteBinary(systemInfo, operatingSystem, Mock(AdoptOpenJdkDownloader), providerFactory())
 
         when:
         def file = binary.download(spec, Mock(File))
@@ -149,10 +150,75 @@ class AdoptOpenJdkRemoteBinaryTest extends Specification {
         javaVersion << [5, 6, 7]
     }
 
+    @Unroll
+    def "skips downloading unsupported vendor #vendor"() {
+        given:
+        def spec = newSpec(8)
+        spec.vendor.set(vendor)
+        def systemInfo = Mock(SystemInfo)
+        systemInfo.architecture >> SystemInfo.Architecture.amd64
+        def operatingSystem = OperatingSystem.MAC_OS
+        def binary = new AdoptOpenJdkRemoteBinary(systemInfo, operatingSystem, Mock(AdoptOpenJdkDownloader), providerFactory())
+
+        when:
+        def file = binary.download(spec, Mock(File))
+
+        then:
+        !file.present
+
+        where:
+        vendor << [JvmVendorSpec.AMAZON, JvmVendorSpec.IBM]
+    }
+
+    @Unroll
+    def "downloads with matching vendor spec using #vendor"() {
+        given:
+        def spec = newSpec(12)
+        spec.vendor.set(vendor)
+        def systemInfo = Mock(SystemInfo)
+        systemInfo.architecture >> SystemInfo.Architecture.amd64
+        def operatingSystem = OperatingSystem.MAC_OS
+        def downloader = Mock(AdoptOpenJdkDownloader)
+        def binary = new AdoptOpenJdkRemoteBinary(systemInfo, operatingSystem, downloader, providerFactory())
+
+        when:
+        def targetFile = temporaryFolder.newFile("jdk")
+        binary.download(spec, targetFile)
+
+        then:
+        1 * downloader.download(URI.create("https://api.adoptopenjdk.net/v3/binary/latest/12/ga/mac/x64/jdk/hotspot/normal/adoptopenjdk"), _)
+
+        where:
+        vendor << [JvmVendorSpec.ADOPTOPENJDK, JvmVendorSpec.matching("adoptopenjdk"), DefaultJvmVendorSpec.any()]
+    }
+
+    def "downloads j9 impl if requested"() {
+        given:
+        def spec = newSpec(12)
+        spec.implementation.set(JvmImplementation.J9)
+        def systemInfo = Mock(SystemInfo)
+        systemInfo.architecture >> SystemInfo.Architecture.amd64
+        def operatingSystem = OperatingSystem.MAC_OS
+        def downloader = Mock(AdoptOpenJdkDownloader)
+        def binary = new AdoptOpenJdkRemoteBinary(systemInfo, operatingSystem, downloader, providerFactory())
+
+        when:
+        def targetFile = temporaryFolder.newFile("jdk")
+        binary.download(spec, targetFile)
+
+        then:
+        1 * downloader.download(URI.create("https://api.adoptopenjdk.net/v3/binary/latest/12/ga/mac/x64/jdk/openj9/normal/adoptopenjdk"), _)
+    }
 
     def newSpec(int jdkVersion = 11) {
         def spec = new DefaultToolchainSpec(TestUtil.objectFactory())
-        spec.languageVersion.set(JavaVersion.toVersion(jdkVersion))
+        spec.languageVersion.set(JavaLanguageVersion.of(jdkVersion))
         spec
+    }
+
+    ProviderFactory providerFactory(hostnameProvider = Providers.notDefined()) {
+        Mock(ProviderFactory) {
+            gradleProperty("org.gradle.jvm.toolchain.install.adoptopenjdk.baseUri") >> hostnameProvider
+        }
     }
 }

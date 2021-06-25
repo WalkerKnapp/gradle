@@ -16,43 +16,16 @@
 package org.gradle.composite.internal;
 
 import org.gradle.api.artifacts.component.BuildIdentifier;
+import org.gradle.internal.service.scopes.Scopes;
+import org.gradle.internal.service.scopes.ServiceScope;
 
-import java.util.Collection;
+import java.util.function.Consumer;
 
+@ServiceScope(Scopes.BuildTree.class)
 public interface IncludedBuildControllers {
-    IncludedBuildControllers EMPTY = new IncludedBuildControllers() {
-        @Override
-        public void rootBuildOperationStarted() {
-        }
-
-        @Override
-        public void populateTaskGraphs() {
-        }
-
-        @Override
-        public void startTaskExecution() {
-        }
-
-        @Override
-        public void awaitTaskCompletion(Collection<? super Throwable> taskFailures) {
-        }
-
-        @Override
-        public void finishBuild(Collection<? super Throwable> failures) {
-        }
-
-        @Override
-        public IncludedBuildController getBuildController(BuildIdentifier buildIdentifier) {
-            throw new UnsupportedOperationException();
-        }
-    };
-
     /**
-     * Notify the controllers that the root build operation has started.
-     * Should be using something like {@link org.gradle.initialization.RootBuildLifecycleListener} however, this is currently called outside the root build operation.
+     * Finish populating task graphs, once all entry point tasks have been scheduled.
      */
-    void rootBuildOperationStarted();
-
     void populateTaskGraphs();
 
     /**
@@ -63,12 +36,12 @@ public interface IncludedBuildControllers {
     /**
      * Blocks until all scheduled tasks have completed.
      */
-    void awaitTaskCompletion(Collection<? super Throwable> taskFailures);
+    void awaitTaskCompletion(Consumer<? super Throwable> taskFailures);
 
     /**
-     * Completes the build, blocking until complete.
+     * Completes any pending work, blocking until complete.
      */
-    void finishBuild(Collection<? super Throwable> failures);
+    void finishPendingWork(Consumer<? super Throwable> collector);
 
     IncludedBuildController getBuildController(BuildIdentifier buildIdentifier);
 }

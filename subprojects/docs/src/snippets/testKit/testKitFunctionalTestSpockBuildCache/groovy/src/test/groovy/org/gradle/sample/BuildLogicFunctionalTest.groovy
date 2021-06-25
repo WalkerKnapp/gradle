@@ -1,45 +1,28 @@
-/*
- * Copyright 2017 the original author or authors.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 package org.gradle.sample
 
 import org.gradle.testkit.runner.GradleRunner
-import org.junit.Rule
-import org.junit.rules.TemporaryFolder
 import spock.lang.Specification
+import spock.lang.TempDir
 
 import static org.gradle.testkit.runner.TaskOutcome.*
 
 class BuildLogicFunctionalTest extends Specification {
 
     // tag::clean-build-cache[]
-    @Rule final TemporaryFolder testProjectDir = new TemporaryFolder()
+    @TempDir File testProjectDir
     File buildFile
     File localBuildCacheDirectory
 
     def setup() {
-        localBuildCacheDirectory = testProjectDir.newFolder('local-cache')
-        testProjectDir.newFile('settings.gradle') << """
+        localBuildCacheDirectory = new File(testProjectDir, 'local-cache')
+        buildFile = new File(testProjectDir,'settings.gradle') << """
             buildCache {
                 local {
                     directory '${localBuildCacheDirectory.toURI()}'
                 }
             }
         """
-        buildFile = testProjectDir.newFile('build.gradle')
+        buildFile = new File(testProjectDir,'build.gradle')
     }
     // end::clean-build-cache[]
 
@@ -61,7 +44,7 @@ class BuildLogicFunctionalTest extends Specification {
         result.task(":cacheableTask").outcome == SUCCESS
 
         when:
-        new File(testProjectDir.root, 'build').deleteDir()
+        new File(testProjectDir, 'build').deleteDir()
         result = runner()
             .withArguments( '--build-cache', 'cacheableTask')
             .build()
@@ -73,7 +56,7 @@ class BuildLogicFunctionalTest extends Specification {
 
     def runner() {
         return GradleRunner.create()
-            .withProjectDir(testProjectDir.root)
+            .withProjectDir(testProjectDir)
             .withPluginClasspath()
     }
 }

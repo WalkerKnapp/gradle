@@ -16,7 +16,6 @@
 
 package org.gradle.api.tasks;
 
-import org.gradle.api.Incubating;
 import org.gradle.api.file.FileCollection;
 
 import javax.annotation.Nullable;
@@ -38,7 +37,7 @@ import java.util.Map;
  *     //if you truly want to override the defaults:
  *     output.resourcesDir = file('out/bin')
  *     // Compiled Java classes should use this directory
- *     java.outputDir = file('out/bin')
+ *     java.destinationDirectory.set(file('out/bin'))
  *   }
  * }
  * </pre>
@@ -160,6 +159,5 @@ public interface SourceSetOutput extends FileCollection {
      * @return The generated sources directories. Never returns null.
      * @since 5.2
      */
-    @Incubating
     FileCollection getGeneratedSourcesDirs();
 }

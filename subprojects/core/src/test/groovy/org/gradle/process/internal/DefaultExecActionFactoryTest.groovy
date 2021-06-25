@@ -33,7 +33,10 @@ class DefaultExecActionFactoryTest extends ConcurrentSpec {
     def resolver = TestFiles.resolver(tmpDir.testDirectory)
     def fileCollectionFactory = TestFiles.fileCollectionFactory(tmpDir.testDirectory)
     def instantiator = TestUtil.instantiatorFactory()
-    def factory = DefaultExecActionFactory.of(resolver, fileCollectionFactory, executorFactory).forContext(resolver, fileCollectionFactory, instantiator.decorateLenient(), TestUtil.objectFactory())
+    def factory =
+        DefaultExecActionFactory
+            .of(resolver, fileCollectionFactory, executorFactory, TestFiles.tmpDirTemporaryFileProvider(tmpDir.root))
+            .forContext(resolver, fileCollectionFactory, instantiator.decorateLenient(), TestUtil.objectFactory())
 
     def javaexec() {
         File testFile = tmpDir.file("someFile")
@@ -42,7 +45,7 @@ class DefaultExecActionFactoryTest extends ConcurrentSpec {
         when:
         ExecResult result = factory.javaexec { spec ->
             spec.classpath(files as Object[])
-            spec.main = SomeMain.name
+            spec.mainClass = SomeMain.name
             spec.args testFile.absolutePath
         }
 
@@ -54,7 +57,7 @@ class DefaultExecActionFactoryTest extends ConcurrentSpec {
     def javaexecWithNonZeroExitValueShouldThrowException() {
         when:
         factory.javaexec { spec ->
-            spec.main = 'org.gradle.UnknownMain'
+            spec.mainClass = 'org.gradle.UnknownMain'
         }
 
         then:
@@ -64,7 +67,7 @@ class DefaultExecActionFactoryTest extends ConcurrentSpec {
     def javaexecWithNonZeroExitValueAndIgnoreExitValueShouldNotThrowException() {
         when:
         ExecResult result = factory.javaexec { spec ->
-            spec.main = 'org.gradle.UnknownMain'
+            spec.mainClass = 'org.gradle.UnknownMain'
             spec.ignoreExitValue = true
         }
 

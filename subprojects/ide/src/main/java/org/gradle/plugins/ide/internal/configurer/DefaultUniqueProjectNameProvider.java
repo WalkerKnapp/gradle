@@ -31,7 +31,8 @@ public class DefaultUniqueProjectNameProvider implements UniqueProjectNameProvid
 
     @Override
     public String getUniqueName(Project project) {
-        String uniqueName = getDeduplicatedNames().get(projectRegistry.stateFor(project));
+        ProjectState projectState = projectRegistry.stateFor(project);
+        String uniqueName = getDeduplicatedNames().get(projectState);
         if (uniqueName != null) {
             return uniqueName;
         }
@@ -50,6 +51,12 @@ public class DefaultUniqueProjectNameProvider implements UniqueProjectNameProvid
         @Override
         public String getName(ProjectState element) {
             return element.getName();
+        }
+
+        @Override
+        public String getIdentityName(ProjectState element) {
+            String identityName = element.getIdentityPath().getName();
+            return identityName != null ? identityName : element.getName();
         }
 
         @Override

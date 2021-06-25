@@ -26,7 +26,7 @@ import org.gradle.workers.fixtures.WorkerExecutorFixture
 import org.junit.Assume
 
 import static org.gradle.api.internal.file.TestFiles.systemSpecificAbsolutePath
-import static org.gradle.util.TextUtil.normaliseFileSeparators
+import static org.gradle.util.internal.TextUtil.normaliseFileSeparators
 
 @IntegrationTestTimeout(180)
 class WorkerDaemonIntegrationTest extends AbstractWorkerExecutorIntegrationTest {
@@ -57,7 +57,7 @@ class WorkerDaemonIntegrationTest extends AbstractWorkerExecutorIntegrationTest 
         workActionThatPrintsWorkingDirectory.writeToBuildFile()
         buildFile << """
             task runInWorker(type: WorkerTask) {
-                isolationMode = IsolationMode.PROCESS
+                isolationMode = 'processIsolation'
                 workActionClass = ${workActionThatPrintsWorkingDirectory.name}.class
             }
         """
@@ -86,7 +86,7 @@ class WorkerDaemonIntegrationTest extends AbstractWorkerExecutorIntegrationTest 
         workActionThatPrintsWorkingDirectory.writeToBuildFile()
         buildFile << """
             task runInWorker(type: WorkerTask) {
-                isolationMode = IsolationMode.PROCESS
+                isolationMode = 'processIsolation'
                 workActionClass = ${workActionThatPrintsWorkingDirectory.name}.class
                 def workDirPath = project.file("unsupported")
                 additionalForkOptions = { it.workingDir = workDirPath }
@@ -123,7 +123,7 @@ class WorkerDaemonIntegrationTest extends AbstractWorkerExecutorIntegrationTest 
             import org.gradle.internal.jvm.Jvm
 
             task runInDaemon(type: WorkerTask) {
-                isolationMode = IsolationMode.PROCESS
+                isolationMode = 'processIsolation'
                 workActionClass = ${workActionThatVerifiesOptions.name}.class
                 additionalForkOptions = { options ->
                     options.with {
@@ -155,7 +155,7 @@ class WorkerDaemonIntegrationTest extends AbstractWorkerExecutorIntegrationTest 
 
         buildFile << """
             task runInDaemon(type: WorkerTask) {
-                isolationMode = IsolationMode.PROCESS
+                isolationMode = 'processIsolation'
                 workActionClass = ${workAction.name}.class
                 additionalForkOptions = { options ->
                     options.executable = new File('${differentJavacExecutablePath}')
@@ -170,11 +170,36 @@ class WorkerDaemonIntegrationTest extends AbstractWorkerExecutorIntegrationTest 
         assertWorkerExecuted("runInDaemon")
     }
 
+    def "worker application classpath is isolated from the worker process classloader"() {
+        fixture.workActionThatCreatesFiles.action += """
+            try {
+                ${fixture.workActionThatCreatesFiles.name}.class.getClassLoader().loadClass("org.gradle.api.Project");
+            } catch (ClassNotFoundException e) {
+                return;
+            }
+            assert false : "org.gradle.api.Project leaked onto the application classpath";
+        """
+        fixture.withWorkActionClassInBuildSrc()
+
+        buildFile << """
+            task runInDaemon(type: WorkerTask) {
+                isolationMode = 'processIsolation'
+                workActionClass = ${fixture.workActionThatCreatesFiles.name}.class
+            }
+        """
+
+        when:
+        succeeds("runInDaemon")
+
+        then:
+        assertWorkerExecuted("runInDaemon")
+    }
+
     WorkerExecutorFixture.WorkActionClass getWorkActionThatVerifiesExecutable(Jvm differentJvm) {
         def workerClass = fixture.getWorkActionThatCreatesFiles("ExecutableVerifyingWorkAction")
         workerClass.imports.add("java.net.URL")
         workerClass.action += """
-            assert new File('${normaliseFileSeparators(differentJvm.jre.homeDir.absolutePath)}').canonicalPath.equals(new File(System.getProperty("java.home")).canonicalPath);
+            assert new File('${normaliseFileSeparators(differentJvm.jre.absolutePath)}').canonicalPath.equals(new File(System.getProperty("java.home")).canonicalPath);
         """
         return workerClass
     }

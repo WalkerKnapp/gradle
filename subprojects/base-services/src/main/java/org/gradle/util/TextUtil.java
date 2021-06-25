@@ -25,8 +25,17 @@ import org.gradle.internal.SystemProperties;
 import javax.annotation.Nullable;
 import java.io.File;
 import java.util.Arrays;
+import java.util.Locale;
 import java.util.regex.Pattern;
 
+/**
+ * This class is only here to maintain binary compatibility with existing plugins.
+ * <p>
+ * Plugins should prefer external frameworks over this class.
+ *
+ * @deprecated Will be removed in Gradle 8.0.
+ */
+@Deprecated
 public class TextUtil {
     private static final Pattern WHITESPACE = Pattern.compile("\\s*");
     private static final Pattern UPPER_CASE = Pattern.compile("(?=\\p{Upper})");
@@ -190,5 +199,20 @@ public class TextUtil {
 
     public static String camelToKebabCase(String camelCase) {
         return KEBAB_JOINER.join(Iterables.transform(Arrays.asList(UPPER_CASE.split(camelCase)), TO_LOWERCASE));
+    }
+
+    /**
+     * This method should be used when making strings lowercase that
+     * could be affected by locale differences. This method always uses an
+     * English locale.
+     *
+     * @param s string to be made lowercase
+     * @return a lowercase string that ignores locale
+     *
+     * @see <a href="https://issues.gradle.org/browse/GRADLE-3470">GRADLE-3470</a>
+     * @see <a href="https://haacked.com/archive/2012/07/05/turkish-i-problem-and-why-you-should-care.aspx/">Turkish i problem</a>
+     */
+    public static String toLowerCaseLocaleSafe(String s) {
+        return s.toLowerCase(Locale.ENGLISH);
     }
 }

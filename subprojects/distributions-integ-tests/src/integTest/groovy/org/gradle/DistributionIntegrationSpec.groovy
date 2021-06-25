@@ -21,7 +21,7 @@ import org.apache.commons.io.IOUtils
 import org.gradle.integtests.fixtures.AbstractIntegrationSpec
 import org.gradle.test.fixtures.archive.JarTestFixture
 import org.gradle.test.fixtures.file.TestFile
-import org.gradle.util.GUtil
+import org.gradle.util.internal.GUtil
 import org.gradle.util.GradleVersion
 import org.gradle.util.PreconditionVerifier
 import org.junit.Rule
@@ -37,7 +37,7 @@ import static org.hamcrest.MatcherAssert.assertThat
 
 abstract class DistributionIntegrationSpec extends AbstractIntegrationSpec {
 
-    protected static final THIRD_PARTY_LIB_COUNT = 140
+    protected static final THIRD_PARTY_LIB_COUNT = 144
 
     @Rule public final PreconditionVerifier preconditionVerifier = new PreconditionVerifier()
 
@@ -51,14 +51,14 @@ abstract class DistributionIntegrationSpec extends AbstractIntegrationSpec {
      * Change this whenever you add or remove subprojects for distribution core modules (lib/).
      */
     int getCoreLibJarsCount() {
-        35
+        38
     }
 
     /**
      * Change this whenever you add or remove subprojects for distribution-packaged plugins (lib/plugins).
      */
     int getPackagedPluginsJarCount() {
-        50
+        45
     }
 
     /**
@@ -74,7 +74,10 @@ abstract class DistributionIntegrationSpec extends AbstractIntegrationSpec {
 
     def "distribution size should not exceed a certain number"() {
         expect:
-        getZip().size() <= getMaxDistributionSizeBytes()
+        def size = getZip().size()
+
+        println("######## Distribution size ${size}")
+        size <= getMaxDistributionSizeBytes()
     }
 
     def "no duplicate entries"() {

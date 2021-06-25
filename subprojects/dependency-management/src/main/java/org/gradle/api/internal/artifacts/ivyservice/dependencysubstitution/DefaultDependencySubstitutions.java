@@ -75,7 +75,7 @@ public class DefaultDependencySubstitutions implements DependencySubstitutionsIn
     private final NotationParser<Object, Capability> capabilityNotationParser;
 
     private MutationValidator mutationValidator = MutationValidator.IGNORE;
-    private boolean hasDependencySubstitutionRule;
+    private boolean rulesMayAddProjectDependency;
 
     public static DefaultDependencySubstitutions forResolutionStrategy(ComponentIdentifierFactory componentIdentifierFactory,
                                                                        NotationParser<Object, ComponentSelector> moduleSelectorNotationParser,
@@ -140,8 +140,8 @@ public class DefaultDependencySubstitutions implements DependencySubstitutionsIn
     }
 
     @Override
-    public boolean hasRules() {
-        return hasDependencySubstitutionRule;
+    public boolean rulesMayAddProjectDependency() {
+        return rulesMayAddProjectDependency;
     }
 
     @Override
@@ -152,7 +152,7 @@ public class DefaultDependencySubstitutions implements DependencySubstitutionsIn
     protected void addSubstitution(Action<? super DependencySubstitution> rule, boolean projectInvolved) {
         addRule(rule);
         if (projectInvolved) {
-            hasDependencySubstitutionRule = true;
+            rulesMayAddProjectDependency = true;
         }
     }
 
@@ -164,7 +164,7 @@ public class DefaultDependencySubstitutions implements DependencySubstitutionsIn
     @Override
     public DependencySubstitutions all(Action<? super DependencySubstitution> rule) {
         addRule(rule);
-        hasDependencySubstitutionRule = true;
+        rulesMayAddProjectDependency = true;
         return this;
     }
 
@@ -234,32 +234,41 @@ public class DefaultDependencySubstitutions implements DependencySubstitutionsIn
 
             @Override
             public Substitution using(ComponentSelector notation) {
-                with(notation);
-                return this;
-            }
-
-            @Override
-            public void with(ComponentSelector substitute) {
-                DefaultDependencySubstitution.validateTarget(substitute);
+                DefaultDependencySubstitution.validateTarget(notation);
 
                 boolean projectInvolved = false;
-                if (substituted instanceof ProjectComponentSelector || substitute instanceof ProjectComponentSelector) {
+                if (substituted instanceof ProjectComponentSelector || notation instanceof ProjectComponentSelector) {
                     // A project is involved, need to be aware of it
                     projectInvolved = true;
                 }
 
                 if (substituted instanceof UnversionedModuleComponentSelector) {
                     final ModuleIdentifier moduleId = ((UnversionedModuleComponentSelector) substituted).getModuleIdentifier();
-                    if (substitute instanceof ModuleComponentSelector) {
-                        if (((ModuleComponentSelector) substitute).getModuleIdentifier().equals(moduleId)) {
+                    if (notation instanceof ModuleComponentSelector) {
+                        if (((ModuleComponentSelector) notation).getModuleIdentifier().equals(moduleId)) {
                             // This substitution is effectively a force
                             substitutionReason = substitutionReason.markAsEquivalentToForce();
                         }
                     }
-                    addSubstitution(new ModuleMatchDependencySubstitutionAction(substitutionReason, moduleId, substitute, () -> artifactAction), projectInvolved);
+                    addSubstitution(new ModuleMatchDependencySubstitutionAction(substitutionReason, moduleId, notation, () -> artifactAction), projectInvolved);
                 } else {
-                    addSubstitution(new ExactMatchDependencySubstitutionAction(substitutionReason, substituted, substitute, () -> artifactAction), projectInvolved);
+                    addSubstitution(new ExactMatchDependencySubstitutionAction(substitutionReason, substituted, notation, () -> artifactAction), projectInvolved);
                 }
+                return this;
+            }
+
+            @Override
+            @Deprecated
+            public void with(ComponentSelector substitute) {
+                // Do not nag for 7.1 as this introduces a performance regression with Android plugin
+                // Revisit when upgrading Android plugin
+                /*DeprecationLogger.deprecateMethod(Substitution.class, "with(ComponentSelector)")
+                    .replaceWith("using(ComponentSelector)")
+                    .willBeRemovedInGradle8()
+                    .withUpgradeGuideSection(7, "dependency_substitutions_with")
+                    .nagUser();*/
+
+                using(substitute);
             }
         };
     }

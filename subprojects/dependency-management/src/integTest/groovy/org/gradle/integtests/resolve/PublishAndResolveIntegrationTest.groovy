@@ -19,7 +19,7 @@ package org.gradle.integtests.resolve
 import org.gradle.integtests.fixtures.AbstractDependencyResolutionTest
 import org.gradle.integtests.fixtures.ToBeFixedForConfigurationCache
 import org.gradle.test.fixtures.ivy.IvyFileRepository
-import org.gradle.util.TextUtil
+import org.gradle.util.internal.TextUtil
 
 class PublishAndResolveIntegrationTest extends AbstractDependencyResolutionTest {
     def setup() {
@@ -71,33 +71,6 @@ class PublishAndResolveIntegrationTest extends AbstractDependencyResolutionTest 
         expect:
         succeeds ":child:${resolveTask}"
         versionIsCopiedAndExists("api", "1.1", "child/")
-    }
-
-    @ToBeFixedForConfigurationCache
-    def "can resolve static dependency published by UploadArchives task in another project in the same build"() {
-        settingsFile << """
-            include ':child'
-        """
-
-        given:
-        buildFile << """
-            uploadArchives {
-                repositories {
-                    ivy {
-                        url '${ivyRepo.uri}'
-                    }
-                }
-            }
-            project(':child') {
-                ${taskWhichResolves('root', '1.9')}
-                ${resolveTask}.dependsOn ":uploadArchives"
-            }
-        """
-
-        expect:
-        executer.expectDeprecationWarning()
-        succeeds ":child:${resolveTask}"
-        versionIsCopiedAndExists("root", "1.9", "child/")
     }
 
     @ToBeFixedForConfigurationCache

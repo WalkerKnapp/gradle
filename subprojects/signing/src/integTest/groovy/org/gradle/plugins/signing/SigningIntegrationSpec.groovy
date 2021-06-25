@@ -23,7 +23,7 @@ import org.junit.Rule
 
 import java.nio.file.Path
 
-import static org.gradle.util.TextUtil.escapeString
+import static org.gradle.util.internal.TextUtil.escapeString
 
 abstract class SigningIntegrationSpec extends AbstractIntegrationSpec {
     enum SignMethod {
@@ -43,7 +43,10 @@ abstract class SigningIntegrationSpec extends AbstractIntegrationSpec {
         buildFile << """
             apply plugin: 'java'
             apply plugin: 'signing'
-            archivesBaseName = '$artifactId'
+
+            base {
+                archivesName = '$artifactId'
+            }
             group = 'sign'
             version = '$version'
         """
@@ -130,30 +133,6 @@ abstract class SigningIntegrationSpec extends AbstractIntegrationSpec {
         }
     }
 
-    String uploadArchives() {
-        return """
-            apply plugin: "maven"
-            uploadArchives {
-                repositories {
-                    mavenDeployer {
-                        repository(url: "file://\$buildDir/m2Repo/")
-                    }
-                    flatDir {
-                        name "fileRepo"
-                        dirs "build/fileRepo"
-                    }
-                    ivy {
-                        url "file://\$buildDir/ivyRepo/"
-                        patternLayout {
-                            artifact "[artifact]-[revision](.[ext])"
-                            ivy "[artifact]-[revision](.[ext])"
-                        }
-                    }
-                }
-            }
-        """
-    }
-
     TestFile m2RepoFile(String name) {
         file("build", "m2Repo", "sign", artifactId, version, name)
     }
@@ -189,16 +168,6 @@ abstract class SigningIntegrationSpec extends AbstractIntegrationSpec {
         assert !m2RepoFile("${jarFileName}.asc").exists()
         assert !ivyRepoFile("${jarFileName - '.jar'}.asc").exists()
         assert !fileRepoFile("${jarFileName - '.jar'}.asc").exists()
-    }
-
-    String signDeploymentPom() {
-        return """
-            uploadArchives {
-                repositories.mavenDeployer {
-                    beforeDeployment { signing.signPom(it) }
-                }
-            }
-        """
     }
 
     TestFile pom(String name = "sign-1.0") {

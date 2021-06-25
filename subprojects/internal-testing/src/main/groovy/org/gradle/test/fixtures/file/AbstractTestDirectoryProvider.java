@@ -32,7 +32,7 @@ import java.util.regex.Pattern;
  * A JUnit rule which provides a unique temporary folder for the test.
  *
  * Note: to avoid 260 char path length limitation on Windows, we should keep the test dir path as short as possible,
- * ideally < 90 chars (from repo root to test dir root, e.g. "subprojects/core/build/tmp/test files/{TestClass}/{testMethod}/qqlj8"),
+ * ideally < 90 chars (from repo root to test dir root, e.g. "core/build/tmp/test files/{TestClass}/{testMethod}/qqlj8"),
  * or < 40 chars for "{TestClass}/{testMethod}/qqlj8"
  */
 abstract class AbstractTestDirectoryProvider implements TestRule, TestDirectoryProvider {
@@ -41,7 +41,7 @@ abstract class AbstractTestDirectoryProvider implements TestRule, TestDirectoryP
 
     private static final Random RANDOM = new Random();
     private static final int ALL_DIGITS_AND_LETTERS_RADIX = 36;
-    private static final int MAX_RANDOM_PART_VALUE = Integer.valueOf("zzzzz", ALL_DIGITS_AND_LETTERS_RADIX);
+    private static final int MAX_RANDOM_PART_VALUE = Integer.parseInt("zzzzz", ALL_DIGITS_AND_LETTERS_RADIX);
     private static final Pattern WINDOWS_RESERVED_NAMES = Pattern.compile("(con)|(prn)|(aux)|(nul)|(com\\d)|(lpt\\d)", Pattern.CASE_INSENSITIVE);
 
     private String prefix;
@@ -124,7 +124,7 @@ abstract class AbstractTestDirectoryProvider implements TestRule, TestDirectoryP
 
         private String cleanupErrorMessage() {
             return "Couldn't delete test dir for `" + displayName() + "` (test is holding files open). "
-                + "In order to find out which files are held open you may find http://file-leak-detector.kohsuke.org/ useful.";
+                + "In order to find out which files are held open, you may find `org.gradle.integtests.fixtures.executer.GradleExecuter.withFileLeakDetection` useful.";
         }
 
         private String displayName() {
@@ -195,5 +195,9 @@ abstract class AbstractTestDirectoryProvider implements TestRule, TestDirectoryP
 
     public TestFile createDir(Object... path) {
         return file(path).createDir();
+    }
+
+    public TestFile getRoot() {
+        return root;
     }
 }

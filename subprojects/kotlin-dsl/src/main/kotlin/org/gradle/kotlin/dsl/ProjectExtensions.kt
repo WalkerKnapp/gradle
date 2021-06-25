@@ -16,7 +16,6 @@
 
 package org.gradle.kotlin.dsl
 
-import org.gradle.api.Incubating
 import org.gradle.api.NamedDomainObjectContainer
 import org.gradle.api.Plugin
 import org.gradle.api.Project
@@ -28,12 +27,14 @@ import org.gradle.api.artifacts.dsl.RepositoryHandler
 import org.gradle.api.initialization.dsl.ScriptHandler
 
 import org.gradle.api.internal.artifacts.dependencies.DefaultSelfResolvingDependency
+import org.gradle.api.internal.artifacts.dsl.dependencies.DependencyFactory
 import org.gradle.api.internal.file.FileCollectionInternal
 
 import org.gradle.api.plugins.Convention
 import org.gradle.api.plugins.PluginAware
 
 import org.gradle.api.tasks.TaskContainer
+import org.gradle.internal.component.local.model.OpaqueComponentIdentifier
 
 import org.gradle.kotlin.dsl.provider.fileCollectionOf
 import org.gradle.kotlin.dsl.provider.gradleKotlinDslOf
@@ -80,11 +81,15 @@ inline fun <reified T : Plugin<Project>> Project.apply() =
  * Executes the given configuration block against the [plugin convention]
  * [Convention.getPlugin] or extension of the specified type.
  *
+ * Note, that the concept of conventions is deprecated and scheduled for
+ * removal in Gradle 8.
+ *
  * @param T the plugin convention type.
  * @param configuration the configuration block.
  * @see [Convention.getPlugin]
  */
 inline fun <reified T : Any> Project.configure(noinline configuration: T.() -> Unit): Unit =
+    @Suppress("deprecation")
     typeOf<T>().let { type ->
         convention.findByType(type)?.let(configuration)
             ?: convention.findPlugin<T>()?.let(configuration)
@@ -94,8 +99,12 @@ inline fun <reified T : Any> Project.configure(noinline configuration: T.() -> U
 
 /**
  * Returns the plugin convention or extension of the specified type.
+ *
+ * Note, that the concept of conventions is deprecated and scheduled for
+ * removal in Gradle 8.
  */
 inline fun <reified T : Any> Project.the(): T =
+    @Suppress("deprecation")
     typeOf<T>().let { type ->
         convention.findByType(type)
             ?: convention.findPlugin(T::class.java)
@@ -105,11 +114,14 @@ inline fun <reified T : Any> Project.the(): T =
 
 /**
  * Returns the plugin convention or extension of the specified type.
+ *
+ * Note, that the concept of conventions is deprecated and scheduled for
+ * removal in Gradle 8.
  */
 fun <T : Any> Project.the(extensionType: KClass<T>): T =
-    convention.findByType(extensionType.java)
-        ?: convention.findPlugin(extensionType.java)
-        ?: convention.getByType(extensionType.java)
+    @Suppress("deprecation") convention.findByType(extensionType.java)
+        ?: @Suppress("deprecation") convention.findPlugin(extensionType.java)
+        ?: @Suppress("deprecation") convention.getByType(extensionType.java)
 
 
 /**
@@ -216,7 +228,7 @@ inline fun <reified T> Project.container(): NamedDomainObjectContainer<T> =
  *
  * @see [Project.container]
  */
-inline fun <reified T> Project.container(noinline factory: (String) -> T): NamedDomainObjectContainer<T> =
+inline fun <reified T : Any> Project.container(noinline factory: (String) -> T): NamedDomainObjectContainer<T> =
     container(T::class.java, factory)
 
 
@@ -229,6 +241,7 @@ inline fun <reified T> Project.container(noinline factory: (String) -> T): Named
  */
 fun Project.gradleKotlinDsl(): Dependency =
     DefaultSelfResolvingDependency(
+        OpaqueComponentIdentifier(DependencyFactory.ClassPathNotation.GRADLE_KOTLIN_DSL),
         project.fileCollectionOf(
             gradleKotlinDslOf(project),
             "gradleKotlinDsl"
@@ -256,6 +269,5 @@ fun Project.gradleKotlinDsl(): Dependency =
     "The plugins {} block must not be used here. " + "If you need to apply a plugin imperatively, please use apply<PluginType>() or apply(plugin = \"id\") instead.",
     level = DeprecationLevel.ERROR
 )
-@Incubating
 fun Project.plugins(@Suppress("unused_parameter") block: PluginDependenciesSpec.() -> Unit): Nothing =
     invalidPluginsCall()

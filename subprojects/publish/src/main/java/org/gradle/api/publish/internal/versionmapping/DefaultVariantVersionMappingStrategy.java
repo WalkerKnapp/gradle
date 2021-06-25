@@ -18,21 +18,31 @@ package org.gradle.api.publish.internal.versionmapping;
 import org.gradle.api.artifacts.Configuration;
 import org.gradle.api.artifacts.ConfigurationContainer;
 import org.gradle.api.artifacts.ModuleVersionIdentifier;
+import org.gradle.api.artifacts.component.ComponentSelector;
 import org.gradle.api.artifacts.component.ModuleComponentSelector;
+import org.gradle.api.artifacts.component.ProjectComponentIdentifier;
+import org.gradle.api.artifacts.component.ProjectComponentSelector;
 import org.gradle.api.artifacts.result.DependencyResult;
 import org.gradle.api.artifacts.result.ResolutionResult;
 import org.gradle.api.artifacts.result.ResolvedComponentResult;
 import org.gradle.api.artifacts.result.ResolvedDependencyResult;
+import org.gradle.api.internal.artifacts.ivyservice.projectmodule.ProjectDependencyPublicationResolver;
+import org.gradle.api.internal.project.ProjectInternal;
+import org.gradle.api.internal.project.ProjectRegistry;
 
 import java.util.Set;
 
 public class DefaultVariantVersionMappingStrategy implements VariantVersionMappingStrategyInternal {
     private final ConfigurationContainer configurations;
+    private final ProjectDependencyPublicationResolver projectResolver;
+    private final ProjectRegistry<ProjectInternal> projectRegistry;
     private boolean usePublishedVersions;
     private Configuration targetConfiguration;
 
-    public DefaultVariantVersionMappingStrategy(ConfigurationContainer configurations) {
+    public DefaultVariantVersionMappingStrategy(ConfigurationContainer configurations, ProjectDependencyPublicationResolver projectResolver, ProjectRegistry<ProjectInternal> projectRegistry) {
         this.configurations = configurations;
+        this.projectResolver = projectResolver;
+        this.projectRegistry = projectRegistry;
     }
 
     @Override
@@ -52,7 +62,7 @@ public class DefaultVariantVersionMappingStrategy implements VariantVersionMappi
     }
 
     @Override
-    public ModuleVersionIdentifier maybeResolveVersion(String group, String module) {
+    public ModuleVersionIdentifier maybeResolveVersion(String group, String module, String projectPath) {
         if (usePublishedVersions && targetConfiguration != null) {
             ResolutionResult resolutionResult = targetConfiguration
                 .getIncoming()
@@ -71,11 +81,26 @@ public class DefaultVariantVersionMappingStrategy implements VariantVersionMappi
             Set<? extends DependencyResult> allDependencies = resolutionResult.getAllDependencies();
             for (DependencyResult dependencyResult : allDependencies) {
                 if (dependencyResult instanceof ResolvedDependencyResult) {
-                    if (dependencyResult.getRequested() instanceof ModuleComponentSelector) {
-                        ModuleComponentSelector requested = (ModuleComponentSelector) dependencyResult.getRequested();
+                    ComponentSelector rcs = dependencyResult.getRequested();
+                    ResolvedComponentResult selected = null;
+                    if (rcs instanceof ModuleComponentSelector) {
+                        ModuleComponentSelector requested = (ModuleComponentSelector) rcs;
                         if (requested.getGroup().equals(group) && requested.getModule().equals(module)) {
-                            return ((ResolvedDependencyResult) dependencyResult).getSelected().getModuleVersion();
+                            selected = ((ResolvedDependencyResult) dependencyResult).getSelected();
                         }
+                    } else if (rcs instanceof ProjectComponentSelector) {
+                        ProjectComponentSelector pcs = (ProjectComponentSelector) rcs;
+                        if (pcs.getProjectPath().equals(projectPath)) {
+                            selected = ((ResolvedDependencyResult) dependencyResult).getSelected();
+                        }
+                    }
+                    // Match found - need to make sure that if the selection is a project, we use its publication identity
+                    if (selected != null) {
+                        if (selected.getId() instanceof ProjectComponentIdentifier) {
+                            ProjectComponentIdentifier projectId = (ProjectComponentIdentifier) selected.getId();
+                            return projectResolver.resolve(ModuleVersionIdentifier.class, projectRegistry.getProject(projectId.getProjectPath()));
+                        }
+                        return selected.getModuleVersion();
                     }
                 }
             }

@@ -29,33 +29,22 @@ class JavaExecToolchainIntegrationTest extends AbstractPluginIntegrationTest {
     @IgnoreIf({ AvailableJavaHomes.differentJdk == null })
     def "can manually set java launcher via  #type toolchain on java exec task #jdk"() {
         buildFile << """
-            import org.gradle.jvm.toolchain.internal.JavaToolchainQueryService
-            import org.gradle.jvm.toolchain.internal.DefaultToolchainSpec
-
             plugins {
                 id 'java'
                 id 'application'
             }
 
-            abstract class ApplyTestToolchain implements Plugin<Project> {
-                @javax.inject.Inject
-                abstract JavaToolchainQueryService getQueryService()
-
-                void apply(Project project) {
-                    def filter = project.objects.newInstance(DefaultToolchainSpec)
-                    filter.languageVersion = JavaVersion.${jdk.javaVersion.name()}
-                    def toolchain = getQueryService().findMatchingToolchain(filter)
-
-                    project.tasks.withType(JavaCompile) {
-                        javaCompiler = toolchain.map({it.javaCompiler})
-                    }
-                    project.tasks.withType(JavaExec) {
-                        javaLauncher = toolchain.map({it.javaLauncher})
-                    }
+            compileJava {
+                javaCompiler = javaToolchains.compilerFor {
+                    languageVersion = JavaLanguageVersion.of(${jdk.javaVersion.majorVersion})
                 }
             }
 
-            apply plugin: ApplyTestToolchain
+            run {
+                javaLauncher = javaToolchains.launcherFor {
+                    languageVersion = JavaLanguageVersion.of(${jdk.javaVersion.majorVersion})
+                }
+            }
 
             application {
                 mainClass = 'App'
@@ -66,7 +55,6 @@ class JavaExecToolchainIntegrationTest extends AbstractPluginIntegrationTest {
 
         when:
         result = executer
-            .withArgument("-Porg.gradle.java.installations.auto-detect=false")
             .withArgument("-Porg.gradle.java.installations.paths=" + jdk.javaHome.absolutePath)
             .withArgument("--info")
             .withTasks("run")
@@ -93,7 +81,7 @@ class JavaExecToolchainIntegrationTest extends AbstractPluginIntegrationTest {
 
             java {
                 toolchain {
-                    languageVersion = JavaVersion.toVersion(${someJdk.javaVersion.majorVersion})
+                    languageVersion = JavaLanguageVersion.of(${someJdk.javaVersion.majorVersion})
                 }
             }
 
@@ -106,7 +94,6 @@ class JavaExecToolchainIntegrationTest extends AbstractPluginIntegrationTest {
 
         when:
         result = executer
-            .withArgument("-Porg.gradle.java.installations.auto-detect=false")
             .withArgument("-Porg.gradle.java.installations.paths=" + someJdk.javaHome.absolutePath)
             .withArgument("--info")
             .withTasks("run")

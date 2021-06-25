@@ -24,6 +24,7 @@ import org.gradle.api.internal.file.FileResolver;
 import org.gradle.api.logging.Logger;
 import org.gradle.api.logging.Logging;
 import org.gradle.internal.resource.local.FileResourceListener;
+import org.gradle.util.internal.GFileUtils;
 
 import javax.annotation.Nullable;
 import java.io.IOException;
@@ -37,6 +38,7 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
@@ -53,6 +55,7 @@ public class LockFileReaderWriter {
     static final List<String> LOCKFILE_HEADER_LIST = ImmutableList.of("# This is a Gradle generated file for dependency locking.", "# Manual edits can break the build and are not advised.", "# This file is expected to be part of source control.");
     static final String EMPTY_CONFIGURATIONS_ENTRY = "empty=";
     static final String BUILD_SCRIPT_PREFIX = "buildscript-";
+    static final String SETTINGS_SCRIPT_PREFIX = "settings-";
 
     private final Path lockFilesRoot;
     private final DomainObjectContext context;
@@ -71,30 +74,6 @@ public class LockFileReaderWriter {
         }
         this.lockFilesRoot = resolve;
         LOGGER.debug("Lockfiles root: {}", lockFilesRoot);
-    }
-
-    public void writeLockFile(String configurationName, List<String> resolvedModules) {
-        checkValidRoot(configurationName);
-
-        makeLockfilesRoot();
-        List<String> content = new ArrayList<>(50);
-        content.addAll(LOCKFILE_HEADER_LIST);
-        content.addAll(resolvedModules);
-        try {
-            Files.write(lockFilesRoot.resolve(decorate(configurationName) + FILE_SUFFIX), content, CHARSET);
-        } catch (IOException e) {
-            throw new RuntimeException("Unable to write lock file", e);
-        }
-    }
-
-    private void makeLockfilesRoot() {
-        if (!Files.exists(lockFilesRoot)) {
-            try {
-                Files.createDirectories(lockFilesRoot);
-            } catch (IOException e) {
-                throw new RuntimeException("Issue creating dependency-lock directory", e);
-            }
-        }
     }
 
     @Nullable
@@ -120,6 +99,9 @@ public class LockFileReaderWriter {
 
     private String decorate(String configurationName) {
         if (context.isScript()) {
+            if (context.isRootScript()) {
+                return SETTINGS_SCRIPT_PREFIX + configurationName;
+            }
             return BUILD_SCRIPT_PREFIX + configurationName;
         } else {
             return configurationName;
@@ -218,12 +200,27 @@ public class LockFileReaderWriter {
         checkValidRoot();
         Path lockfilePath = getUniqueLockfilePath();
 
+        if (lockState.isEmpty()) {
+            // Remove the file when no lock state
+            GFileUtils.deleteQuietly(lockfilePath.toFile());
+            return;
+        }
+
         // Revert mapping
         Map<String, List<String>> dependencyToConfigurations = new TreeMap<>();
         List<String> emptyConfigurations = new ArrayList<>();
         mapLockStateFromDependencyToConfiguration(lockState, dependencyToConfigurations, emptyConfigurations);
 
         writeUniqueLockfile(lockfilePath, dependencyToConfigurations, emptyConfigurations);
+
+        cleanupLegacyLockFiles(lockState.keySet());
+    }
+
+    private void cleanupLegacyLockFiles(Set<String> lockedConfigurations) {
+        lockedConfigurations.stream()
+            .map(f -> lockFilesRoot.resolve(decorate(f) + FILE_SUFFIX))
+            .map(Path::toFile)
+            .forEach(GFileUtils::deleteQuietly);
     }
 
     private void writeUniqueLockfile(Path lockfilePath, Map<String, List<String>> dependencyToConfigurations, List<String> emptyConfigurations) {

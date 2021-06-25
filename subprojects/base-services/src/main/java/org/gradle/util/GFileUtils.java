@@ -41,6 +41,14 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.zip.Checksum;
 
+/**
+ * This class is only here to maintain binary compatibility with existing plugins.
+ * <p>
+ * Plugins should prefer java.io, java.nio or external packages over this class.
+ *
+ * @deprecated Will be removed in Gradle 8.0.
+ */
+@Deprecated
 public class GFileUtils {
 
     public static FileInputStream openInputStream(File file) {
@@ -111,6 +119,11 @@ public class GFileUtils {
         }
     }
 
+    /**
+     * If the destination file exists, then this method will overwrite it.
+     *
+     * @see FileUtils#copyFile(File, File)
+     */
     public static void copyFile(File source, File destination) {
         try {
             FileUtils.copyFile(source, destination);
@@ -213,6 +226,10 @@ public class GFileUtils {
         return FileUtils.deleteQuietly(file);
     }
 
+    /**
+     * Tail reading exception.
+     */
+    @Deprecated
     public static class TailReadingException extends RuntimeException {
         public TailReadingException(Throwable throwable) {
             super(throwable);
@@ -220,6 +237,8 @@ public class GFileUtils {
     }
 
     /**
+     * Returns the tail of a file.
+     *
      * @param file to read from tail
      * @param maxLines max lines to read
      * @return tail content

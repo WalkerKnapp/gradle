@@ -25,6 +25,7 @@ import org.gradle.api.artifacts.transform.TransformOutputs
 import org.gradle.api.artifacts.transform.TransformParameters
 import org.gradle.api.artifacts.transform.VariantTransformConfigurationException
 import org.gradle.api.attributes.Attribute
+import org.gradle.api.internal.DocumentationRegistry
 import org.gradle.api.internal.DomainObjectContext
 import org.gradle.api.internal.DynamicObjectAware
 import org.gradle.api.internal.file.FileCollectionFactory
@@ -33,7 +34,7 @@ import org.gradle.api.internal.initialization.RootScriptDomainObjectContext
 import org.gradle.api.internal.tasks.properties.InspectionScheme
 import org.gradle.api.internal.tasks.properties.PropertyWalker
 import org.gradle.api.plugins.ExtensionAware
-import org.gradle.internal.fingerprint.FileCollectionFingerprinterRegistry
+import org.gradle.internal.execution.fingerprint.InputFingerprinter
 import org.gradle.internal.hash.ClassLoaderHierarchyHasher
 import org.gradle.internal.hash.HashCode
 import org.gradle.internal.isolation.TestIsolatableFactory
@@ -50,6 +51,8 @@ import spock.lang.Specification
 import javax.inject.Inject
 
 class DefaultVariantTransformRegistryTest extends Specification {
+    private final DocumentationRegistry documentationRegistry = new DocumentationRegistry()
+
     public static final TEST_ATTRIBUTE = Attribute.of("TEST", String)
 
     @Rule
@@ -58,7 +61,7 @@ class DefaultVariantTransformRegistryTest extends Specification {
     def instantiatorFactory = TestUtil.instantiatorFactory()
     def transformerInvocationFactory = Mock(TransformerInvocationFactory)
     def valueSnapshotter = Mock(ValueSnapshotter)
-    def fileCollectionFingerprinterRegistry = Mock(FileCollectionFingerprinterRegistry)
+    def inputFingerprinter = Mock(InputFingerprinter)
     def fileCollectionFactory = Mock(FileCollectionFactory)
     def propertyWalker = Mock(PropertyWalker)
     def inspectionScheme = Stub(InspectionScheme) {
@@ -70,16 +73,17 @@ class DefaultVariantTransformRegistryTest extends Specification {
 
     def isolatableFactory = new TestIsolatableFactory()
     def classLoaderHierarchyHasher = Mock(ClassLoaderHierarchyHasher)
+    def calculatedValueContainerFactory = TestUtil.calculatedValueContainerFactory()
     def attributesFactory = AttributeTestUtil.attributesFactory()
     def registryFactory = new DefaultTransformationRegistrationFactory(
         new TestBuildOperationExecutor(),
         isolatableFactory,
         classLoaderHierarchyHasher,
         transformerInvocationFactory,
-        valueSnapshotter,
         fileCollectionFactory,
         Mock(FileLookup),
-        fileCollectionFingerprinterRegistry,
+        inputFingerprinter,
+        calculatedValueContainerFactory,
         domainObjectContext,
         new ArtifactTransformParameterScheme(
             instantiatorFactory.injectScheme(),
@@ -92,7 +96,8 @@ class DefaultVariantTransformRegistryTest extends Specification {
             inspectionScheme,
             instantiatorFactory.injectScheme()
         ),
-        Stub(ServiceLookup)
+        Stub(ServiceLookup),
+        documentationRegistry
     )
     def registry = new DefaultVariantTransformRegistry(instantiatorFactory, attributesFactory, Stub(ServiceRegistry), registryFactory, instantiatorFactory.injectScheme())
 
@@ -170,10 +175,10 @@ class DefaultVariantTransformRegistryTest extends Specification {
         registration.from.getAttribute(TEST_ATTRIBUTE) == "FROM"
         registration.to.getAttribute(TEST_ATTRIBUTE) == "TO"
         registration.transformationStep.transformer.implementationClass == TestTransform
-        registration.transformationStep.transformer.parameterObject instanceof TestTransform.Parameters
+        registration.transformationStep.transformer.isolatedParameters.supplier.parameterObject instanceof TestTransform.Parameters
     }
 
-    def "creates registration for parametereless action"() {
+    def "creates registration for parameterless action"() {
         when:
         registry.registerTransform(ParameterlessTestTransform) {
             it.from.attribute(TEST_ATTRIBUTE, "FROM")
@@ -186,7 +191,7 @@ class DefaultVariantTransformRegistryTest extends Specification {
         registration.from.getAttribute(TEST_ATTRIBUTE) == "FROM"
         registration.to.getAttribute(TEST_ATTRIBUTE) == "TO"
         registration.transformationStep.transformer.implementationClass == ParameterlessTestTransform
-        registration.transformationStep.transformer.parameterObject == null
+        registration.transformationStep.transformer.isolatedParameters.supplier.parameterObject == null
     }
 
     def "cannot use TransformParameters as parameter type"() {

@@ -17,27 +17,27 @@
 package org.gradle.launcher.daemon.server.health.gc
 
 import org.gradle.api.JavaVersion
-import org.gradle.integtests.fixtures.ContextualMultiVersionTest
-import org.gradle.integtests.fixtures.MultiVersionSpecRunner
 import org.gradle.integtests.fixtures.TargetCoverage
 import org.gradle.integtests.fixtures.ToBeFixedForConfigurationCache
+import org.gradle.integtests.fixtures.compatibility.MultiVersionTest
+import org.gradle.integtests.fixtures.compatibility.MultiVersionTestCategory
 import org.gradle.integtests.fixtures.daemon.DaemonIntegrationSpec
 import org.gradle.integtests.fixtures.daemon.JavaGarbageCollector
+import org.gradle.integtests.fixtures.executer.GradleContextualExecuter
 import org.gradle.launcher.daemon.server.health.DaemonMemoryStatus
-import org.junit.experimental.categories.Category
-import org.junit.runner.RunWith
 
 import static org.gradle.launcher.daemon.server.DaemonStateCoordinator.DAEMON_STOPPING_IMMEDIATELY_MESSAGE
 import static org.gradle.launcher.daemon.server.DaemonStateCoordinator.DAEMON_WILL_STOP_MESSAGE
 
-@Category(ContextualMultiVersionTest.class)
-@RunWith(MultiVersionSpecRunner)
 @TargetCoverage({ garbageCollectors })
+@MultiVersionTest
+@MultiVersionTestCategory
 class GarbageCollectionMonitoringIntegrationTest extends DaemonIntegrationSpec {
     static def version
-    GarbageCollectorUnderTest garbageCollector = version
+    GarbageCollectorUnderTest garbageCollector
 
     def setup() {
+        garbageCollector = version
         executer.withBuildJvmOpts(garbageCollector.configuration.jvmArgs.split(" "))
         executer.withEnvironmentVars(JAVA_TOOL_OPTIONS: "-D${DefaultGarbageCollectionMonitor.DISABLE_POLLING_SYSTEM_PROPERTY}=true -D${DaemonMemoryStatus.ENABLE_PERFORMANCE_MONITORING}=true")
     }
@@ -58,6 +58,11 @@ class GarbageCollectionMonitoringIntegrationTest extends DaemonIntegrationSpec {
 
     def "expires daemon immediately when garbage collector is thrashing"() {
         given:
+        if (JavaVersion.current().isJava9Compatible() && GradleContextualExecuter.isConfigCache()) {
+            // For java.util.concurrent.CountDownLatch being serialized reflectively by configuration cache
+            executer.withArgument('-Dorg.gradle.jvmargs=--add-opens java.base/java.util.concurrent=ALL-UNNAMED --add-opens java.base/java.util.concurrent.locks=ALL-UNNAMED')
+        }
+
         configureGarbageCollectionHeapEventsFor(256, 512, 100, garbageCollector.monitoringStrategy.thrashingThreshold + 0.2)
         waitForImmediateDaemonExpiration()
 

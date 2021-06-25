@@ -16,12 +16,20 @@
 package org.gradle.api.tasks
 
 import org.gradle.integtests.fixtures.AbstractIntegrationSpec
+import org.gradle.integtests.fixtures.DirectoryBuildCacheFixture
 import org.gradle.integtests.fixtures.ToBeFixedForConfigurationCache
+import org.gradle.internal.reflect.problems.ValidationProblemId
+import org.gradle.internal.reflect.validation.ValidationMessageChecker
+import org.gradle.internal.reflect.validation.ValidationTestFor
 import org.gradle.test.fixtures.file.TestFile
-import org.gradle.util.ToBeImplemented
+import org.gradle.util.internal.ToBeImplemented
 import spock.lang.Issue
 
-class IncrementalBuildIntegrationTest extends AbstractIntegrationSpec {
+class IncrementalBuildIntegrationTest extends AbstractIntegrationSpec implements ValidationMessageChecker, DirectoryBuildCacheFixture {
+
+    def setup() {
+        expectReindentedValidationMessage()
+    }
 
     private TestFile writeDirTransformerTask() {
         buildFile << '''
@@ -829,25 +837,23 @@ task b(dependsOn: a)
         result.assertTasksSkipped(":a", ":b")
     }
 
-    @ToBeFixedForConfigurationCache(because = "GradleBuild task")
     def "can share artifacts between builds"() {
         writeTransformerTask()
 
         buildFile << '''
-task otherBuild(type: GradleBuild) {
-    buildFile = 'build.gradle'
-    tasks = ['generate']
-}
-task transform(type: TransformerTask) {
-    dependsOn otherBuild
-    inputFile = file('generated.txt')
-    outputFile = file('out.txt')
-}
-task generate(type: TransformerTask) {
-    inputFile = file('src.txt')
-    outputFile = file('generated.txt')
-}
-'''
+            task otherBuild(type: GradleBuild) {
+                tasks = ['generate']
+            }
+            task transform(type: TransformerTask) {
+                dependsOn otherBuild
+                inputFile = file('generated.txt')
+                outputFile = file('out.txt')
+            }
+            task generate(type: TransformerTask) {
+                inputFile = file('src.txt')
+                outputFile = file('generated.txt')
+            }
+        '''
         file('settings.gradle') << 'rootProject.name = "build"'
         file('src.txt').text = 'content'
 
@@ -1076,8 +1082,11 @@ task generate(type: TransformerTask) {
         output.contains "Task 'b2' file 'output.txt' with 'output-file'"
     }
 
+    @ValidationTestFor(
+        ValidationProblemId.UNKNOWN_IMPLEMENTATION
+    )
     @ToBeFixedForConfigurationCache(because = "ClassNotFoundException: CustomTask")
-    def "task loaded with custom classloader is never up-to-date"() {
+    def "task loaded with custom classloader disables execution optimizations"() {
         file("input.txt").text = "data"
         buildFile << """
             def CustomTask = new GroovyClassLoader(getClass().getClassLoader()).parseClass '''
@@ -1100,17 +1109,123 @@ task generate(type: TransformerTask) {
             }
         """
         when:
+        expectThatExecutionOptimizationDisabledWarningIsDisplayed(executer, implementationUnknown {
+            implementationOfTask(':customTask')
+            unknownClassloader('CustomTask_Decorated')
+            includeLink()
+        })
+        expectThatExecutionOptimizationDisabledWarningIsDisplayed(executer, implementationUnknown {
+            additionalTaskAction(':customTask')
+            unknownClassloader('CustomTask_Decorated')
+            includeLink()
+        })
         succeeds "customTask"
         then:
         noneSkipped()
 
         when:
-        succeeds "customTask", "--info"
+        expectThatExecutionOptimizationDisabledWarningIsDisplayed(executer, implementationUnknown {
+            implementationOfTask(':customTask')
+            unknownClassloader('CustomTask_Decorated')
+            includeLink()
+        })
+        expectThatExecutionOptimizationDisabledWarningIsDisplayed(executer, implementationUnknown {
+            additionalTaskAction(':customTask')
+            unknownClassloader('CustomTask_Decorated')
+            includeLink()
+        })
+        succeeds "customTask"
         then:
         noneSkipped()
-        output.contains "The type of task ':customTask' was loaded with an unknown classloader (class 'CustomTask_Decorated')."
     }
 
+    @ValidationTestFor(
+        ValidationProblemId.UNKNOWN_IMPLEMENTATION
+    )
+    def "can switch between task with implementation from unknown classloader and from known classloader"() {
+        file("input.txt").text = "data"
+        buildFile << """
+            ${customTaskImplementation("CustomTaskFromBuildFile")}
+
+            def CustomTaskFromUnknownClassloader = new GroovyClassLoader(getClass().getClassLoader()).parseClass '''
+                import org.gradle.api.*
+                import org.gradle.api.tasks.*
+
+                ${customTaskImplementation("CustomTaskFromUnknownClassloader")}
+            '''
+
+            def customTaskClass = providers.gradleProperty("unknownClassloader").forUseAtConfigurationTime().isPresent()
+                    ? CustomTaskFromUnknownClassloader
+                    : CustomTaskFromBuildFile
+
+            task customTask(type: customTaskClass) {
+                outputs.cacheIf { true }
+                input = file("input.txt")
+                output = file("build/output.txt")
+            }
+        """
+        when:
+        expectThatExecutionOptimizationDisabledWarningIsDisplayed(executer, implementationUnknown {
+            implementationOfTask(':customTask')
+            unknownClassloader('CustomTaskFromUnknownClassloader_Decorated')
+            includeLink()
+        })
+        expectThatExecutionOptimizationDisabledWarningIsDisplayed(executer, implementationUnknown {
+            additionalTaskAction(':customTask')
+            unknownClassloader('CustomTaskFromUnknownClassloader_Decorated')
+            includeLink()
+        })
+        withBuildCache().run "customTask", "-PunknownClassloader"
+        then:
+        executedAndNotSkipped(":customTask")
+
+        when:
+        withBuildCache().run "customTask"
+        then:
+        executedAndNotSkipped(":customTask")
+
+        when:
+        withBuildCache().run "customTask"
+        then:
+        skipped(":customTask")
+
+        when:
+        expectThatExecutionOptimizationDisabledWarningIsDisplayed(executer, implementationUnknown {
+            implementationOfTask(':customTask')
+            unknownClassloader('CustomTaskFromUnknownClassloader_Decorated')
+            includeLink()
+        })
+        expectThatExecutionOptimizationDisabledWarningIsDisplayed(executer, implementationUnknown {
+            additionalTaskAction(':customTask')
+            unknownClassloader('CustomTaskFromUnknownClassloader_Decorated')
+            includeLink()
+        })
+        withBuildCache().run "customTask", "-PunknownClassloader"
+        then:
+        executedAndNotSkipped(":customTask")
+
+        when:
+        withBuildCache().run "customTask"
+        then:
+        skipped(":customTask")
+    }
+
+    private static String customTaskImplementation(String className) {
+        """
+            class ${className} extends DefaultTask {
+                @InputFile File input
+                @OutputFile File output
+                @TaskAction action() {
+                    output.parentFile.mkdirs()
+                    output.text = input.text
+                }
+            }
+        """
+    }
+
+    @ValidationTestFor(
+        ValidationProblemId.UNKNOWN_IMPLEMENTATION
+    )
     @ToBeFixedForConfigurationCache(because = "ClassNotFoundException: CustomTaskAction")
     def "task with custom action loaded with custom classloader is never up-to-date"() {
         file("input.txt").text = "data"
@@ -1148,15 +1263,24 @@ task generate(type: TransformerTask) {
             }
         """
         when:
+        expectThatExecutionOptimizationDisabledWarningIsDisplayed(executer, implementationUnknown {
+            additionalTaskAction(':customTask')
+            unknownClassloader('CustomTaskAction')
+            includeLink()
+        })
         succeeds "customTask"
         then:
         noneSkipped()
 
         when:
-        succeeds "customTask", "--info"
+        expectThatExecutionOptimizationDisabledWarningIsDisplayed(executer, implementationUnknown {
+            additionalTaskAction(':customTask')
+            unknownClassloader('CustomTaskAction')
+            includeLink()
+        })
+        succeeds "customTask"
         then:
         noneSkipped()
-        output.contains "Additional action for task ':customTask': was loaded with an unknown classloader (class 'CustomTaskAction')."
     }
 
     @Issue("gradle/gradle#1168")
@@ -1284,11 +1408,12 @@ task generate(type: TransformerTask) {
     }
 
     @ToBeImplemented("Private getters should be ignored")
+    @ValidationTestFor(
+        ValidationProblemId.PRIVATE_GETTER_MUST_NOT_BE_ANNOTATED
+    )
     def "private inputs can be overridden in subclass"() {
         given:
         buildFile << '''
-            import javax.inject.Inject
-
             abstract class MyBaseTask extends DefaultTask {
 
                 @Inject
@@ -1296,7 +1421,7 @@ task generate(type: TransformerTask) {
 
                 @Input
                 private String getMyPrivateInput() {
-                    return providers.gradleProperty('private').get()
+                    return 'overridden private'
                 }
 
                 @OutputFile
@@ -1318,44 +1443,19 @@ task generate(type: TransformerTask) {
             task myTask(type: MyTask)
         '''
 
-        executer.expectDeprecationWarning()
-
         when:
-        run 'myTask', '-Pprivate=first'
+        fails 'myTask'
 
         then:
-        def outputFile = file('build/output.txt')
-        outputFile.text == 'first'
-        output.contains("Property 'myPrivateInput' is private and annotated with @Input. This behaviour has been deprecated and is scheduled to be removed in Gradle 7.0.")
-
-        executer.expectDeprecationWarning()
-
-        when:
-        run 'myTask', '-Pprivate=second'
-
-        then:
-        skipped ':myTask'
-        outputFile.text == 'first'
-        output.contains("Property 'myPrivateInput' is private and annotated with @Input. This behaviour has been deprecated and is scheduled to be removed in Gradle 7.0.")
-
-        executer.expectDeprecationWarning()
-
-        when:
-        outputFile.delete()
-        run 'myTask', '-Pprivate=second'
-
-        then:
-        executedAndNotSkipped ':myTask'
-        outputFile.text == 'second'
-        output.contains("Property 'myPrivateInput' is private and annotated with @Input. This behaviour has been deprecated and is scheduled to be removed in Gradle 7.0.")
+        failureDescriptionContains(
+            privateGetterAnnotatedMessage { type('MyTask').property('myPrivateInput').annotation('Input')}
+        )
     }
 
     @ToBeImplemented("Private getters should be ignored")
     def "private inputs in superclass are respected"() {
         given:
         buildFile << '''
-            import javax.inject.Inject
-
             abstract class MyBaseTask extends DefaultTask {
 
                 @Inject
@@ -1405,8 +1505,11 @@ task generate(type: TransformerTask) {
         outputFile.text == 'second'
     }
 
+    @ValidationTestFor(
+        ValidationProblemId.IGNORED_PROPERTY_MUST_NOT_BE_ANNOTATED
+    )
     @Issue("https://github.com/gradle/gradle/issues/11805")
-    def "Groovy property annotated as @Internal with differently annotated getter emits warning about conflicting annotations"() {
+    def "Groovy property annotated as @Internal with differently annotated getter is not allowed"() {
         def inputFile = file("input.txt")
         inputFile.text = "original"
 
@@ -1437,24 +1540,15 @@ task generate(type: TransformerTask) {
         """
 
         when:
-        executer.expectDeprecationWarning()
-        run "custom"
-        then:
-        executedAndNotSkipped ":custom"
-        outputContains("Property 'classpath' annotated with @Internal should not be also annotated with @InputFiles, @Classpath. This behaviour has been deprecated and is scheduled to be removed in Gradle 7.0.")
-
-        when:
-        executer.expectDeprecationWarning()
-        run "custom"
-        then:
-        skipped ":custom"
-
-        when:
-        executer.expectDeprecationWarning()
-        inputFile.text = "changed"
-        run "custom"
+        fails "custom"
 
         then:
-        skipped ":custom"
+        failureDescriptionContains(
+            ignoredAnnotatedPropertyMessage {
+                type('CustomTask').property('classpath')
+                ignoring('Internal')
+                alsoAnnotatedWith('Classpath', 'InputFiles')
+            }
+        )
     }
 }

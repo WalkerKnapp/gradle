@@ -9,8 +9,8 @@ plugins {
 
 // tag::jacoco-configuration[]
 jacoco {
-    toolVersion = "0.8.5"
-    reportsDir = file("$buildDir/customJacocoReportDir")
+    toolVersion = "0.8.7"
+    reportsDirectory.set(layout.buildDirectory.dir("customJacocoReportDir"))
 }
 // end::jacoco-configuration[]
 
@@ -25,8 +25,8 @@ dependencies {
 // tag::testtask-configuration[]
 tasks.test {
     extensions.configure(JacocoTaskExtension::class) {
-        destinationFile = file("$buildDir/jacoco/jacocoTest.exec")
-        classDumpDir = file("$buildDir/jacoco/classpathdumps")
+        destinationFile = layout.buildDirectory.file("jacoco/jacocoTest.exec").get().asFile
+        classDumpDir = layout.buildDirectory.dir("jacoco/classpathdumps").get().asFile
     }
 }
 // end::testtask-configuration[]
@@ -43,9 +43,9 @@ tasks.jacocoTestReport {
 // tag::report-configuration[]
 tasks.jacocoTestReport {
     reports {
-        xml.isEnabled = false
-        csv.isEnabled = false
-        html.destination = file("${buildDir}/jacocoHtml")
+        xml.required.set(false)
+        csv.required.set(false)
+        html.outputLocation.set(layout.buildDirectory.dir("jacocoHtml"))
     }
 }
 // end::report-configuration[]
@@ -60,7 +60,7 @@ tasks.jacocoTestCoverageVerification {
         }
 
         rule {
-            enabled = false
+            isEnabled = false
             element = "CLASS"
             includes = listOf("org.gradle.*")
 
@@ -78,7 +78,7 @@ tasks.jacocoTestCoverageVerification {
 tasks.test {
     configure<JacocoTaskExtension> {
         isEnabled = true
-        destinationFile = file("$buildDir/jacoco/$name.exec")
+        destinationFile = layout.buildDirectory.file("jacoco/${name}.exec").get().asFile
         includes = emptyList()
         excludes = emptyList()
         excludeClassLoaders = emptyList()

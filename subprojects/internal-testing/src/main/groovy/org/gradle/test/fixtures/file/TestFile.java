@@ -26,10 +26,6 @@ import org.codehaus.groovy.runtime.ResourceGroovyMethods;
 import org.gradle.api.UncheckedIOException;
 import org.gradle.internal.hash.HashCode;
 import org.gradle.internal.hash.Hashing;
-import org.gradle.internal.hash.HashingOutputStream;
-import org.gradle.internal.io.NullOutputStream;
-import org.gradle.internal.nativeintegration.filesystem.FileSystem;
-import org.gradle.internal.nativeintegration.services.NativeServices;
 import org.gradle.testing.internal.util.RetryUtil;
 import org.hamcrest.Matcher;
 
@@ -44,6 +40,7 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.FileVisitOption;
 import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -51,6 +48,7 @@ import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.EnumSet;
 import java.util.Formatter;
 import java.util.HashMap;
 import java.util.List;
@@ -63,10 +61,10 @@ import java.util.jar.Manifest;
 
 import static java.nio.file.StandardCopyOption.COPY_ATTRIBUTES;
 import static java.nio.file.StandardCopyOption.REPLACE_EXISTING;
+import static org.hamcrest.MatcherAssert.assertThat;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
-import static org.hamcrest.MatcherAssert.assertThat;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assume.assumeTrue;
 
@@ -274,7 +272,7 @@ public class TestFile extends File {
             try {
                 final Path targetDir = target.toPath();
                 final Path sourceDir = this.toPath();
-                Files.walkFileTree(sourceDir, new SimpleFileVisitor<Path>() {
+                Files.walkFileTree(sourceDir, EnumSet.of(FileVisitOption.FOLLOW_LINKS), Integer.MAX_VALUE, new SimpleFileVisitor<Path>() {
                     @Override
                     public FileVisitResult visitFile(Path sourceFile, BasicFileAttributes attributes) throws IOException {
                         Path targetFile = targetDir.resolve(sourceDir.relativize(sourceFile));
@@ -469,25 +467,11 @@ public class TestFile extends File {
     }
 
     public static HashCode md5(File file) {
-        HashingOutputStream hashingStream = Hashing.primitiveStreamHasher();
         try {
-            Files.copy(file.toPath(), hashingStream);
+            return Hashing.hashFile(file);
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
-        return hashingStream.hash();
-    }
-
-    public String getSha256Hash() {
-        // Sha256 is not part of core-services (i.e. no Hashing.sha256() available), hence we use plain Guava classes here.
-        com.google.common.hash.HashingOutputStream hashingStream =
-            new com.google.common.hash.HashingOutputStream(com.google.common.hash.Hashing.sha256(), NullOutputStream.INSTANCE);
-        try {
-            Files.copy(this.toPath(), hashingStream);
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
-        }
-        return hashingStream.hash().toString();
     }
 
     public TestFile createLink(String target) {
@@ -495,15 +479,19 @@ public class TestFile extends File {
     }
 
     public TestFile createLink(File target) {
-        FileSystem fileSystem = NativeServices.getInstance().get(FileSystem.class);
-        if (fileSystem.isSymlink(this)) {
+        if (Files.isSymbolicLink(this.toPath())) {
             try {
                 Files.delete(toPath());
             } catch (IOException e) {
                 throw new UncheckedIOException(e);
             }
         }
-        fileSystem.createSymbolicLink(this, target);
+        try {
+            getParentFile().mkdirs();
+            Files.createSymbolicLink(this.toPath(), target.toPath());
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
         clearCanonCaches();
         return this;
     }

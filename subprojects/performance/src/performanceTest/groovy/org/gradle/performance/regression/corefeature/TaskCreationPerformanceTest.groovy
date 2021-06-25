@@ -16,16 +16,22 @@
 
 package org.gradle.performance.regression.corefeature
 
-import org.gradle.performance.AbstractCrossVersionGradleProfilerPerformanceTest
+import org.gradle.performance.AbstractCrossVersionPerformanceTest
+import org.gradle.performance.annotations.RunFor
+import org.gradle.performance.annotations.Scenario
 
-class TaskCreationPerformanceTest extends AbstractCrossVersionGradleProfilerPerformanceTest {
+import static org.gradle.performance.annotations.ScenarioType.PER_COMMIT
+import static org.gradle.performance.results.OperatingSystem.LINUX
+
+@RunFor(
+    @Scenario(type = PER_COMMIT, operatingSystems = [LINUX], testProjects = ["createLotsOfTasks"])
+)
+class TaskCreationPerformanceTest extends AbstractCrossVersionPerformanceTest {
 
     def "create many tasks"() {
         given:
-        runner.testProject = "createLotsOfTasks"
         runner.tasksToRun = ['help']
-        runner.gradleOpts = ["-Xms1g", "-Xmx1g"]
-        runner.targetVersions = ["6.7-20200723220251+0000"]
+        runner.targetVersions = ["7.1-20210427170827+0000"]
         runner.runs = 60
 
         when:

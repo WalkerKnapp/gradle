@@ -23,7 +23,7 @@ import org.gradle.api.internal.artifacts.ivyservice.ArtifactCacheLockingManager;
 import org.gradle.api.internal.artifacts.ivyservice.ivyresolve.StartParameterResolutionOverride;
 import org.gradle.api.internal.artifacts.ivyservice.resolutionstrategy.DefaultExternalResourceCachePolicy;
 import org.gradle.api.internal.artifacts.ivyservice.resolutionstrategy.ExternalResourceCachePolicy;
-import org.gradle.api.internal.file.TemporaryFileProvider;
+import org.gradle.api.internal.file.temp.TemporaryFileProvider;
 import org.gradle.authentication.Authentication;
 import org.gradle.cache.internal.ProducerGuard;
 import org.gradle.internal.authentication.AuthenticationInternal;
@@ -40,7 +40,7 @@ import org.gradle.internal.resource.transfer.ExternalResourceConnector;
 import org.gradle.internal.resource.transport.ResourceConnectorRepositoryTransport;
 import org.gradle.internal.resource.transport.file.FileTransport;
 import org.gradle.internal.verifier.HttpRedirectVerifier;
-import org.gradle.util.BuildCommencedTimeProvider;
+import org.gradle.util.internal.BuildCommencedTimeProvider;
 
 import java.util.Collection;
 import java.util.Collections;

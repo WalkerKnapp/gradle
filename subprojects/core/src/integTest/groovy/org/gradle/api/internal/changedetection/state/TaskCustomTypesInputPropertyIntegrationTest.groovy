@@ -166,7 +166,7 @@ someTask.inputs.property "someValue", new CustomType("value1")
 
 ${customSerializableType()}
 """
-        buildFile << """
+        buildFile """
 task someTask {
     def f = file("build/e1")
     outputs.dir f
@@ -306,7 +306,7 @@ task someTask(type: SomeTask) {
         skipped(":someTask")
     }
 
-    def "can use custom type with non-deterministic serialized form"() {
+    def "using a custom type with non-deterministic serialized form is deprecated"() {
         file("buildSrc/src/main/java/CustomType.java") << customSerializableTypeWithNonDeterministicSerializedForm()
         buildFile << """
 task someTask {
@@ -329,6 +329,7 @@ task someTask {
         // Change to "equal" value
         when:
         buildFile.replace('new CustomType("value1")', 'new CustomType("value1 ignore me")')
+        executer.expectDocumentedDeprecationWarning("Using objects as inputs that have a different serialized form but are equal has been deprecated. This is scheduled to be removed in Gradle 8.0. Type 'CustomType' has a custom implementation for equals(). Declare the property as @Nested instead to expose its properties as inputs. See https://docs.gradle.org/current/userguide/upgrading_7.html#equals_up_to_date_deprecation for more details.")
         run "someTask"
 
         then:
@@ -352,7 +353,7 @@ task someTask {
     }
 
     @Unroll
-    @ToBeFixedForConfigurationCache(because = "ClassNotFoundException: ArrayList1_groovyProxy", iterationMatchers = '.*\\[2\\]$')
+    @ToBeFixedForConfigurationCache(because = "ClassNotFoundException: ArrayList1_groovyProxy", iterationMatchers = '.*\\[type: Map, #2\\]$')
     def "task can take as input a collection of custom types from various sources"() {
         def buildSrcType = file("buildSrc/src/main/java/CustomType.java")
         buildSrcType << customSerializableType()

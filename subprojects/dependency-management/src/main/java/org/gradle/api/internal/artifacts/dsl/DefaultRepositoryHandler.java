@@ -34,8 +34,9 @@ import org.gradle.api.internal.artifacts.DefaultArtifactRepositoryContainer;
 import org.gradle.internal.Actions;
 import org.gradle.internal.Cast;
 import org.gradle.internal.Factory;
+import org.gradle.internal.deprecation.DeprecationLogger;
 import org.gradle.internal.reflect.Instantiator;
-import org.gradle.util.ConfigureUtil;
+import org.gradle.util.internal.ConfigureUtil;
 
 import java.util.HashMap;
 import java.util.List;
@@ -44,9 +45,9 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import static org.gradle.util.CollectionUtils.flattenCollections;
+import static org.gradle.util.internal.CollectionUtils.flattenCollections;
 
-public class DefaultRepositoryHandler extends DefaultArtifactRepositoryContainer implements RepositoryHandler {
+public class DefaultRepositoryHandler extends DefaultArtifactRepositoryContainer implements RepositoryHandlerInternal {
 
     public static final String GRADLE_PLUGIN_PORTAL_REPO_NAME = "Gradle Central Plugin Repository";
     public static final String DEFAULT_BINTRAY_JCENTER_REPO_NAME = "BintrayJCenter";
@@ -59,6 +60,7 @@ public class DefaultRepositoryHandler extends DefaultArtifactRepositoryContainer
 
     private final BaseRepositoryFactory repositoryFactory;
     private final Instantiator instantiator;
+    private boolean exclusiveContentInUse = false;
 
     public DefaultRepositoryHandler(BaseRepositoryFactory repositoryFactory, Instantiator instantiator, CollectionCallbackActionDecorator decorator) {
         super(instantiator, decorator);
@@ -106,14 +108,26 @@ public class DefaultRepositoryHandler extends DefaultArtifactRepositoryContainer
         return addRepository(repositoryFactory.createMavenCentralRepository(), DEFAULT_MAVEN_CENTRAL_REPO_NAME, action);
     }
 
+    @Deprecated
     @Override
     public MavenArtifactRepository jcenter() {
+        deprecateJCenter("jcenter()", "mavenCentral()");
         return addRepository(repositoryFactory.createJCenterRepository(), DEFAULT_BINTRAY_JCENTER_REPO_NAME);
     }
 
+    @Deprecated
     @Override
     public MavenArtifactRepository jcenter(Action<? super MavenArtifactRepository> action) {
+        deprecateJCenter("jcenter(Action<MavenArtifactRepository>)", "mavenCentral(Action<MavenArtifactRepository>");
         return addRepository(repositoryFactory.createJCenterRepository(), DEFAULT_BINTRAY_JCENTER_REPO_NAME, action);
+    }
+
+    private void deprecateJCenter(String method, String replacement) {
+        DeprecationLogger.deprecateMethod(RepositoryHandler.class, method)
+            .withAdvice("JFrog announced JCenter's shutdown in February 2021. Use " + replacement + " instead.")
+            .willBeRemovedInGradle8()
+            .withUpgradeGuideSection(6, "jcenter_deprecation")
+            .nagUser();
     }
 
     @Override
@@ -168,6 +182,12 @@ public class DefaultRepositoryHandler extends DefaultArtifactRepositoryContainer
     public void exclusiveContent(Action<? super ExclusiveContentRepository> action) {
         ExclusiveContentRepositorySpec spec = Cast.uncheckedCast(instantiator.newInstance(ExclusiveContentRepositorySpec.class, this));
         spec.apply(action);
+        exclusiveContentInUse = true;
+    }
+
+    @Override
+    public boolean isExclusiveContentInUse() {
+        return exclusiveContentInUse;
     }
 
     private static Action<? super RepositoryContentDescriptor> transformForExclusivity(Action<? super InclusiveRepositoryContentDescriptor> config) {

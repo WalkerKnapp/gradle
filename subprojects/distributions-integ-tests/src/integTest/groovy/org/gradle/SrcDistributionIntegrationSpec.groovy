@@ -18,8 +18,9 @@ package org.gradle
 
 import org.apache.tools.ant.taskdefs.Expand
 import org.gradle.integtests.fixtures.ToBeFixedForConfigurationCache
+import org.gradle.internal.jvm.Jvm
 import org.gradle.test.fixtures.file.TestFile
-import org.gradle.util.AntUtil
+import org.gradle.util.internal.AntUtil
 import org.gradle.util.Requires
 import org.gradle.util.TestPrecondition
 
@@ -35,7 +36,7 @@ class SrcDistributionIntegrationSpec extends DistributionIntegrationSpec {
 
     @Override
     int getMaxDistributionSizeBytes() {
-        return 44 * 1024 * 1024
+        return 48 * 1024 * 1024
     }
 
     @Override
@@ -47,9 +48,6 @@ class SrcDistributionIntegrationSpec extends DistributionIntegrationSpec {
     @ToBeFixedForConfigurationCache
     def sourceZipContents() {
         given:
-        // workaround for https://github.com/asciidoctor/asciidoctor-gradle-plugin/issues/270
-        // can be removed once 1.5.9.3/1.5.10 is released
-        executer.noDeprecationChecks()
         TestFile contentsDir = unpackDistribution()
 
         expect:
@@ -60,7 +58,8 @@ class SrcDistributionIntegrationSpec extends DistributionIntegrationSpec {
             inDirectory(contentsDir)
             usingExecutable('gradlew')
             withTasks(':distributions-full:binDistributionZip')
-            withArguments("-D${PLUGIN_PORTAL_OVERRIDE_URL_PROPERTY}=${gradlePluginRepositoryMirrorUrl()}")
+            withArgument("-D${PLUGIN_PORTAL_OVERRIDE_URL_PROPERTY}=${gradlePluginRepositoryMirrorUrl()}")
+            withArgument("-Porg.gradle.java.installations.paths=${Jvm.current().javaHome.absolutePath}")
             withEnvironmentVars([BUILD_BRANCH: System.getProperty("gradleBuildBranch"), BUILD_COMMIT_ID: System.getProperty("gradleBuildCommitId")])
             withWarningMode(null)
         }.run()

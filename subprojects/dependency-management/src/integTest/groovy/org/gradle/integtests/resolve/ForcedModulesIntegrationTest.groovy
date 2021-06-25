@@ -164,7 +164,7 @@ project(':tool') {
 		implementation project(':api')
 		implementation project(':impl')
 	}
-    task checkDeps(dependsOn: configurations.compile) {
+    task checkDeps {
         doLast {
             assert configurations.runtimeClasspath*.name == ['api-1.0.jar', 'impl-1.0.jar', 'foo-1.5.5.jar']
             def metadata = configurations.runtimeClasspath.resolvedConfiguration
@@ -228,7 +228,7 @@ project(':tool') {
 	        force 'org:foo:1.3.3'
 	    }
 	}
-    task checkDeps(dependsOn: configurations.compile) {
+    task checkDeps {
         doLast {
             assert configurations.runtimeClasspath*.name == ['api.jar', 'impl.jar', 'foo-1.3.3.jar']
         }
@@ -283,7 +283,7 @@ project(':tool') {
 
         expect:
         executer.expectDocumentedDeprecationWarning("Using force on a dependency has been deprecated. " +
-            "This is scheduled to be removed in Gradle 7.0. Consider using strict version constraints instead (version { strictly ... } }). " +
+            "This is scheduled to be removed in Gradle 8.0. Consider using strict version constraints instead (version { strictly ... } }). " +
             "Consult the upgrading guide for further information: https://docs.gradle.org/current/userguide/upgrading_version_5.html#forced_dependencies")
         run("tool:dependencies")
     }

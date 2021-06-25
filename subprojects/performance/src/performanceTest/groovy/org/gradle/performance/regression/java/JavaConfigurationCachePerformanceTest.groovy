@@ -17,43 +17,46 @@
 package org.gradle.performance.regression.java
 
 import org.gradle.initialization.StartParameterBuildOptions.ConfigurationCacheOption
-import org.gradle.performance.AbstractCrossVersionGradleInternalPerformanceTest
-import org.gradle.performance.categories.PerformanceRegressionTest
-import org.gradle.performance.fixture.BuildExperimentInvocationInfo
-import org.gradle.performance.fixture.BuildExperimentListener
-import org.gradle.performance.fixture.BuildExperimentListenerAdapter
-import org.gradle.performance.measure.MeasuredOperation
-import org.junit.experimental.categories.Category
+import org.gradle.performance.AbstractCrossVersionPerformanceTest
+import org.gradle.performance.annotations.RunFor
+import org.gradle.performance.annotations.Scenario
+import org.gradle.profiler.BuildContext
+import org.gradle.profiler.BuildMutator
+import org.gradle.profiler.InvocationSettings
 import spock.lang.Unroll
 
 import java.nio.file.Files
 
-import static org.gradle.performance.generator.JavaTestProject.LARGE_JAVA_MULTI_PROJECT_NO_BUILD_SRC
-import static org.gradle.performance.generator.JavaTestProject.SMALL_JAVA_MULTI_PROJECT_NO_BUILD_SRC
+import static org.gradle.performance.annotations.ScenarioType.PER_COMMIT
+import static org.gradle.performance.annotations.ScenarioType.PER_DAY
+import static org.gradle.performance.results.OperatingSystem.LINUX
 import static org.junit.Assert.assertTrue
 
-@Category(PerformanceRegressionTest)
-class JavaConfigurationCachePerformanceTest extends AbstractCrossVersionGradleInternalPerformanceTest {
-
+class JavaConfigurationCachePerformanceTest extends AbstractCrossVersionPerformanceTest {
     private File stateDirectory
 
     def setup() {
         stateDirectory = temporaryFolder.file(".gradle/configuration-cache")
+        runner.targetVersions = ["7.2-20210527220045+0000"]
+        runner.minimumBaseVersion = "6.6"
     }
 
+    @RunFor([
+        @Scenario(type = PER_COMMIT, operatingSystems = [LINUX], testProjects = ["smallJavaMultiProject"], iterationMatcher = ".*with hot.*"),
+        @Scenario(type = PER_COMMIT, operatingSystems = [LINUX], testProjects = ["largeJavaMultiProjectNoBuildSrc"], iterationMatcher = "assemble loading configuration cache state with cold daemon"),
+        @Scenario(type = PER_COMMIT, operatingSystems = [LINUX], testProjects = ["largeJavaMultiProjectNoBuildSrc"], iterationMatcher = "assemble storing configuration cache state with hot daemon"),
+        @Scenario(type = PER_DAY, operatingSystems = [LINUX], testProjects = ["largeJavaMultiProjectNoBuildSrc"], iterationMatcher = "assemble storing configuration cache state with cold daemon"),
+        @Scenario(type = PER_DAY, operatingSystems = [LINUX], testProjects = ["largeJavaMultiProjectNoBuildSrc"], iterationMatcher = "assemble loading configuration cache state with hot daemon")
+    ])
     @Unroll
-    def "assemble on #testProject #action configuration cache state with #daemon daemon"() {
-
+    def "assemble #action configuration cache state with #daemon daemon"() {
         given:
-        runner.targetVersions = ["6.7-20200723220251+0000"]
-        runner.minimumBaseVersion = "6.6"
-        runner.testProject = testProject.projectName
         runner.tasksToRun = ["assemble"]
         runner.args = ["-D${ConfigurationCacheOption.PROPERTY_NAME}=true"]
 
         and:
         runner.useDaemon = daemon == hot
-        runner.addBuildExperimentListener(listenerFor(action))
+        runner.addBuildMutator { configurationCacheInvocationListenerFor(it, action, stateDirectory) }
         runner.warmUpRuns = daemon == hot ? 20 : 1
         runner.runs = daemon == hot ? 60 : 25
 
@@ -64,19 +67,11 @@ class JavaConfigurationCachePerformanceTest extends AbstractCrossVersionGradleIn
         result.assertCurrentVersionHasNotRegressed()
 
         where:
-        testProject                           | daemon | action
-        LARGE_JAVA_MULTI_PROJECT_NO_BUILD_SRC | hot    | loading
-        LARGE_JAVA_MULTI_PROJECT_NO_BUILD_SRC | hot    | storing
-        LARGE_JAVA_MULTI_PROJECT_NO_BUILD_SRC | cold   | loading
-        LARGE_JAVA_MULTI_PROJECT_NO_BUILD_SRC | cold   | storing
-        SMALL_JAVA_MULTI_PROJECT_NO_BUILD_SRC | hot    | loading
-        SMALL_JAVA_MULTI_PROJECT_NO_BUILD_SRC | hot    | storing
-//        SMALL_JAVA_MULTI_PROJECT_NO_BUILD_SRC | cold   | loading
-//        SMALL_JAVA_MULTI_PROJECT_NO_BUILD_SRC | cold   | storing
-    }
-
-    private BuildExperimentListener listenerFor(String action) {
-        return configurationCacheInvocationListenerFor(action, stateDirectory)
+        daemon | action
+        hot    | loading
+        hot    | storing
+        cold   | loading
+        cold   | storing
     }
 
     static String loading = "loading"
@@ -84,27 +79,28 @@ class JavaConfigurationCachePerformanceTest extends AbstractCrossVersionGradleIn
     static String hot = "hot"
     static String cold = "cold"
 
-    static BuildExperimentListener configurationCacheInvocationListenerFor(String action, File stateDirectory) {
-        return new BuildExperimentListenerAdapter() {
-
+    static BuildMutator configurationCacheInvocationListenerFor(InvocationSettings invocationSettings, String action, File stateDirectory) {
+        return new BuildMutator() {
             @Override
-            void beforeInvocation(BuildExperimentInvocationInfo invocationInfo) {
+            void beforeBuild(BuildContext context) {
                 if (action == storing) {
                     stateDirectory.deleteDir()
                 }
             }
 
             @Override
-            void afterInvocation(BuildExperimentInvocationInfo invocationInfo, MeasuredOperation operation, BuildExperimentListener.MeasurementCallback measurementCallback) {
-                if (invocationInfo.iterationNumber > 1) {
+            void afterBuild(BuildContext context, Throwable error) {
+                if (context.iteration > 1) {
                     def tag = action == storing
                         ? "Calculating task graph as no configuration cache is available"
                         : "Reusing configuration cache"
-                    def found = Files.lines(invocationInfo.buildLog.toPath()).withCloseable { lines ->
+                    File buildLog = new File(invocationSettings.projectDir, "profile.log")
+
+                    def found = Files.lines(buildLog.toPath()).withCloseable { lines ->
                         lines.anyMatch { line -> line.contains(tag) }
                     }
                     if (!found) {
-                        assertTrue("Configuration cache log '$tag' not found in '$invocationInfo.buildLog'\n\n$invocationInfo.buildLog.text", found)
+                        assertTrue("Configuration cache log '$tag' not found in '$buildLog'\n\n$buildLog.text", found)
                     }
                 }
             }

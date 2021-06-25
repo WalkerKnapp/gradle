@@ -22,15 +22,17 @@ import org.gradle.internal.file.FileMetadata.AccessType
 import org.gradle.internal.file.FileType
 import org.gradle.internal.file.impl.DefaultFileMetadata
 import org.gradle.internal.hash.HashCode
-import org.gradle.internal.snapshot.AbstractIncompleteSnapshotWithChildren
-import org.gradle.internal.snapshot.CompleteDirectorySnapshot
-import org.gradle.internal.snapshot.CompleteFileSystemLocationSnapshot
+import org.gradle.internal.snapshot.AbstractIncompleteFileSystemNode
+import org.gradle.internal.snapshot.DirectorySnapshot
+import org.gradle.internal.snapshot.FileSystemLocationSnapshot
 import org.gradle.internal.snapshot.FileSystemNode
+import org.gradle.internal.snapshot.MetadataSnapshot
 import org.gradle.internal.snapshot.MissingFileSnapshot
 import org.gradle.internal.snapshot.PathUtil
 import org.gradle.internal.snapshot.RegularFileSnapshot
 import org.gradle.internal.snapshot.SnapshotHierarchy
 import org.gradle.internal.snapshot.impl.DirectorySnapshotter
+import org.gradle.internal.snapshot.impl.DirectorySnapshotterStatistics
 import org.gradle.test.fixtures.file.TestNameTestDirectoryProvider
 import org.junit.Assume
 import org.junit.Rule
@@ -45,7 +47,7 @@ class DefaultSnapshotHierarchyTest extends Specification {
 
     private static final SnapshotHierarchy EMPTY = DefaultSnapshotHierarchy.empty(CASE_SENSITIVE)
 
-    DirectorySnapshotter directorySnapshotter = new DirectorySnapshotter(TestFiles.fileHasher(), new StringInterner(), [])
+    DirectorySnapshotter directorySnapshotter = new DirectorySnapshotter(TestFiles.fileHasher(), new StringInterner(), [], Stub(DirectorySnapshotterStatistics.Collector))
 
     def diffListener = new SnapshotHierarchy.NodeDiffListener() {
         @Override
@@ -87,8 +89,8 @@ class DefaultSnapshotHierarchyTest extends Specification {
             assertFileSnapshot(set, it)
         }
         assertMissingFileSnapshot(set, dir2.file("some/non-existing/file"))
-        assertPartialDirectorySnapshot(set, parent)
-        assertPartialDirectorySnapshot(set, dir2.parentFile)
+        assertPartialDirectoryNode(set, parent)
+        assertPartialDirectoryNode(set, dir2.parentFile)
         !snapshotPresent(set, tmpDir.file("dir"))
         !snapshotPresent(set, tmpDir.file("dir12"))
         !snapshotPresent(set, tmpDir.file("common/dir21"))
@@ -149,7 +151,7 @@ class DefaultSnapshotHierarchyTest extends Specification {
         !snapshotPresent(s1, dir3)
         !snapshotPresent(s1, tooFew)
         !snapshotPresent(s1, tooMany)
-        assertPartialDirectorySnapshot(s1, parent)
+        assertPartialDirectoryNode(s1, parent)
         flatten(s1) == [parent.path, "1:dir1", "2:child1", "1:dir2"]
 
         def s2 = updateDir(single, dir1)
@@ -186,7 +188,7 @@ class DefaultSnapshotHierarchyTest extends Specification {
         assertDirectorySnapshot(s5, tooFew)
         !snapshotPresent(s5, dir2)
         !snapshotPresent(s5, tooMany)
-        assertPartialDirectorySnapshot(s5, parent)
+        assertPartialDirectoryNode(s5, parent)
         flatten(s5) == [parent.path, "1:dir", "1:dir1", "2:child1"]
 
         def s6 = updateDir(single, tooMany)
@@ -195,7 +197,7 @@ class DefaultSnapshotHierarchyTest extends Specification {
         assertDirectorySnapshot(s6, tooMany)
         !snapshotPresent(s6, dir2)
         !snapshotPresent(s6, tooFew)
-        assertPartialDirectorySnapshot(s6, parent)
+        assertPartialDirectoryNode(s6, parent)
         flatten(s6) == [parent.path, "1:dir1", "2:child1", "1:dir12"]
     }
 
@@ -216,7 +218,7 @@ class DefaultSnapshotHierarchyTest extends Specification {
         snapshotPresent(s1, dir2)
         snapshotPresent(s1, dir3)
         !snapshotPresent(s1, other)
-        assertPartialDirectorySnapshot(s1, parent)
+        assertPartialDirectoryNode(s1, parent)
         flatten(s1) == [parent.path, "1:dir1", "2:child1", "1:dir2", "1:dir3"]
 
         def s2 = updateDir(multi, dir2)
@@ -225,7 +227,7 @@ class DefaultSnapshotHierarchyTest extends Specification {
         snapshotPresent(s2, dir2)
         !snapshotPresent(s2, dir3)
         !snapshotPresent(s2, other)
-        assertPartialDirectorySnapshot(s2, parent)
+        assertPartialDirectoryNode(s2, parent)
         flatten(s2) == [parent.path, "1:dir1", "2:child1", "1:dir2"]
 
         def s3 = updateDir(multi, child)
@@ -234,7 +236,7 @@ class DefaultSnapshotHierarchyTest extends Specification {
         snapshotPresent(s3, dir2)
         !snapshotPresent(s3, dir3)
         !snapshotPresent(s3, other)
-        assertPartialDirectorySnapshot(s2, parent)
+        assertPartialDirectoryNode(s2, parent)
         flatten(s3) == [parent.path, "1:dir1", "2:child1", "1:dir2"]
 
         def s4 = updateDir(multi, parent)
@@ -242,7 +244,7 @@ class DefaultSnapshotHierarchyTest extends Specification {
         snapshotPresent(s4, child)
         snapshotPresent(s4, dir2)
         snapshotPresent(s4, other)
-        assertPartialDirectorySnapshot(s2, parent)
+        assertPartialDirectoryNode(s2, parent)
         flatten(s4) == [parent.path, "1:dir1", "2:child1", "1:dir2", "1:dir3", "1:dir4"]
     }
 
@@ -426,7 +428,7 @@ class DefaultSnapshotHierarchyTest extends Specification {
         snapshotPresent(set, dir3)
         snapshotPresent(set, dir2File)
         snapshotPresent(set, dir2FileSibling)
-        assertPartialDirectorySnapshot(set, dir2)
+        assertPartialDirectoryNode(set, dir2)
 
         when:
         set = invalidate(fullSet, dir2File)
@@ -434,7 +436,7 @@ class DefaultSnapshotHierarchyTest extends Specification {
         snapshotPresent(set, dir1)
         snapshotPresent(set, dir3)
         snapshotPresent(set, dir2FileSibling)
-        assertPartialDirectorySnapshot(set, dir2)
+        assertPartialDirectoryNode(set, dir2)
         !snapshotPresent(set, dir2File)
 
         when:
@@ -470,17 +472,18 @@ class DefaultSnapshotHierarchyTest extends Specification {
         def set = fileHierarchySet(file)
 
         when:
-        set = invalidate(set, invalidatedLocation)
+        def invalidatedSet = invalidate(set, invalidatedLocation)
         then:
-        snapshotPresent(set, file)
-        !snapshotPresent(set, invalidatedLocation)
+        snapshotPresent(invalidatedSet, file)
+        !snapshotPresent(invalidatedSet, invalidatedLocation)
+        invalidatedSet.is(set)
     }
 
     def "root is handled correctly"() {
         Assume.assumeTrue("Root is only defined for the file separator '/'", File.separator == '/')
 
         when:
-        def set = EMPTY.store("/", new CompleteDirectorySnapshot("/", "", [new RegularFileSnapshot("/root.txt", "root.txt", HashCode.fromInt(1234), DefaultFileMetadata.file(1, 1, AccessType.DIRECT))], HashCode.fromInt(1111), AccessType.DIRECT), diffListener)
+        def set = EMPTY.store("/", new DirectorySnapshot("/", "", AccessType.DIRECT, HashCode.fromInt(1111), [new RegularFileSnapshot("/root.txt", "root.txt", HashCode.fromInt(1234), DefaultFileMetadata.file(1, 1, AccessType.DIRECT))]), diffListener)
         then:
         set.getMetadata("/root.txt").get().type == FileType.RegularFile
         set.hasDescendantsUnder("/root.txt")
@@ -489,13 +492,13 @@ class DefaultSnapshotHierarchyTest extends Specification {
         collectSnapshots(set, "/")[0].type == FileType.Directory
 
         when:
-        set = set.invalidate("/root.txt", diffListener).store("/", new CompleteDirectorySnapshot("/", "", [new RegularFileSnapshot("/base.txt", "base.txt", HashCode.fromInt(1234), DefaultFileMetadata.file(1, 1, AccessType.DIRECT))], HashCode.fromInt(2222), AccessType.DIRECT), diffListener)
+        set = set.invalidate("/root.txt", diffListener).store("/", new DirectorySnapshot("/", "", AccessType.DIRECT, HashCode.fromInt(2222), [new RegularFileSnapshot("/base.txt", "base.txt", HashCode.fromInt(1234), DefaultFileMetadata.file(1, 1, AccessType.DIRECT))]), diffListener)
         then:
         set.getMetadata("/base.txt").get().type == FileType.RegularFile
     }
 
-    Collection<CompleteFileSystemLocationSnapshot> collectSnapshots(SnapshotHierarchy set, String path) {
-        List<CompleteFileSystemLocationSnapshot> result = []
+    Collection<FileSystemLocationSnapshot> collectSnapshots(SnapshotHierarchy set, String path) {
+        List<FileSystemLocationSnapshot> result = []
         set.visitSnapshotRoots(path) { snapshotRoot -> result.add(snapshotRoot)}
         return result
     }
@@ -653,22 +656,96 @@ class DefaultSnapshotHierarchyTest extends Specification {
         !invalidated.getMetadata(thirdPath).present
     }
 
-    private static CompleteDirectorySnapshot rootDirectorySnapshot() {
-        new CompleteDirectorySnapshot("/", "", [
+    def "getSnapshot returns root node when queried at the root"() {
+        def rootNode = Mock(FileSystemNode)
+        def hierarchy = DefaultSnapshotHierarchy.from(rootNode, CASE_SENSITIVE)
+
+        when:
+        def foundSnapshot = hierarchy.getMetadata("/")
+        then:
+        foundSnapshot.present
+        1 * rootNode.snapshot >> Optional.of(Mock(MetadataSnapshot))
+        0 * _
+    }
+
+    def "hasDescendants can query the root"() {
+        def rootNode = Mock(FileSystemNode)
+        def hierarchy = DefaultSnapshotHierarchy.from(rootNode, CASE_SENSITIVE)
+
+        when:
+        def hasDescendants = hierarchy.hasDescendantsUnder("/")
+        then:
+        hasDescendants
+        1 * rootNode.hasDescendants() >> true
+        0 * _
+    }
+
+    def "visitRootSnapshots can visit the root"() {
+        def rootNode = Mock(FileSystemNode)
+        def hierarchy = DefaultSnapshotHierarchy.from(rootNode, CASE_SENSITIVE)
+        def snapshotVisitor = Mock(SnapshotHierarchy.SnapshotVisitor)
+
+        when:
+        hierarchy.visitSnapshotRoots("/", snapshotVisitor)
+        then:
+        1 * rootNode.accept(snapshotVisitor)
+        0 * _
+    }
+
+    def "store overwrites root node when storing at the root"() {
+        def rootNode = Mock(FileSystemNode)
+        def newRoot = Mock(FileSystemNode)
+        def snapshot = Mock(MetadataSnapshot)
+        def hierarchy = DefaultSnapshotHierarchy.from(rootNode, CASE_SENSITIVE)
+
+        when:
+        def newHierarchy = hierarchy.store("/", snapshot, SnapshotHierarchy.NodeDiffListener.NOOP)
+        then:
+        1 * snapshot.asFileSystemNode() >> newRoot
+        0 * _
+
+        when:
+        def foundSnapshot = newHierarchy.getMetadata("/")
+        then:
+        foundSnapshot.get() is snapshot
+        1 * newRoot.snapshot >> Optional.of(snapshot)
+        0 * _
+    }
+
+    def "can invalidate the root"() {
+        def rootNode = Mock(FileSystemNode)
+        def hierarchy = DefaultSnapshotHierarchy.from(rootNode, CASE_SENSITIVE)
+
+        when:
+        def newHierarchy = hierarchy.invalidate("/", SnapshotHierarchy.NodeDiffListener.NOOP)
+        then:
+        0 * _
+
+        when:
+        def rootMetadata = newHierarchy.getMetadata("/")
+        then:
+        !rootMetadata.present
+        0 * _
+    }
+
+    private static DirectorySnapshot rootDirectorySnapshot() {
+        new DirectorySnapshot("/", "", AccessType.DIRECT, HashCode.fromInt(1111), [
             new RegularFileSnapshot("/root.txt", "root.txt", HashCode.fromInt(1234), DefaultFileMetadata.file(1, 1, AccessType.DIRECT)),
             new RegularFileSnapshot("/other.txt", "other.txt", HashCode.fromInt(4321), DefaultFileMetadata.file(5, 28, AccessType.DIRECT))
-        ], HashCode.fromInt(1111), AccessType.DIRECT)
+        ])
     }
 
-    private static CompleteDirectorySnapshot directorySnapshotForPath(String absolutePath) {
-        new CompleteDirectorySnapshot(absolutePath, PathUtil.getFileName(absolutePath), [new RegularFileSnapshot("${absolutePath}/root.txt", "root.txt", HashCode.fromInt(1234), DefaultFileMetadata.file(1, 1, AccessType.DIRECT))], HashCode.fromInt(1111), AccessType.DIRECT)
+    private static DirectorySnapshot directorySnapshotForPath(String absolutePath) {
+        new DirectorySnapshot(absolutePath, PathUtil.getFileName(absolutePath), AccessType.DIRECT, HashCode.fromInt(1111), [
+            new RegularFileSnapshot("${absolutePath}/root.txt", "root.txt", HashCode.fromInt(1234), DefaultFileMetadata.file(1, 1, AccessType.DIRECT))
+        ])
     }
 
-    private CompleteFileSystemLocationSnapshot snapshotDir(File dir) {
+    private FileSystemLocationSnapshot snapshotDir(File dir) {
         directorySnapshotter.snapshot(dir.absolutePath, null, new AtomicBoolean(false))
     }
 
-    private static CompleteFileSystemLocationSnapshot snapshotFile(File file) {
+    private static FileSystemLocationSnapshot snapshotFile(File file) {
         if (!file.exists()) {
             return new MissingFileSnapshot(file.absolutePath, file.name, AccessType.DIRECT)
         }
@@ -695,10 +772,10 @@ class DefaultSnapshotHierarchyTest extends Specification {
 
     }
 
-    private static void assertPartialDirectorySnapshot(SnapshotHierarchy set, File location) {
+    private static void assertPartialDirectoryNode(SnapshotHierarchy set, File location) {
         def snapshot = set.getMetadata(location.absolutePath).get()
         assert snapshot.type == FileType.Directory
-        assert !(snapshot instanceof CompleteFileSystemLocationSnapshot)
+        assert !(snapshot instanceof FileSystemLocationSnapshot)
     }
 
     private static void assertMissingFileSnapshot(SnapshotHierarchy set, File location) {
@@ -737,27 +814,39 @@ class DefaultSnapshotHierarchyTest extends Specification {
             return []
         }
         List<String> prefixes = new ArrayList<>()
-        collectPrefixes(set.rootNode, 0, prefixes)
+        def node = set.rootNode
+        def unpackedNode = (node.getSnapshot().filter { it instanceof FileSystemLocationSnapshot }.orElse(node))
+        if (unpackedNode instanceof DirectorySnapshot) {
+            def children = unpackedNode.children
+            children.forEach { child ->
+                collectPrefixes(child.name, child, 0, prefixes)
+            }
+        } else if (unpackedNode instanceof AbstractIncompleteFileSystemNode) {
+            def children = unpackedNode.children
+            children.visitChildren { path, child ->
+                collectPrefixes(path, child, 0, prefixes)
+            }
+        }
         return prefixes
     }
 
-    private static void collectPrefixes(FileSystemNode node, int depth, List<String> prefixes) {
+    private static void collectPrefixes(String path, FileSystemNode node, int depth, List<String> prefixes) {
         if (depth == 0) {
-            prefixes.add((File.separator == '/' ? '/' : "") + node.getPathToParent())
+            prefixes.add((File.separator == '/' ? '/' : "") + path)
         } else {
-            prefixes.add(depth + ":" + node.getPathToParent().replace(File.separatorChar, (char) '/'))
+            prefixes.add(depth + ":" + path.replace(File.separatorChar, (char) '/'))
         }
-        List<? extends FileSystemNode> children
-        def unpackedNode = (node.getSnapshot().filter { it instanceof CompleteFileSystemLocationSnapshot }.orElse(node))
-        if (unpackedNode instanceof CompleteDirectorySnapshot) {
-            children = unpackedNode.children
-        } else if (unpackedNode instanceof AbstractIncompleteSnapshotWithChildren) {
-            children = unpackedNode.children
-        } else {
-            children = []
-        }
-        children.forEach { child ->
-            collectPrefixes(child, depth + 1, prefixes)
+        def unpackedNode = (node.getSnapshot().filter { it instanceof FileSystemLocationSnapshot }.orElse(node))
+        if (unpackedNode instanceof DirectorySnapshot) {
+            def children = unpackedNode.children
+            children.forEach { child ->
+                collectPrefixes(child.name, child, depth + 1, prefixes)
+            }
+        } else if (unpackedNode instanceof AbstractIncompleteFileSystemNode) {
+            def children = unpackedNode.children
+            children.visitChildren { childPath, child ->
+                collectPrefixes(childPath, child, depth + 1, prefixes)
+            }
         }
     }
 }

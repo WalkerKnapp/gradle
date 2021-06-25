@@ -25,10 +25,10 @@ import org.gradle.nativeplatform.fixtures.ToolChainRequirement
 import org.gradle.nativeplatform.fixtures.app.CppHelloWorldApp
 import org.gradle.util.Requires
 import org.gradle.util.TestPrecondition
-import org.gradle.util.TextUtil
+import org.gradle.util.internal.TextUtil
 import spock.lang.Issue
 
-import static org.gradle.util.TextUtil.normaliseLineSeparators
+import static org.gradle.util.internal.TextUtil.normaliseLineSeparators
 
 @Requires(TestPrecondition.CAN_INSTALL_EXECUTABLE)
 @RequiresInstalledToolChain(ToolChainRequirement.SUPPORTS_32)
@@ -516,7 +516,6 @@ model {
     }
 
     @Issue("https://github.com/gradle/gradle/issues/1000")
-    @ToBeFixedForConfigurationCache
     def "can configure legacy plugin"() {
         given:
         buildFile << """

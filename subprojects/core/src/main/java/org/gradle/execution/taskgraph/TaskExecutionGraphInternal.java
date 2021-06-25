@@ -38,6 +38,11 @@ public interface TaskExecutionGraphInternal extends TaskExecutionGraph {
     void addEntryTasks(Iterable<? extends Task> tasks);
 
     /**
+     * Adds an additional entry task that may be discovered in a composition of task graphs.
+     */
+    void addAdditionalEntryTask(String taskPath);
+
+    /**
      * Adds the given nodes to this graph.
      */
     void addNodes(Collection<? extends Node> nodes);
@@ -77,4 +82,10 @@ public interface TaskExecutionGraphInternal extends TaskExecutionGraph {
      * Returns all of the work items in this graph scheduled for execution.
      */
     List<Node> getScheduledWork();
+
+    /**
+     * Returns all of the work items in this graph scheduled for execution plus all
+     * dependencies from other builds.
+     */
+    List<Node> getScheduledWorkPlusDependencies();
 }

@@ -18,7 +18,7 @@ package org.gradle.java.compile.jpms.test
 
 import org.gradle.integtests.fixtures.AvailableJavaHomes
 import org.gradle.util.Requires
-import org.gradle.util.TextUtil
+import org.gradle.util.internal.TextUtil
 
 class JavaModuleBackboxTestExcutionIntegrationTest extends AbstractJavaModuleTestingIntegrationTest {
 
@@ -73,7 +73,7 @@ class JavaModuleBackboxTestExcutionIntegrationTest extends AbstractJavaModuleTes
         buildFile << """
             test { useJUnitPlatform() }
             dependencies {
-                testImplementation 'org.junit.jupiter:junit-jupiter-api:5.6.0'
+                testImplementation 'org.junit.jupiter:junit-jupiter-api:5.7.1'
                 testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine'
             }
         """
@@ -130,6 +130,24 @@ class JavaModuleBackboxTestExcutionIntegrationTest extends AbstractJavaModuleTes
 
         then:
         fails "test"
-        failure.assertHasErrorOutput('Unrecognized option: --module')
+        // Oracle JDK or IBM JDK
+        failure.assertHasErrorOutput('Unrecognized option: --module') || failure.assertHasErrorOutput('Command-line option unrecognised: --module')
+    }
+
+    def "runs JUnit4 module test on classpath if module path inference is turned off"() {
+        given:
+        buildFile << """
+            tasks.test.modularity.inferModulePath = false
+            dependencies { testImplementation 'junit:junit:4.13' }
+        """
+
+        when:
+        consumingModuleInfo('exports consumer')
+        consumingModuleClass()
+        testModuleInfo('requires consumer', 'requires junit')
+        testModuleClass('org.junit.Assert.assertNull(consumer.MainModule.class.getModule().getName())')
+
+        then:
+        succeeds ':test'
     }
 }

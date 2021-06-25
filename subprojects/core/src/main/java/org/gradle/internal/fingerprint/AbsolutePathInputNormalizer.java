@@ -17,9 +17,10 @@
 package org.gradle.internal.fingerprint;
 
 import org.gradle.api.tasks.FileNormalizer;
+import org.gradle.internal.execution.fingerprint.DirectorySensitiveNormalizer;
 
 /**
  * {@link FileNormalizer} that uses absolute paths for input files. The default.
  */
-public interface AbsolutePathInputNormalizer extends FileNormalizer {
+public interface AbsolutePathInputNormalizer extends FileNormalizer, DirectorySensitiveNormalizer {
 }

@@ -83,12 +83,6 @@ _Depends on_: `testClasses`, and all tasks which produce the test runtime classp
 +
 Runs the unit tests using JUnit or TestNG.
 
-`uploadArchives` — link:{groovyDslPath}/org.gradle.api.tasks.Upload.html[Upload]::
-_Depends on_: `jar`, and any other task that produces an artifact attached to the `archives` configuration
-+
-Uploads artifacts in the `archives` configuration — including the production JAR file — to the configured repositories.
-This task is _deprecated_, you should use one of the <<publishing_ivy.adoc#publishing_ivy,Ivy>> or <<publishing_maven.adoc#publishing_maven,Maven>> publishing plugins instead.
-
 `clean` — link:{groovyDslPath}/org.gradle.api.tasks.Delete.html[Delete]::
 Deletes the project build directory.
 
@@ -238,7 +232,7 @@ _Default value_: `src/$name/java`, e.g. _src/main/java_
 +
 The source directories containing the Java source files of this source set.  You can set this to any value that is described in <<working_with_files.adoc#sec:specifying_multiple_files,this section>>.
 
-`java.outputDir` — `File`::
+`java.destinationDirectory` — `DirectoryProperty`::
 _Default value_: `$buildDir/classes/java/$name`, e.g. _build/classes/java/main_
 +
 The directory to generate compiled Java sources into. You can set this to any value that is described in <<working_with_files.adoc#sec:single_file_paths,this section>>.
@@ -309,55 +303,43 @@ To find information on the `api` configuration, please consult the <<java_librar
 
 ====
 
-[.line-through]#`compile`#(Deprecated)::
-Compile time dependencies. Superseded by `implementation`.
-
-`implementation` extends `compile`::
+`implementation`::
 Implementation only dependencies.
 
 `compileOnly`::
 Compile time only dependencies, not used at runtime.
 
-`compileClasspath` extends `compile, compileOnly, implementation`::
+`compileClasspath` extends `compileOnly, implementation`::
 Compile classpath, used when compiling source. Used by task `compileJava`.
 
 `annotationProcessor`::
 Annotation processors used during compilation.
 
-[.line-through]#`runtime`#(Deprecated) extends `compile`::
-Runtime dependencies. Superseded by `runtimeOnly`.
-
 `runtimeOnly`::
 Runtime only dependencies.
 
-`runtimeClasspath` extends `runtimeOnly, runtime, implementation`::
+`runtimeClasspath` extends `runtimeOnly, implementation`::
 Runtime classpath contains elements of the implementation, as well as runtime only elements.
 
-[.line-through]#`testCompile`#(Deprecated) extends `compile`::
-Additional dependencies for compiling tests. Superseded by `testImplementation`.
-
-`testImplementation` extends `testCompile, implementation`::
+`testImplementation` extends `implementation`::
 Implementation only dependencies for tests.
 
 `testCompileOnly`::
 Additional dependencies only for compiling tests, not used at runtime.
 
-`testCompileClasspath` extends `testCompile, testCompileOnly, testImplementation`::
+`testCompileClasspath` extends `testCompileOnly, testImplementation`::
 Test compile classpath, used when compiling test sources. Used by task `compileTestJava`.
-
-[.line-through]#`testRuntime`#(Deprecated) extends `runtime, testCompile`::
-Additional dependencies for running tests only. Superseded by `testRuntimeOnly`.
 
 `testRuntimeOnly` extends `runtimeOnly`::
 Runtime only dependencies for running tests.
 
-`testRuntimeClasspath` extends `testRuntimeOnly, testRuntime, testImplementation`::
+`testRuntimeClasspath` extends `testRuntimeOnly, testImplementation`::
 Runtime classpath for running tests. Used by task `test`.
 
 `archives`::
-Artifacts (e.g. jars) produced by this project. Used by task `uploadArchives`.
+Artifacts (e.g. jars) produced by this project. Used by Gradle to determine "default" tasks to execute when building.
 
-`default` extends `runtimeClasspath`::
+`default` extends `runtimeElements`::
 The default configuration used by a project dependency on this project. Contains the artifacts and dependencies required by this project at runtime.
 
 The following diagrams show the dependency configurations for the _main_ and _test_ source sets respectively. You can use this legend to interpret the colors:
@@ -378,28 +360,22 @@ For each source set you add to the project, the Java plugins adds the following 
 [[java_source_set_configurations]]
 === SourceSet dependency configurations
 
-[.line-through]#`__sourceSet__Compile`#(Deprecated)::
-Compile time dependencies for the given source set. Superseded by `__sourceSet__Implementation`.
-
-`__sourceSet__Implementation` extends `__sourceSet__Compile`::
+`__sourceSet__Implementation`::
 Compile time dependencies for the given source set. Used by `__sourceSet__CompileClasspath, __sourceSet__RuntimeClasspath`.
 
 `__sourceSet__CompileOnly`::
 Compile time only dependencies for the given source set, not used at runtime.
 
-`__sourceSet__CompileClasspath` extends `__sourceSet__Compile, __sourceSet__CompileOnly, __sourceSet__Implementation`::
+`__sourceSet__CompileClasspath` extends `__sourceSet__CompileOnly, __sourceSet__Implementation`::
 Compile classpath, used when compiling source. Used by `compile__SourceSet__Java`.
 
 `__sourceSet__AnnotationProcessor`::
 Annotation processors used during compilation of this source set.
 
-[.line-through]#`__sourceSet__Runtime`#(Deprecated)::
-Runtime dependencies for the given source set. Superseded by `__sourceSet__RuntimeOnly`.
-
 `__sourceSet__RuntimeOnly`::
 Runtime only dependencies for the given source set.
 
-`__sourceSet__RuntimeClasspath` extends `__sourceSet__RuntimeOnly, __sourceSet__Runtime, __sourceSet__Implementation`::
+`__sourceSet__RuntimeClasspath` extends `__sourceSet__RuntimeOnly, __sourceSet__Implementation`::
 Runtime classpath contains elements of the implementation, as well as runtime only elements.
 
 [[sec:java-extension]]
@@ -425,10 +401,6 @@ Automatically packages Javadoc and creates a variant `javadocElements` with an a
 
 `withSourcesJar()`::
 Automatically packages source code and creates a variant `sourceElements` with an artifact `-sources.jar`, which will be part of the publication.
-
-== Convention properties
-
-The Java Plugin adds a number of convention properties to the project, shown below. You can use these properties in your build script as though they were properties of the project object.
 
 === Directory properties
 
@@ -471,7 +443,7 @@ The directory to generate documentation into. Default value: `__buildDir__/__doc
 `String dependencyCacheDirName`::
 The name of the directory to use to cache source dependency information, relative to the build directory. Default value: `dependency-cache`
 
-=== Other convention properties
+=== Other properties
 
 `(read-only) link:{javadocPath}/org/gradle/api/tasks/SourceSetContainer.html[SourceSetContainer] sourceSets`::
 Contains the project's source sets. Default value: Not null link:{javadocPath}/org/gradle/api/tasks/SourceSetContainer.html[SourceSetContainer]
@@ -482,7 +454,11 @@ The basename to use for archives, such as JAR or ZIP files. Default value: `__pr
 `link:{javadocPath}/org/gradle/api/java/archives/Manifest.html[Manifest] manifest`::
 The manifest to include in all JAR files. Default value: an empty manifest.
 
-These properties are provided by convention objects of type link:{javadocPath}/org/gradle/api/plugins/JavaPluginConvention.html[JavaPluginConvention], and link:{javadocPath}/org/gradle/api/plugins/BasePluginConvention.html[BasePluginConvention].
+== Convention properties (deprecated)
+
+The Java Plugin adds a number of convention properties to the project. You can use these properties in your build script as though they were properties of the project object.
+These are *deprecated* and superseded by the extension described above.
+See the link:{groovyDslPath}/org.gradle.api.plugins.JavaPluginConvention.html[JavaPluginConvention] DSL documentation for information on them.
 
 [[sec:java_test]]
 == Testing
@@ -493,7 +469,8 @@ See the <<java_testing.adoc#java_testing,Testing in Java & JVM projects>> chapte
 == Publishing
 
 `components.java`::
-A link:{javadocPath}/org/gradle/api/component/SoftwareComponent.html[SoftwareComponent] for <<publishing_setup.adoc#publishing_overview,publishing>> the production JAR created by the `jar` task. This component includes the runtime dependency information for the JAR.
+A link:{javadocPath}/org/gradle/api/component/SoftwareComponent.html[SoftwareComponent] for <<publishing_setup.adoc#publishing_overview,publishing>> the production JAR created by the `jar` task.
+This component includes the runtime dependency information for the JAR.
 
 See also the <<#sec:java-extension,`java` extension>>.
 
@@ -514,13 +491,12 @@ To help you understand how incremental compilation works, the following provides
 * Gradle will recompile all classes _affected_ by a change.
 * A class is _affected_ if it has been changed or if it depends on another affected class.
     This works no matter if the other class is defined in the same project, another project or even an external library.
-* A class's dependencies are determined from type references in its bytecode.
-* Since constants can be inlined, any change to a constant will result in Gradle recompiling all source files.
-    For that reason, you should try to minimize the use of constants in your source code and replace them with static methods where possible.
+* A class's dependencies are determined from type references in its bytecode or symbol analysis via a compiler plugin.
 * Since source-retention annotations are not visible in bytecode, changes to a source-retention annotation will result in full recompilation.
 * You can improve incremental compilation performance by applying good software design principles like loose coupling.
     For instance, if you put an interface between a concrete class and its dependents, the dependent classes are only recompiled when the interface changes, but not when the implementation changes.
 * The class analysis is cached in the project directory, so the first build after a clean checkout can be slower. Consider turning off the incremental compiler on your build server.
+* The class analysis is also an output stored in the build cache, which means that if a compilation output is fetched from the build cache, then the incremental compilation analysis will be too and the next compilation will be incremental.
 
 [[sec:incremental_compilation_known_issues]]
 === Known issues
@@ -528,7 +504,6 @@ To help you understand how incremental compilation works, the following provides
 * If a compile task fails due to a compile error, it will do a full compilation again the next time it is invoked.
 * If you are using an annotation processor that reads resources (e.g. a configuration file), you need to declare those resources as an input of the compile task.
 * If a resource file is changed, Gradle will trigger a full recompilation.
-* If there is a mismatch in the package declaration and the directory structure of source files (e.g. `package foo` vs location `bar/MyClass.java`), then incremental compilation can produce broken output. Wrong classes might be recompiled and there might be leftover class files in the output.
 
 [[sec:incremental_annotation_processing]]
 == Incremental annotation processing
@@ -798,5 +773,5 @@ include::sample[dir="snippets/java/apt/kotlin", files="build.gradle.kts[tags=ann
 
 == Variant aware selection
 
-The whole set of JVM plugins leverage <<variant_model.adoc#,variant aware resolution>> for the dependencies used.
+The whole set of JVM plugins leverage <<variant_model.adoc#understanding-variant-selection,variant aware resolution>> for the dependencies used.
 They also install a set of attributes compatibility and disambiguation rules to <<variant_attributes.adoc#sub:jvm_default_attributes,configure the Gradle attributes>> for the specifics of the JVM ecosystem.

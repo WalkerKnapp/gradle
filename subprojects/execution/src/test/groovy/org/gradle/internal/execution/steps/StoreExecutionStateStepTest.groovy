@@ -20,17 +20,15 @@ import com.google.common.collect.ImmutableList
 import com.google.common.collect.ImmutableSortedMap
 import org.gradle.caching.internal.origin.OriginMetadata
 import org.gradle.internal.Try
-import org.gradle.internal.execution.BeforeExecutionContext
-import org.gradle.internal.execution.CurrentSnapshotResult
-import org.gradle.internal.execution.ExecutionOutcome
+import org.gradle.internal.execution.ExecutionResult
 import org.gradle.internal.execution.history.AfterPreviousExecutionState
 import org.gradle.internal.execution.history.BeforeExecutionState
 import org.gradle.internal.execution.history.ExecutionHistoryStore
-import org.gradle.internal.fingerprint.CurrentFileCollectionFingerprint
 import org.gradle.internal.hash.HashCode
+import org.gradle.internal.snapshot.FileSystemSnapshot
 import org.gradle.internal.snapshot.impl.ImplementationSnapshot
 
-class StoreExecutionStateStepTest extends StepSpec<BeforeExecutionContext> implements FingerprinterFixture {
+class StoreExecutionStateStepTest extends StepSpec<BeforeExecutionContext> implements SnasphotterFixture {
     def executionHistoryStore = Mock(ExecutionHistoryStore)
 
     def originMetadata = Mock(OriginMetadata)
@@ -46,7 +44,7 @@ class StoreExecutionStateStepTest extends StepSpec<BeforeExecutionContext> imple
     }
 
     def outputFile = file("output.txt").text = "output"
-    def finalOutputs = fingerprintsOf(output: outputFile)
+    def outputFilesProduceByWork = snapshotsOf(output: outputFile)
 
     def step = new StoreExecutionStateStep<BeforeExecutionContext>(delegate)
     def delegateResult = Mock(CurrentSnapshotResult)
@@ -57,45 +55,45 @@ class StoreExecutionStateStepTest extends StepSpec<BeforeExecutionContext> imple
     }
 
     def setup() {
-        _ * work.executionHistoryStore >> Optional.of(executionHistoryStore)
+        _ * context.history >> Optional.of(executionHistoryStore)
     }
 
     def "output snapshots are stored after successful execution"() {
         when:
-        def result = step.execute(context)
+        def result = step.execute(work, context)
 
         then:
         result == delegateResult
-        1 * delegate.execute(context) >> delegateResult
+        1 * delegate.execute(work, context) >> delegateResult
 
         then:
-        1 * delegateResult.finalOutputs >> finalOutputs
+        1 * delegateResult.outputFilesProduceByWork >> outputFilesProduceByWork
         _ * context.beforeExecutionState >> Optional.of(beforeExecutionState)
-        1 * delegateResult.outcome >> Try.successful(ExecutionOutcome.EXECUTED_NON_INCREMENTALLY)
+        1 * delegateResult.executionResult >> Try.successful(Mock(ExecutionResult))
 
         then:
-        interaction { expectStore(true, finalOutputs) }
+        interaction { expectStore(true, outputFilesProduceByWork) }
         0 * _
     }
 
     def "output snapshots are stored after failed execution when there's no previous state available"() {
         when:
-        def result = step.execute(context)
+        def result = step.execute(work, context)
 
         then:
         result == delegateResult
-        1 * delegate.execute(context) >> delegateResult
+        1 * delegate.execute(work, context) >> delegateResult
 
         then:
-        1 * delegateResult.finalOutputs >> finalOutputs
+        1 * delegateResult.outputFilesProduceByWork >> outputFilesProduceByWork
         _ * context.beforeExecutionState >> Optional.of(beforeExecutionState)
-        1 * delegateResult.outcome >> Try.failure(new RuntimeException("execution error"))
+        1 * delegateResult.executionResult >> Try.failure(new RuntimeException("execution error"))
 
         then:
         _ * context.afterPreviousExecutionState >> Optional.empty()
 
         then:
-        interaction { expectStore(false, finalOutputs) }
+        interaction { expectStore(false, outputFilesProduceByWork) }
         0 * _
     }
 
@@ -103,23 +101,23 @@ class StoreExecutionStateStepTest extends StepSpec<BeforeExecutionContext> imple
         def afterPreviousExecutionState = Mock(AfterPreviousExecutionState)
 
         when:
-        def result = step.execute(context)
+        def result = step.execute(work, context)
 
         then:
         result == delegateResult
-        1 * delegate.execute(context) >> delegateResult
+        1 * delegate.execute(work, context) >> delegateResult
 
         then:
-        1 * delegateResult.finalOutputs >> finalOutputs
+        1 * delegateResult.outputFilesProduceByWork >> outputFilesProduceByWork
         _ * context.beforeExecutionState >> Optional.of(beforeExecutionState)
-        1 * delegateResult.outcome >> Try.failure(new RuntimeException("execution error"))
+        1 * delegateResult.executionResult >> Try.failure(new RuntimeException("execution error"))
 
         then:
         _ * context.afterPreviousExecutionState >> Optional.of(afterPreviousExecutionState)
-        1 * afterPreviousExecutionState.outputFileProperties >> fingerprintsOf([:])
+        1 * afterPreviousExecutionState.outputFilesProducedByWork >> snapshotsOf([:])
 
         then:
-        interaction { expectStore(false, finalOutputs) }
+        interaction { expectStore(false, outputFilesProduceByWork) }
         0 * _
     }
 
@@ -127,27 +125,27 @@ class StoreExecutionStateStepTest extends StepSpec<BeforeExecutionContext> imple
         def afterPreviousExecutionState = Mock(AfterPreviousExecutionState)
 
         when:
-        def result = step.execute(context)
+        def result = step.execute(work, context)
 
         then:
         result == delegateResult
-        1 * delegate.execute(context) >> delegateResult
+        1 * delegate.execute(work, context) >> delegateResult
 
         then:
-        1 * delegateResult.finalOutputs >> finalOutputs
+        1 * delegateResult.outputFilesProduceByWork >> outputFilesProduceByWork
         _ * context.beforeExecutionState >> Optional.of(beforeExecutionState)
-        1 * delegateResult.outcome >> Try.failure(new RuntimeException("execution error"))
+        1 * delegateResult.executionResult >> Try.failure(new RuntimeException("execution error"))
 
         then:
         _ * context.afterPreviousExecutionState >> Optional.of(afterPreviousExecutionState)
-        1 * afterPreviousExecutionState.outputFileProperties >> finalOutputs
+        1 * afterPreviousExecutionState.outputFilesProducedByWork >> outputFilesProduceByWork
         0 * _
     }
 
-    void expectStore(boolean successful, ImmutableSortedMap<String, CurrentFileCollectionFingerprint> finalOutputs) {
+    void expectStore(boolean successful, ImmutableSortedMap<String, FileSystemSnapshot> finalOutputs) {
         1 * delegateResult.originMetadata >> originMetadata
         1 * executionHistoryStore.store(
-            identity,
+            identity.uniqueId,
             originMetadata,
             implementationSnapshot,
             additionalImplementations,

@@ -16,119 +16,62 @@
 
 package org.gradle.api.plugins.internal;
 
-import org.gradle.api.Project;
 import org.gradle.api.file.DirectoryProperty;
-import org.gradle.api.internal.project.ProjectInternal;
 import org.gradle.api.plugins.BasePluginConvention;
+import org.gradle.api.plugins.BasePluginExtension;
 import org.gradle.api.reflect.HasPublicType;
 import org.gradle.api.reflect.TypeOf;
-import org.gradle.internal.deprecation.DeprecationLogger;
 
-import java.io.File;
-
-import static org.gradle.api.reflect.TypeOf.typeOf;
-
+@Deprecated
 public class DefaultBasePluginConvention extends BasePluginConvention implements HasPublicType {
-    private final DirectoryProperty buildDirectory;
-    private final DirectoryProperty distsDirectory;
-    private final DirectoryProperty libsDirectory;
 
-    private ProjectInternal project;
+    private BasePluginExtension extension;
 
-    private String distsDirName;
-    private String libsDirName;
-    private String archivesBaseName;
-
-    public DefaultBasePluginConvention(Project project) {
-        this.project = (ProjectInternal) project;
-        this.buildDirectory = project.getLayout().getBuildDirectory();
-        this.archivesBaseName = project.getName();
-
-        this.distsDirName = "distributions";
-        this.distsDirectory = project.getObjects().directoryProperty();
-        distsDirectory.convention(buildDirectory.dir(distsDirName));
-
-        this.libsDirName = "libs";
-        this.libsDirectory = project.getObjects().directoryProperty();
-        libsDirectory.convention(buildDirectory.dir(libsDirName));
+    public DefaultBasePluginConvention(BasePluginExtension extension) {
+        this.extension = extension;
     }
-
     @Override
     public TypeOf<?> getPublicType() {
-        return typeOf(BasePluginConvention.class);
-    }
-
-    @Override
-    @Deprecated
-    public File getDistsDir() {
-        DeprecationLogger.deprecateProperty(Project.class, "distsDir").replaceWith("distsDirectory").willBeRemovedInGradle7().withDslReference().nagUser();
-        return getDistsDirectory().get().getAsFile();
+        return TypeOf.typeOf(BasePluginConvention.class);
     }
 
     @Override
     public DirectoryProperty getDistsDirectory() {
-        return distsDirectory;
-    }
-
-    @Override
-    @Deprecated
-    public File getLibsDir() {
-        DeprecationLogger.deprecateProperty(Project.class, "libsDir").replaceWith("libsDirectory").willBeRemovedInGradle7().withDslReference().nagUser();
-        return getLibsDirectory().get().getAsFile();
+        return extension.getDistsDirectory();
     }
 
     @Override
     public DirectoryProperty getLibsDirectory() {
-        return libsDirectory;
-    }
-
-    @Override
-    public ProjectInternal getProject() {
-        DeprecationLogger.deprecateMethod(BasePluginConvention.class, "getProject()")
-            .willBeRemovedInGradle7()
-            .withUpgradeGuideSection(6, "discontinued_methods")
-            .nagUser();
-        return project;
-    }
-
-    @Override
-    public void setProject(ProjectInternal project) {
-        DeprecationLogger.deprecateMethod(BasePluginConvention.class, "setProject()")
-            .willBeRemovedInGradle7()
-            .withUpgradeGuideSection(6, "discontinued_methods")
-            .nagUser();
-        this.project = project;
+        return extension.getLibsDirectory();
     }
 
     @Override
     public String getDistsDirName() {
-        return distsDirName;
+        return extension.getDistsDirName();
     }
 
     @Override
     public void setDistsDirName(String distsDirName) {
-        this.distsDirName = distsDirName;
-        distsDirectory.set(buildDirectory.dir(distsDirName));
+        extension.setDistsDirName(distsDirName);
     }
 
     @Override
     public String getLibsDirName() {
-        return libsDirName;
+        return extension.getLibsDirName();
     }
 
     @Override
     public void setLibsDirName(String libsDirName) {
-        this.libsDirName = libsDirName;
-        libsDirectory.set(buildDirectory.dir(libsDirName));
+        extension.setLibsDirName(libsDirName);
     }
 
     @Override
     public String getArchivesBaseName() {
-        return archivesBaseName;
+        return extension.getArchivesBaseName();
     }
 
     @Override
     public void setArchivesBaseName(String archivesBaseName) {
-        this.archivesBaseName = archivesBaseName;
+        extension.setArchivesBaseName(archivesBaseName);
     }
 }

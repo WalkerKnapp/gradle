@@ -18,24 +18,24 @@ package org.gradle.performance.results.report;
 
 import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
-import com.google.common.collect.Sets;
 import com.googlecode.jatl.Html;
 import groovy.json.JsonOutput;
 import org.apache.commons.lang.StringUtils;
 import org.gradle.performance.results.CrossVersionPerformanceTestHistory;
 import org.gradle.performance.results.FormatSupport;
+import org.gradle.performance.results.PerformanceScenario;
 import org.gradle.performance.results.PerformanceTestExecution;
 import org.gradle.performance.results.PerformanceTestHistory;
 import org.gradle.performance.results.ScenarioDefinition;
 import org.gradle.performance.util.Git;
 
 import javax.annotation.Nullable;
-import java.io.IOException;
 import java.io.Writer;
+import java.time.Instant;
 import java.util.Collections;
-import java.util.Date;
 import java.util.List;
-import java.util.Set;
+
+import static org.gradle.performance.results.report.AbstractTablePageGenerator.getTeamCityWebUrlFromBuildId;
 
 public class TestPageGenerator extends HtmlPageGenerator<PerformanceTestHistory> implements PerformanceExecutionGraphRenderer {
     private final String projectName;
@@ -50,8 +50,7 @@ public class TestPageGenerator extends HtmlPageGenerator<PerformanceTestHistory>
     }
 
     @Override
-    public void render(final PerformanceTestHistory testHistory, Writer writer) throws IOException {
-        // TODO: Add test name to the report
+    public void render(final PerformanceTestHistory testHistory, Writer writer) {
         // @formatter:off
         new MetricsHtml(writer) {{
             html();
@@ -155,11 +154,11 @@ public class TestPageGenerator extends HtmlPageGenerator<PerformanceTestHistory>
 
             private void renderDateAndLink(PerformanceTestExecution results) {
                 td();
-                    String date = FormatSupport.timestamp(new Date(results.getStartTime()));
+                    String date = FormatSupport.timestamp(Instant.ofEpochMilli(results.getStartTime()));
                     if (results.getTeamCityBuildId() == null) {
                         text(date);
                     } else {
-                        a().href("https://builds.gradle.org/viewLog.html?buildId=" + results.getTeamCityBuildId()).target("_blank").text(date).end();
+                        a().href(getTeamCityWebUrlFromBuildId(results.getTeamCityBuildId())).target("_blank").text(date).end();
                     }
                 end();
             }
@@ -285,18 +284,11 @@ public class TestPageGenerator extends HtmlPageGenerator<PerformanceTestHistory>
     }
 
     private String getReproductionInstructions(PerformanceTestHistory history) {
-        Set<String> templates = Sets.newHashSet();
-        Set<String> cleanTasks = Sets.newHashSet();
-        for (ScenarioDefinition scenario : history.getScenarios()) {
-            templates.add(scenario.getTestProject());
-            cleanTasks.add("clean" + StringUtils.capitalize(scenario.getTestProject()));
-        }
-
-        return String.format("To reproduce, run ./gradlew %s %s cleanPerformanceAdhocTest :%s:performanceAdhocTest --scenarios '%s' -x prepareSamples",
-            Joiner.on(' ').join(cleanTasks),
-            Joiner.on(' ').join(templates),
+        PerformanceScenario scenario = history.getExperiment().getScenario();
+        return String.format("To reproduce, run ./gradlew :%s:%sPerformanceAdhocTest --tests '%s' -PperformanceBaselines=force-defaults",
             projectName,
-            history.getDisplayName()
+            history.getExperiment().getTestProject(),
+            scenario.getClassName() + "." + scenario.getTestName()
         );
     }
 
@@ -314,7 +306,7 @@ public class TestPageGenerator extends HtmlPageGenerator<PerformanceTestHistory>
         }
 
         public String getUrl() {
-            return String.format("https://github.com/%s/commit/%s", repo, formatHash(hash));
+            return String.format("https://github.com/%s/commit/%s", repo, hash);
         }
 
         public String getLabel() {

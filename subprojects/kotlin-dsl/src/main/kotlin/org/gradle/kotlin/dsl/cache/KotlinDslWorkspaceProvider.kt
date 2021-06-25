@@ -21,8 +21,10 @@ import org.gradle.cache.CacheRepository
 import org.gradle.cache.internal.CacheScopeMapping
 import org.gradle.cache.internal.InMemoryCacheDecoratorFactory
 import org.gradle.cache.internal.VersionStrategy
+import org.gradle.internal.execution.workspace.WorkspaceProvider
 import org.gradle.internal.execution.workspace.impl.DefaultImmutableWorkspaceProvider
 import org.gradle.internal.file.FileAccessTimeJournal
+import java.io.Closeable
 
 
 class KotlinDslWorkspaceProvider(
@@ -31,11 +33,29 @@ class KotlinDslWorkspaceProvider(
     fileAccessTimeJournal: FileAccessTimeJournal,
     inMemoryCacheDecoratorFactory: InMemoryCacheDecoratorFactory,
     stringInterner: StringInterner
-) : DefaultImmutableWorkspaceProvider(
-    "kotlin-dsl",
-    cacheScopeMapping.getBaseDirectory(null, "kotlin-dsl", VersionStrategy.CachePerVersion),
-    cacheRepository,
-    fileAccessTimeJournal,
-    inMemoryCacheDecoratorFactory,
-    stringInterner
-)
+) : Closeable {
+
+    private
+    val kotlinDslWorkspace = DefaultImmutableWorkspaceProvider.withBuiltInHistory(
+        cacheRepository
+            .cache(cacheScopeMapping.getBaseDirectory(null, "kotlin-dsl", VersionStrategy.CachePerVersion))
+            .withDisplayName("kotlin-dsl"),
+        fileAccessTimeJournal,
+        inMemoryCacheDecoratorFactory,
+        stringInterner,
+        2 // scripts and accessors caches sit below the root directory
+    )
+
+    val accessors = subWorkspace("accessors")
+
+    val scripts = subWorkspace("scripts")
+
+    override fun close() =
+        kotlinDslWorkspace.close()
+
+    private
+    fun subWorkspace(prefix: String): WorkspaceProvider = object : WorkspaceProvider {
+        override fun <T : Any> withWorkspace(path: String, action: WorkspaceProvider.WorkspaceAction<T>): T =
+            kotlinDslWorkspace.withWorkspace("$prefix/$path", action)
+    }
+}

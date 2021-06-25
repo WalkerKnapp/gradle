@@ -97,11 +97,20 @@ public class ErrorHandlingConfigurationResolver implements ConfigurationResolver
         results.artifactsResolved(wrappedConfiguration, results.getVisitedArtifacts());
     }
 
-    private static ResolveException wrapException(Throwable e, ResolveContext resolveContext) {
+    static ResolveException wrapException(Throwable e, ResolveContext resolveContext) {
         if (e instanceof ResolveException) {
-            return (ResolveException) e;
+            ResolveException resolveException = (ResolveException) e;
+            return maybeAddHintToResolveException(resolveContext, resolveException);
         }
-        return new ResolveException(resolveContext.getDisplayName(), e);
+        return maybeAddHintToResolveException(resolveContext, new ResolveException(resolveContext.getDisplayName(), e));
+    }
+
+    private static ResolveException maybeAddHintToResolveException(ResolveContext resolveContext, ResolveException resolveException) {
+        if (resolveContext instanceof ConfigurationInternal) {
+            ConfigurationInternal config = (ConfigurationInternal) resolveContext;
+            return config.maybeAddContext(resolveException);
+        }
+        return resolveException;
     }
 
     private static class ErrorHandlingLenientConfiguration implements LenientConfiguration {

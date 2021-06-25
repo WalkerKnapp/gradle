@@ -20,6 +20,7 @@ import org.gradle.internal.service.scopes.Scope.Global;
 import org.gradle.internal.service.scopes.ServiceScope;
 
 import javax.annotation.concurrent.ThreadSafe;
+import java.util.function.Predicate;
 
 /**
  * A factory for {@link CrossBuildInMemoryCache} instances.
@@ -42,6 +43,17 @@ public interface CrossBuildInMemoryCacheFactory {
      * <p>Note: this should be used to create _only_ global scoped instances.
      */
     <K, V> CrossBuildInMemoryCache<K, V> newCache();
+
+    /**
+     * Creates a new cache instance. Keys and values are always referenced using strong references.
+     *
+     * <p>Entries are only removed after each build session if they have not been used in this or the previous build.
+     *
+     * <p>Note: this should be used to create _only_ global/Gradle user home scoped instances.
+     *
+     * @param retentionFilter Determines which values should be retained till the next build.
+     */
+    <K, V> CrossBuildInMemoryCache<K, V> newCacheRetainingDataFromPreviousBuild(Predicate<V> retentionFilter);
 
     /**
      * Creates a new cache instance whose keys are Class instances. Keys are referenced using strong or weak references, values by strong or soft references depending on their usage.

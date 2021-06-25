@@ -16,24 +16,24 @@
 
 package org.gradle.plugin.devel.tasks
 
-import org.gradle.internal.reflect.TypeValidationContext
+import org.gradle.internal.reflect.problems.ValidationProblemId
+import org.gradle.internal.reflect.validation.ValidationTestFor
 import org.gradle.test.fixtures.file.TestFile
 
-import static org.gradle.internal.reflect.TypeValidationContext.Severity.ERROR
-import static org.gradle.internal.reflect.TypeValidationContext.Severity.WARNING
+import static org.gradle.internal.reflect.validation.Severity.ERROR
+import static org.gradle.internal.reflect.validation.Severity.WARNING
 
 class RuntimePluginValidationIntegrationTest extends AbstractPluginValidationIntegrationSpec {
 
     @Override
     def setup() {
+        expectReindentedValidationMessage()
         buildFile << """
             tasks.register("run", MyTask)
         """
-
-        executer.withFullDeprecationStackTraceDisabled()
     }
 
-    final String iterableSymbol = '.$0'
+    String iterableSymbol = '.$0'
 
     @Override
     String getNameSymbolFor(String name) {
@@ -51,30 +51,23 @@ class RuntimePluginValidationIntegrationTest extends AbstractPluginValidationInt
         result.assertTaskNotSkipped(":run")
     }
 
-    @Override
-    void assertValidationFailsWith(Map<String, TypeValidationContext.Severity> messages) {
-        def expectedWarnings = messages
-            .findAll { message, severity -> severity == WARNING }
-            .keySet()
-            .collect { removeTypeForProperties(it) }
-        def expectedErrors = messages
-            .findAll { message, severity -> severity == ERROR }
-            .keySet()
-            .collect { removeTypeForProperties(it) }
+    void assertValidationFailsWith(List<DocumentedProblem> messages) {
+        def expectedDeprecations = messages
+            .findAll { problem -> problem.severity == WARNING }
+        def expectedFailures = messages
+            .findAll { problem -> problem.severity == ERROR }
 
-        executer.withFullDeprecationStackTraceDisabled()
-        expectedWarnings.forEach { warning ->
-            executer.expectDocumentedDeprecationWarning("$warning This behaviour has been deprecated and is scheduled to be removed in Gradle 7.0. " +
-                "See https://docs.gradle.org/current/userguide/more_about_tasks.html#sec:up_to_date_checks for more details.")
+        expectedDeprecations.forEach { warning ->
+            expectThatExecutionOptimizationDisabledWarningIsDisplayed(executer, warning.message, warning.id, warning.section)
         }
-        if (expectedErrors) {
+        if (expectedFailures) {
             fails "run"
         } else {
             succeeds "run"
         }
         result.assertTaskNotSkipped(":run")
 
-        switch (expectedErrors.size()) {
+        switch (expectedFailures.size()) {
             case 0:
                 break
             case 1:
@@ -84,13 +77,9 @@ class RuntimePluginValidationIntegrationTest extends AbstractPluginValidationInt
                 failure.assertHasDescription("Some problems were found with the configuration of task ':run' (type 'MyTask').")
                 break
         }
-        expectedErrors.forEach { error ->
-            failureHasCause(error)
+        expectedFailures.forEach { error ->
+            failureDescriptionContains(error.message)
         }
-    }
-
-    static String removeTypeForProperties(String message) {
-        message.replaceAll(/Type '.*?': property/, "Property")
     }
 
     @Override
@@ -98,6 +87,9 @@ class RuntimePluginValidationIntegrationTest extends AbstractPluginValidationInt
         return file("buildSrc/$path")
     }
 
+    @ValidationTestFor(
+        ValidationProblemId.MISSING_ANNOTATION
+    )
     def "supports recursive types"() {
         groovyTaskSource << """
             import org.gradle.api.*
@@ -125,10 +117,10 @@ class RuntimePluginValidationIntegrationTest extends AbstractPluginValidationInt
         """
 
         expect:
-        assertValidationFailsWith(
-            "Property 'tree.nonAnnotated' is not annotated with an input or output annotation.": WARNING,
-            "Property 'tree.left.nonAnnotated' is not annotated with an input or output annotation.": WARNING,
-            "Property 'tree.right.nonAnnotated' is not annotated with an input or output annotation.": WARNING,
-        )
+        assertValidationFailsWith([
+                error(missingAnnotationMessage { type('MyTask').property('tree.nonAnnotated').missingInputOrOutput() }, 'validation_problems', 'missing_annotation'),
+                error(missingAnnotationMessage { type('MyTask').property('tree.left.nonAnnotated').missingInputOrOutput() }, 'validation_problems', 'missing_annotation'),
+                error(missingAnnotationMessage { type('MyTask').property('tree.right.nonAnnotated').missingInputOrOutput() }, 'validation_problems', 'missing_annotation'),
+        ])
     }
 }

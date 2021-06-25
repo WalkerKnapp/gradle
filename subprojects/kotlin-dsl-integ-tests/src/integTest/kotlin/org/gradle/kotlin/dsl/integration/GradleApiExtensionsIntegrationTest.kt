@@ -24,7 +24,6 @@ import org.gradle.api.tasks.Delete
 import org.gradle.api.tasks.TaskCollection
 import org.gradle.integtests.fixtures.ToBeFixedForConfigurationCache
 import org.gradle.kotlin.dsl.fixtures.containsMultiLineString
-import org.gradle.kotlin.dsl.support.normaliseLineSeparators
 import org.gradle.test.fixtures.file.LeaksFileHandles
 import org.hamcrest.CoreMatchers.allOf
 import org.hamcrest.CoreMatchers.containsString
@@ -42,7 +41,8 @@ class GradleApiExtensionsIntegrationTest : AbstractPluginIntegrationTest() {
     @ToBeFixedForConfigurationCache
     fun `Kotlin chooses withType extension specialized to container type`() {
 
-        withBuildScript("""
+        withBuildScript(
+            """
 
             open class A
             open class B : A()
@@ -69,18 +69,21 @@ class GradleApiExtensionsIntegrationTest : AbstractPluginIntegrationTest() {
                     println(inferredTypeOf(td))
                 }
             }
-        """)
+            """
+        )
 
         assertThat(
             build("test", "-q").output,
-            containsMultiLineString("""
+            containsMultiLineString(
+                """
                 ${NamedDomainObjectContainer::class.qualifiedName}<Build_gradle.A>
                 ${NamedDomainObjectCollection::class.qualifiedName}<Build_gradle.B>
                 ${DomainObjectCollection::class.qualifiedName}<Build_gradle.A>
                 ${DomainObjectCollection::class.qualifiedName}<Build_gradle.B>
                 ${TaskCollection::class.qualifiedName}<${Task::class.qualifiedName}>
                 ${TaskCollection::class.qualifiedName}<${Delete::class.qualifiedName}>
-            """)
+                """
+            )
         )
     }
 
@@ -88,13 +91,17 @@ class GradleApiExtensionsIntegrationTest : AbstractPluginIntegrationTest() {
     @ToBeFixedForConfigurationCache(because = "source dependency VCS mappings are defined")
     fun `can use Gradle API generated extensions in scripts`() {
 
-        withFile("init.gradle.kts", """
+        withFile(
+            "init.gradle.kts",
+            """
             allprojects {
                 container(String::class)
             }
-        """)
+            """
+        )
 
-        withDefaultSettings().appendText("""
+        withDefaultSettings().appendText(
+            """
             sourceControl {
                 vcsMappings {
                     withModule("some:thing") {
@@ -104,14 +111,19 @@ class GradleApiExtensionsIntegrationTest : AbstractPluginIntegrationTest() {
                     }
                 }
             }
-        """)
+            """
+        )
 
-        withBuildScript("""
+        withBuildScript(
+            """
             container(String::class)
             apply(from = "plugin.gradle.kts")
-        """)
+            """
+        )
 
-        withFile("plugin.gradle.kts", """
+        withFile(
+            "plugin.gradle.kts",
+            """
             import org.apache.tools.ant.filters.ReplaceTokens
 
             // Class<T> to KClass<T>
@@ -128,7 +140,8 @@ class GradleApiExtensionsIntegrationTest : AbstractPluginIntegrationTest() {
                 // Class<T> + Groovy named arguments to KClass<T> + vararg of Pair
                 filter(ReplaceTokens::class, "foo" to "bar")
             }
-        """)
+            """
+        )
 
         build("foo", "-I", "init.gradle.kts")
     }
@@ -138,11 +151,11 @@ class GradleApiExtensionsIntegrationTest : AbstractPluginIntegrationTest() {
     @ToBeFixedForConfigurationCache(because = "Kotlin Gradle Plugin")
     fun `can use Gradle API generated extensions in buildSrc`() {
 
-        assumeNonEmbeddedGradleExecuter() // Classloader issue with pre-compiled script plugins lets ':compileKotlin' fail
-
         withKotlinBuildSrc()
 
-        withFile("buildSrc/src/main/kotlin/foo/FooTask.kt", """
+        withFile(
+            "buildSrc/src/main/kotlin/foo/FooTask.kt",
+            """
             package foo
 
             import org.gradle.api.*
@@ -159,19 +172,25 @@ class GradleApiExtensionsIntegrationTest : AbstractPluginIntegrationTest() {
                     project.container(Long::class)
                 }
             }
-        """)
+            """
+        )
 
-        withFile("buildSrc/src/main/kotlin/foo/foo.gradle.kts", """
+        withFile(
+            "buildSrc/src/main/kotlin/foo/foo.gradle.kts",
+            """
             package foo
 
             tasks.register("foo", FooTask::class)
-        """)
+            """
+        )
 
-        withBuildScript("""
+        withBuildScript(
+            """
             plugins {
                 id("foo.foo")
             }
-        """)
+            """
+        )
 
         build("foo")
     }
@@ -226,11 +245,12 @@ class GradleApiExtensionsIntegrationTest : AbstractPluginIntegrationTest() {
             """
             inline fun <T : org.gradle.api.Named> org.gradle.api.model.ObjectFactory.`named`(`type`: kotlin.reflect.KClass<T>, `name`: String): T =
                 `named`(`type`.java, `name`)
-            """)
+            """
+        )
 
         assertThat(
             generatedSourceCode,
-            allOf(extensions.map { containsString(it.normaliseLineSeparators().trimIndent()) })
+            allOf(extensions.map { containsString(it.trimIndent()) })
         )
 
         assertThat(

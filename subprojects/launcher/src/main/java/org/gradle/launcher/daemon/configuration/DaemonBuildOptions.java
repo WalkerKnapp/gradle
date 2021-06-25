@@ -74,7 +74,7 @@ public class DaemonBuildOptions extends BuildOptionSet<DaemonParameters> {
         @Override
         public void applyTo(String value, DaemonParameters settings, Origin origin) {
             try {
-                settings.setIdleTimeout(Integer.valueOf(value));
+                settings.setIdleTimeout(Integer.parseInt(value));
             } catch (NumberFormatException e) {
                 origin.handleInvalidValue(value, "the value should be an int");
             }
@@ -91,7 +91,7 @@ public class DaemonBuildOptions extends BuildOptionSet<DaemonParameters> {
         @Override
         public void applyTo(String value, DaemonParameters settings, Origin origin) {
             try {
-                settings.setPeriodicCheckInterval(Integer.valueOf(value));
+                settings.setPeriodicCheckInterval(Integer.parseInt(value));
             } catch (NumberFormatException e) {
                 origin.handleInvalidValue(value, "the value should be an int");
             }
@@ -210,7 +210,7 @@ public class DaemonBuildOptions extends BuildOptionSet<DaemonParameters> {
         public static final String GRADLE_PROPERTY = "org.gradle.priority";
 
         public PriorityOption() {
-            super(GRADLE_PROPERTY, CommandLineOptionConfiguration.create("priority", "Specifies the scheduling priority for the Gradle daemon and all processes launched by it. Values are 'normal' (default) or 'low'").incubating());
+            super(GRADLE_PROPERTY, CommandLineOptionConfiguration.create("priority", "Specifies the scheduling priority for the Gradle daemon and all processes launched by it. Values are 'normal' (default) or 'low'"));
         }
 
         @Override

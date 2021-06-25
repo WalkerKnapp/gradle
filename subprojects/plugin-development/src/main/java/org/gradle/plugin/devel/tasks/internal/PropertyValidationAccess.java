@@ -31,10 +31,9 @@ import org.gradle.api.tasks.Nested;
 import org.gradle.cache.internal.DefaultCrossBuildInMemoryCacheFactory;
 import org.gradle.internal.Cast;
 import org.gradle.internal.event.DefaultListenerManager;
-import org.gradle.internal.event.ListenerManager;
 import org.gradle.internal.instantiation.generator.DefaultInstantiatorFactory;
 import org.gradle.internal.reflect.PropertyMetadata;
-import org.gradle.internal.reflect.TypeValidationContext;
+import org.gradle.internal.reflect.validation.TypeValidationContext;
 import org.gradle.internal.service.DefaultServiceLocator;
 import org.gradle.internal.service.ServiceRegistration;
 import org.gradle.internal.service.ServiceRegistry;
@@ -67,7 +66,7 @@ public class PropertyValidationAccess {
         builder.provider(new Object() {
             @SuppressWarnings("unused")
             void configure(ServiceRegistration registration) {
-                registration.add(ListenerManager.class, new DefaultListenerManager(Global.class));
+                registration.add(DefaultListenerManager.class, new DefaultListenerManager(Global.class));
                 registration.add(DefaultCrossBuildInMemoryCacheFactory.class);
                 // TODO: do we need any factories here?
                 registration.add(DefaultManagedFactoryRegistry.class, new DefaultManagedFactoryRegistry());

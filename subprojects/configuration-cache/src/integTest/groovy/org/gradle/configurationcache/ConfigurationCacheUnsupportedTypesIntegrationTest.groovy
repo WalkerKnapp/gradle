@@ -49,11 +49,12 @@ import org.gradle.api.attributes.AttributeMatchingStrategy
 import org.gradle.api.attributes.AttributesSchema
 import org.gradle.api.attributes.CompatibilityRuleChain
 import org.gradle.api.attributes.DisambiguationRuleChain
+import org.gradle.api.file.SourceDirectorySet
 import org.gradle.api.initialization.Settings
 import org.gradle.api.internal.artifacts.DefaultDependencyConstraintSet
 import org.gradle.api.internal.artifacts.DefaultDependencySet
-import org.gradle.api.internal.artifacts.DefaultResolvedArtifact
 import org.gradle.api.internal.artifacts.DefaultResolvedDependency
+import org.gradle.api.internal.artifacts.PreResolvedResolvableArtifact
 import org.gradle.api.internal.artifacts.configurations.DefaultConfiguration
 import org.gradle.api.internal.artifacts.configurations.DefaultConfiguration.ConfigurationResolvableDependencies
 import org.gradle.api.internal.artifacts.configurations.DefaultConfiguration.ConfigurationResolvableDependencies.ConfigurationArtifactView
@@ -79,11 +80,14 @@ import org.gradle.api.internal.attributes.DefaultAttributeMatchingStrategy
 import org.gradle.api.internal.attributes.DefaultAttributesSchema
 import org.gradle.api.internal.attributes.DefaultCompatibilityRuleChain
 import org.gradle.api.internal.attributes.DefaultDisambiguationRuleChain
+import org.gradle.api.internal.file.DefaultSourceDirectorySet
 import org.gradle.api.internal.project.DefaultProject
 import org.gradle.api.internal.tasks.DefaultSourceSet
 import org.gradle.api.internal.tasks.DefaultSourceSetContainer
 import org.gradle.api.internal.tasks.DefaultTaskContainer
 import org.gradle.api.invocation.Gradle
+import org.gradle.api.services.BuildService
+import org.gradle.api.services.BuildServiceParameters
 import org.gradle.api.tasks.SourceSet
 import org.gradle.api.tasks.SourceSetContainer
 import org.gradle.api.tasks.TaskContainer
@@ -105,6 +109,9 @@ class ConfigurationCacheUnsupportedTypesIntegrationTest extends AbstractConfigur
     def "reports when task field references an object of type #baseType"() {
         buildFile << """
             plugins { id "java" }
+
+            abstract class SomeBuildService implements $BuildService.name<${BuildServiceParameters.name}.None> {
+            }
 
             class SomeBean {
                 private ${baseType.name} badReference
@@ -142,8 +149,7 @@ class ConfigurationCacheUnsupportedTypesIntegrationTest extends AbstractConfigur
         problems.assertResultHasProblems(result) {
             withTotalProblemsCount(3)
             withUniqueProblems(
-                "field 'badReference' from type 'SomeTask': cannot serialize object of type '${concreteType.name}', a subtype of '${baseType.name}', as these are not supported with the configuration cache.",
-                "field 'badReference' from type 'SomeBean': cannot serialize object of type '${concreteType.name}', a subtype of '${baseType.name}', as these are not supported with the configuration cache."
+                "Task `:broken` of type `SomeTask`: cannot serialize object of type '$concreteTypeName', a subtype of '${baseType.name}', as these are not supported with the configuration cache."
             )
             withProblemsWithStackTraceCount(0)
         }
@@ -155,8 +161,7 @@ class ConfigurationCacheUnsupportedTypesIntegrationTest extends AbstractConfigur
         problems.assertResultHasProblems(result) {
             withTotalProblemsCount(3)
             withUniqueProblems(
-                "field 'badReference' from type 'SomeTask': cannot deserialize object of type '${baseType.name}' as these are not supported with the configuration cache.",
-                "field 'badReference' from type 'SomeBean': cannot deserialize object of type '${baseType.name}' as these are not supported with the configuration cache."
+                "Task `:broken` of type `SomeTask`: cannot deserialize object of type '${baseType.name}' as these are not supported with the configuration cache."
             )
             withProblemsWithStackTraceCount(0)
         }
@@ -211,12 +216,17 @@ class ConfigurationCacheUnsupportedTypesIntegrationTest extends AbstractConfigur
         DefaultExternalModuleDependency       | Dependency                     | "project.dependencies.create('junit:junit:4.13')"
         DefaultDependencyLockingHandler       | DependencyLockingHandler       | "project.dependencyLocking"
         DefaultResolvedDependency             | ResolvedDependency             | "project.configurations.create(java.util.UUID.randomUUID().toString()).tap { project.dependencies.add(name, 'junit:junit:4.13') }.resolvedConfiguration.firstLevelModuleDependencies.first()"
-        DefaultResolvedArtifact               | ResolvedArtifact               | "project.configurations.create(java.util.UUID.randomUUID().toString()).tap { project.dependencies.add(name, 'junit:junit:4.13') }.resolvedConfiguration.resolvedArtifacts.first()"
+        PreResolvedResolvableArtifact         | ResolvedArtifact               | "project.configurations.create(java.util.UUID.randomUUID().toString()).tap { project.dependencies.add(name, 'junit:junit:4.13') }.resolvedConfiguration.resolvedArtifacts.first()"
         ConfigurationArtifactView             | ArtifactView                   | "project.configurations.maybeCreate('some').incoming.artifactView {}"
         DefaultArtifactResolutionResult       | ArtifactResolutionResult       | "project.dependencies.createArtifactResolutionQuery().forModule('junit', 'junit', '4.13').withArtifacts(JvmLibrary).execute()"
         DefaultComponentArtifactsResult       | ComponentResult                | "project.dependencies.createArtifactResolutionQuery().forModule('junit', 'junit', '4.13').withArtifacts(JvmLibrary).execute().components.first()"
         DefaultResolvedArtifactResult         | ArtifactResult                 | "project.dependencies.createArtifactResolutionQuery().forModule('junit', 'junit', '4.13').withArtifacts(JvmLibrary, SourcesArtifact).execute().components.first().getArtifacts(SourcesArtifact).first()"
         DefaultResolvedVariantResult          | ResolvedVariantResult          | "project.dependencies.createArtifactResolutionQuery().forModule('junit', 'junit', '4.13').withArtifacts(JvmLibrary, SourcesArtifact).execute().components.first().getArtifacts(SourcesArtifact).first().variant"
+
+        // direct BuildService reference, build services must always be referenced via their providers
+        'SomeBuildService'                    | BuildService                   | "project.gradle.sharedServices.registerIfAbsent('service', SomeBuildService) {}.get()"
+
+        concreteTypeName = concreteType instanceof Class ? concreteType.name : concreteType
     }
 
     @Unroll
@@ -260,8 +270,7 @@ class ConfigurationCacheUnsupportedTypesIntegrationTest extends AbstractConfigur
         problems.assertResultHasProblems(result) {
             withTotalProblemsCount(3)
             withUniqueProblems(
-                "field 'badField' from type 'SomeTask': cannot serialize object of type '${concreteType.name}', a subtype of '${baseType.name}', as these are not supported with the configuration cache.",
-                "field 'badField' from type 'SomeBean': cannot serialize object of type '${concreteType.name}', a subtype of '${baseType.name}', as these are not supported with the configuration cache."
+                "Task `:broken` of type `SomeTask`: cannot serialize object of type '${concreteType.name}', a subtype of '${baseType.name}', as these are not supported with the configuration cache."
             )
             withProblemsWithStackTraceCount(0)
         }
@@ -273,10 +282,8 @@ class ConfigurationCacheUnsupportedTypesIntegrationTest extends AbstractConfigur
         problems.assertResultHasProblems(result) {
             withTotalProblemsCount(6)
             withUniqueProblems(
-                "field 'badField' from type 'SomeTask': cannot deserialize object of type '${baseType.name}' as these are not supported with the configuration cache.",
-                "field 'badField' from type 'SomeTask': value '$deserializedValue' is not assignable to '${baseType.name}'",
-                "field 'badField' from type 'SomeBean': cannot deserialize object of type '${baseType.name}' as these are not supported with the configuration cache.",
-                "field 'badField' from type 'SomeBean': value '$deserializedValue' is not assignable to '${baseType.name}'"
+                "Task `:broken` of type `SomeTask`: cannot deserialize object of type '${baseType.name}' as these are not supported with the configuration cache.",
+                "Task `:broken` of type `SomeTask`: value '$deserializedValue' is not assignable to '${baseType.name}'"
             )
             withProblemsWithStackTraceCount(0)
         }
@@ -287,7 +294,8 @@ class ConfigurationCacheUnsupportedTypesIntegrationTest extends AbstractConfigur
         outputContains("beanWithSameType.reference = null")
 
         where:
-        concreteType         | baseType      | reference                                    | deserializedValue
-        DefaultConfiguration | Configuration | "project.configurations.maybeCreate('some')" | 'file collection'
+        concreteType              | baseType           | reference                                            | deserializedValue
+        DefaultConfiguration      | Configuration      | "project.configurations.maybeCreate('some')"         | 'file collection'
+        DefaultSourceDirectorySet | SourceDirectorySet | "project.objects.sourceDirectorySet('some', 'more')" | 'file tree'
     }
 }

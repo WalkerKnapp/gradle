@@ -24,7 +24,7 @@ import org.gradle.integtests.fixtures.RichConsoleStyling;
 import org.gradle.internal.concurrent.Stoppable;
 import org.gradle.test.fixtures.file.TestDirectoryProvider;
 import org.gradle.test.fixtures.file.TestFile;
-import org.gradle.util.TextUtil;
+import org.gradle.util.internal.TextUtil;
 
 import java.io.File;
 import java.io.IOException;
@@ -76,6 +76,7 @@ public interface GradleExecuter extends Stoppable {
      */
     GradleExecuter withEnvironmentVars(Map<String, ?> environment);
 
+    @Deprecated
     GradleExecuter usingSettingsFile(File settingsFile);
 
     GradleExecuter usingInitScript(File initScript);
@@ -88,6 +89,7 @@ public interface GradleExecuter extends Stoppable {
     /**
      * Uses the given build script
      */
+    @Deprecated
     GradleExecuter usingBuildScript(File buildScript);
 
     /**
@@ -198,9 +200,22 @@ public interface GradleExecuter extends Stoppable {
     GradleExecuter withNoExplicitNativeServicesDir();
 
     /**
-     * Disables the rendering of stack traces for deprecation logging.
+     * Enables the rendering of stack traces for deprecation logging.
      */
-    GradleExecuter withFullDeprecationStackTraceDisabled();
+    GradleExecuter withFullDeprecationStackTraceEnabled();
+
+    /**
+     * Downloads and sets up the JVM arguments for running the Gradle daemon with the file leak detector: https://file-leak-detector.kohsuke.org/
+     *
+     * NOTE: This requires running the test with JDK8 and the forking executer.
+     *
+     * This should not be checked-in on. This is only for local debugging.
+     *
+     * By default, this starts a HTTP server on port 19999, so you can observe which files are open. Passing any arguments disables this behavior.
+     *
+     * @param args the arguments to pass the file leak detector java agent
+     */
+    GradleExecuter withFileLeakDetection(String... args);
 
     /**
      * Specifies that the executer should only those JVM args explicitly requested using {@link #withBuildJvmOpts(String...)} and {@link #withCommandLineGradleOpts(String...)} (where appropriate) for
@@ -526,4 +541,9 @@ public interface GradleExecuter extends Stoppable {
     GradleExecuter ignoreMissingSettingsFile();
 
     GradleExecuter ignoreCleanupAssertions();
+
+    GradleExecuter withToolchainDetectionEnabled();
+
+    GradleExecuter withToolchainDownloadEnabled();
+
 }

@@ -49,15 +49,15 @@ To generate the user manual and see your changes, run:
 This will generate:
 
  - A multi-page HTML manual in `build/working/usermanual/render-multi/` for each chapter. There is a 1-1 mapping from `.adoc` file to `.html` file.
- - A single-page HTML manual at `build/working/usermanual/render-single/userguide_single.html`
- - A PDF at `build/working/usermanual/render-single/userguide_single.pdf`
+ - A single-page HTML manual at `build/working/usermanual/render-single-html/userguide_single.html`
+ - A PDF at `build/working/usermanual/render-single-pdf/userguide_single.pdf`
 
 Note that PNG files in the source are generated from ".graphml" files in the same directory.  You can edit these files
 with tools like [yEd](http://www.yworks.com/en/products_yed_about.html) and then generate the associated PNG.
 
 If you just need to see a change to one of the userguide sections, try:
 
-    ./gradlew :docs:userguide -x :docs:userguideSinglePage
+    ./gradlew :docs:userguide -x :docs:userguideSinglePageHtml -x :docs:userguideSinglePagePdf
 
 ### Authoring with AsciiDoc
 
@@ -133,18 +133,25 @@ Samples and output belong under `src/samples` and are published beside the user 
 
 To run the samples tests:
 ```
-./gradlew :docs:docsTest --tests "org.gradle.docs.samples.ExemplarExternalSamplesFunctionalTest.*"
+./gradlew :docs:docsTest --tests "org.gradle.docs.samples.*.*"
 ```
 
 To run tests for a single sample, let's say from `samples/java/application`:
 ```
-./gradlew :docs:docsTest --tests "org.gradle.docs.samples.ExemplarExternalSamplesFunctionalTest.java-application*"
+./gradlew :docs:docsTest --tests "org.gradle.docs.samples.DependencyManagementSnippetsTest.java-application*"
 ```
 
-To run tests for a single snippet, let's say from `snippets/base/distribution`:
+To run tests for a single snippet:
+
+Let's say you want to run the snippet found at `src/snippets/dependencyManagement/customizingResolution-consistentResolution`.
+
+then you can run the following command line:
+
 ```
-./gradlew :docs:docsTest --tests "org.gradle.docs.samples.ExemplarExternalSamplesFunctionalTest.snippet-base-distribution*"
+   ./gradlew :docs:docsTest --tests "*.snippet-dependency-management-customizing-resolution-consistent-resolution*"
 ```
+
+which would run both Groovy and Kotlin tests.
 
 ## Groovy DSL Reference
 
@@ -181,7 +188,7 @@ To link to a method:
 
 To build these, run:
 
-    ./gradlew :docs:javadoc
+    ./gradlew :docs:javadocAll
 
 The output is available within `build/javadoc`.
 

@@ -25,10 +25,10 @@ import org.gradle.internal.file.FileType
 import org.gradle.internal.file.Stat
 import org.gradle.internal.hash.FileHasher
 import org.gradle.internal.hash.HashCode
-import org.gradle.internal.snapshot.CompleteDirectorySnapshot
-import org.gradle.internal.snapshot.CompleteFileSystemLocationSnapshot
-import org.gradle.internal.snapshot.FileSystemSnapshotVisitor
+import org.gradle.internal.snapshot.DirectorySnapshot
+import org.gradle.internal.snapshot.FileSystemLocationSnapshot
 import org.gradle.internal.snapshot.SnapshottingFilter
+import org.gradle.internal.snapshot.impl.DirectorySnapshotterStatistics
 import org.gradle.internal.vfs.FileSystemAccess
 import org.gradle.test.fixtures.file.CleanupTestDirectory
 import org.gradle.test.fixtures.file.TestNameTestDirectoryProvider
@@ -46,12 +46,14 @@ abstract class AbstractFileSystemAccessTest extends Specification {
     def fileHasher = new AllowingHasher(TestFiles.fileHasher())
     def stat = new AllowingStat(TestFiles.fileSystem())
     def updateListener = Mock(FileSystemAccess.WriteListener)
+    def statisticsCollector = Mock(DirectorySnapshotterStatistics.Collector)
     def fileSystemAccess = new DefaultFileSystemAccess(
         fileHasher,
         new StringInterner(),
         stat,
         TestFiles.virtualFileSystem(),
-        updateListener
+        updateListener,
+        statisticsCollector
     )
 
     void allowFileSystemAccess(boolean allow) {
@@ -59,12 +61,12 @@ abstract class AbstractFileSystemAccessTest extends Specification {
         stat.allowStat(allow)
     }
 
-    CompleteFileSystemLocationSnapshot read(File file) {
+    FileSystemLocationSnapshot read(File file) {
         return fileSystemAccess.read(file.absolutePath, { it })
     }
 
-    CompleteFileSystemLocationSnapshot read(File file, SnapshottingFilter filter) {
-        MutableReference<CompleteFileSystemLocationSnapshot> result = MutableReference.empty()
+    FileSystemLocationSnapshot read(File file, SnapshottingFilter filter) {
+        MutableReference<FileSystemLocationSnapshot> result = MutableReference.empty()
         fileSystemAccess.read(file.absolutePath, filter, result.&set)
         return result.get()
     }
@@ -133,24 +135,24 @@ abstract class AbstractFileSystemAccessTest extends Specification {
         }
     }
 
-    void assertIsFileSnapshot(CompleteFileSystemLocationSnapshot snapshot, File file) {
+    void assertIsFileSnapshot(FileSystemLocationSnapshot snapshot, File file) {
         assert snapshot.absolutePath == file.absolutePath
         assert snapshot.name == file.name
         assert snapshot.type == FileType.RegularFile
         assert snapshot.hash == hashFile(file)
     }
 
-    void assertIsMissingFileSnapshot(CompleteFileSystemLocationSnapshot snapshot, File file) {
+    void assertIsMissingFileSnapshot(FileSystemLocationSnapshot snapshot, File file) {
         assert snapshot.absolutePath == file.absolutePath
         assert snapshot.name == file.name
         assert snapshot.type == FileType.Missing
     }
 
-    void assertIsDirectorySnapshot(CompleteFileSystemLocationSnapshot snapshot, File file) {
+    void assertIsDirectorySnapshot(FileSystemLocationSnapshot snapshot, File file) {
         assert snapshot.absolutePath == file.absolutePath
         assert snapshot.name == file.name
         assert snapshot.type == FileType.Directory
-        assert (((CompleteDirectorySnapshot) snapshot).children*.name as Set) == (file.list() as Set)
+        assert (((DirectorySnapshot) snapshot).children*.name as Set) == (file.list() as Set)
     }
 
     HashCode hashFile(File file) {
@@ -173,7 +175,7 @@ abstract class AbstractFileSystemAccessTest extends Specification {
         FileSystemSnapshotPredicate getAsSnapshotPredicate() {
             return new FileSystemSnapshotPredicate() {
                 @Override
-                boolean test(CompleteFileSystemLocationSnapshot fileSystemLocationSnapshot, Iterable<String> relativePath) {
+                boolean test(FileSystemLocationSnapshot fileSystemLocationSnapshot, Iterable<String> relativePath) {
                     return fileSystemLocationSnapshot.getType() == FileType.Directory || predicate.test(fileSystemLocationSnapshot.name)
                 }
             }
@@ -187,43 +189,6 @@ abstract class AbstractFileSystemAccessTest extends Specification {
                     return isDirectory || predicate.test(name)
                 }
             }
-        }
-    }
-
-    static class RelativePathCapturingVisitor implements FileSystemSnapshotVisitor {
-        private Deque<String> relativePath = new ArrayDeque<String>()
-        private boolean seenRoot = false
-        private final List<String> relativePaths = []
-
-        @Override
-        boolean preVisitDirectory(CompleteDirectorySnapshot directorySnapshot) {
-            if (!seenRoot) {
-                seenRoot = true
-            } else {
-                relativePath.addLast(directorySnapshot.name)
-                relativePaths.add(relativePath.join("/"))
-            }
-            return true
-        }
-
-        @Override
-        void visitFile(CompleteFileSystemLocationSnapshot fileSnapshot) {
-            relativePath.addLast(fileSnapshot.name)
-            relativePaths.add(relativePath.join("/"))
-            relativePath.removeLast()
-        }
-
-        @Override
-        void postVisitDirectory(CompleteDirectorySnapshot directorySnapshot) {
-            if (relativePath.isEmpty()) {
-                seenRoot = false
-            } else {
-                relativePath.removeLast()
-            }
-        }
-
-        List<String> getRelativePaths() {
-            return relativePaths
         }
     }
 }

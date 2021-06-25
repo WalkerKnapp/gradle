@@ -17,8 +17,10 @@ package org.gradle.api.internal.artifacts.configurations;
 
 import org.gradle.api.Action;
 import org.gradle.api.artifacts.Configuration;
+import org.gradle.api.artifacts.DependencyConstraint;
 import org.gradle.api.artifacts.ExcludeRule;
 import org.gradle.api.artifacts.PublishArtifact;
+import org.gradle.api.artifacts.ResolveException;
 import org.gradle.api.internal.artifacts.ResolveContext;
 import org.gradle.api.internal.artifacts.transform.ExtraExecutionGraphDependenciesResolverFactory;
 import org.gradle.api.internal.attributes.AttributeContainerInternal;
@@ -27,8 +29,11 @@ import org.gradle.internal.DisplayName;
 import org.gradle.internal.deprecation.DeprecatableConfiguration;
 import org.gradle.util.Path;
 
+import javax.annotation.Nullable;
 import java.util.Collection;
+import java.util.List;
 import java.util.Set;
+import java.util.function.Supplier;
 
 public interface ConfigurationInternal extends ResolveContext, Configuration, DeprecatableConfiguration, DependencyMetaDataProvider {
     enum InternalState {
@@ -85,6 +90,19 @@ public interface ConfigurationInternal extends ResolveContext, Configuration, De
     Set<ExcludeRule> getAllExcludeRules();
 
     ExtraExecutionGraphDependenciesResolverFactory getDependenciesResolver();
+
+    @Nullable
+    ConfigurationInternal getConsistentResolutionSource();
+
+    Supplier<List<DependencyConstraint>> getConsistentResolutionConstraints();
+
+    /**
+     * Decorates a resolve exception with more context. This can be used
+     * to give hints to the user when a resolution error happens.
+     * @param e a resolve exception
+     * @return a decorated resolve exception, or the same exception
+     */
+    ResolveException maybeAddContext(ResolveException e);
 
     interface VariantVisitor {
         // The artifacts to use when this configuration is used as a configuration

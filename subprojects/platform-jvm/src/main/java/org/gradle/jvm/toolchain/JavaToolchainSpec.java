@@ -17,9 +17,8 @@
 package org.gradle.jvm.toolchain;
 
 import org.gradle.api.Describable;
-import org.gradle.api.Incubating;
-import org.gradle.api.JavaVersion;
 import org.gradle.api.provider.Property;
+import org.gradle.internal.HasInternalProtocol;
 
 /**
  * Requirements for selecting a Java toolchain.
@@ -29,12 +28,28 @@ import org.gradle.api.provider.Property;
  *
  * @since 6.7
  */
-@Incubating
+@HasInternalProtocol
 public interface JavaToolchainSpec extends Describable {
 
     /**
      * The exact version of the Java language that the toolchain is required to support.
      */
-    Property<JavaVersion> getLanguageVersion();
+    Property<JavaLanguageVersion> getLanguageVersion();
+
+    /**
+     * The vendor of the toolchain.
+     * <p>By default, toolchains from any vendor are eligible.</p>
+     *
+     * @since 6.8
+     */
+    Property<JvmVendorSpec> getVendor();
+
+    /**
+     * The virtual machine implementation of the toolchain.
+     * <p>By default, any implementation (hotspot, j9, ...) is eligible.</p>
+     *
+     * @since 6.8
+     */
+    Property<JvmImplementation> getImplementation();
 
 }

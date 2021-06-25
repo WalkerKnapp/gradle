@@ -34,7 +34,6 @@ data class PropertyProblem internal constructor(
 
 enum class DocumentationSection(val anchor: String) {
     NotYetImplemented("config_cache:not_yet_implemented"),
-    NotYetImplementedCompositeBuilds("config_cache:not_yet_implemented:composite_builds"),
     NotYetImplementedSourceDependencies("config_cache:not_yet_implemented:source_dependencies"),
     NotYetImplementedJavaSerialization("config_cache:not_yet_implemented:java_serialization"),
     NotYetImplementedTestKitJavaAgent("config_cache:not_yet_implemented:testkit_build_with_java_agent"),
@@ -44,6 +43,9 @@ enum class DocumentationSection(val anchor: String) {
     RequirementsUndeclaredSysPropRead("config_cache:requirements:undeclared_sys_prop_read"),
     RequirementsUseProjectDuringExecution("config_cache:requirements:use_project_during_execution")
 }
+
+
+typealias StructuredMessageBuilder = StructuredMessage.Builder.() -> Unit
 
 
 data class StructuredMessage(val fragments: List<Fragment>) {
@@ -64,7 +66,7 @@ data class StructuredMessage(val fragments: List<Fragment>) {
 
     companion object {
 
-        fun build(builder: Builder.() -> Unit) = StructuredMessage(
+        fun build(builder: StructuredMessageBuilder) = StructuredMessage(
             Builder().apply(builder).fragments
         )
     }
@@ -115,19 +117,33 @@ sealed class PropertyTrace {
     class Bean(
         val type: Class<*>,
         val trace: PropertyTrace
-    ) : PropertyTrace()
+    ) : PropertyTrace() {
+        override val containingUserCode: String
+            get() = trace.containingUserCode
+    }
 
     class Property(
         val kind: PropertyKind,
         val name: String,
         val trace: PropertyTrace
-    ) : PropertyTrace()
+    ) : PropertyTrace() {
+        override val containingUserCode: String
+            get() = trace.containingUserCode
+    }
 
     override fun toString(): String =
         StringBuilder().apply {
             sequence.forEach {
                 appendStringOf(it)
             }
+        }.toString()
+
+    /**
+     * The user code where the problem occurred. User code should generally be some coarse-grained entity such as a plugin or script.
+     */
+    open val containingUserCode: String
+        get() = StringBuilder().apply {
+            appendStringOf(this@PropertyTrace)
         }.toString()
 
     private

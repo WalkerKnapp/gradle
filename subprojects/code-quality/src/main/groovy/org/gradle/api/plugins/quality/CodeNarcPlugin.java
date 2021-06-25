@@ -17,21 +17,29 @@ package org.gradle.api.plugins.quality;
 
 import org.gradle.api.Plugin;
 import org.gradle.api.artifacts.Configuration;
+import org.gradle.api.file.ProjectLayout;
+import org.gradle.api.file.RegularFile;
+import org.gradle.api.file.SourceDirectorySet;
 import org.gradle.api.internal.ConventionMapping;
-import org.gradle.api.internal.plugins.DslObject;
 import org.gradle.api.plugins.GroovyBasePlugin;
 import org.gradle.api.plugins.quality.internal.AbstractCodeQualityPlugin;
+import org.gradle.api.provider.Provider;
+import org.gradle.api.provider.ProviderFactory;
+import org.gradle.api.tasks.GroovySourceDirectorySet;
 import org.gradle.api.tasks.SourceSet;
-import org.gradle.internal.metaobject.DynamicObject;
 
 import java.io.File;
 
+import static org.gradle.api.internal.lambdas.SerializableLambdas.action;
+
 /**
  * CodeNarc Plugin.
+ *
+ * @see <a href="https://docs.gradle.org/current/userguide/codenarc_plugin.html">CodeNarc plugin reference</a>
  */
 public class CodeNarcPlugin extends AbstractCodeQualityPlugin<CodeNarc> {
 
-    public static final String DEFAULT_CODENARC_VERSION = "1.5";
+    public static final String DEFAULT_CODENARC_VERSION = "2.0.0";
     private CodeNarcExtension extension;
 
     @Override
@@ -74,9 +82,9 @@ public class CodeNarcPlugin extends AbstractCodeQualityPlugin<CodeNarc> {
     }
 
     private void configureDefaultDependencies(Configuration configuration) {
-        configuration.defaultDependencies(dependencies -> {
-            dependencies.add(project.getDependencies().create("org.codenarc:CodeNarc:" + extension.getToolVersion()));
-        });
+        configuration.defaultDependencies(dependencies ->
+            dependencies.add(project.getDependencies().create("org.codenarc:CodeNarc:" + extension.getToolVersion()))
+        );
     }
 
     private void configureTaskConventionMapping(Configuration configuration, CodeNarc task) {
@@ -90,19 +98,23 @@ public class CodeNarcPlugin extends AbstractCodeQualityPlugin<CodeNarc> {
     }
 
     private void configureReportsConventionMapping(CodeNarc task, final String baseName) {
-        task.getReports().all(report -> {
-            report.getRequired().convention(project.getProviders().provider(() -> report.getName().equals(extension.getReportFormat())));
-            report.getOutputLocation().convention(project.getLayout().getProjectDirectory().file(project.provider(() -> {
+        ProjectLayout layout = project.getLayout();
+        ProviderFactory providers = project.getProviders();
+        Provider<String> reportFormat = providers.provider(() -> extension.getReportFormat());
+        Provider<RegularFile> reportsDir = layout.file(providers.provider(() -> extension.getReportsDir()));
+        task.getReports().all(action(report -> {
+            report.getRequired().convention(providers.provider(() -> report.getName().equals(reportFormat.get())));
+            report.getOutputLocation().convention(layout.getProjectDirectory().file(providers.provider(() -> {
                 String fileSuffix = report.getName().equals("text") ? "txt" : report.getName();
-                return new File(extension.getReportsDir(), baseName + "." + fileSuffix).getAbsolutePath();
+                return new File(reportsDir.get().getAsFile(), baseName + "." + fileSuffix).getAbsolutePath();
             })));
-        });
+        }));
     }
 
     @Override
     protected void configureForSourceSet(final SourceSet sourceSet, CodeNarc task) {
         task.setDescription("Run CodeNarc analysis for " + sourceSet.getName() + " classes");
-        DynamicObject dynamicObject = new DslObject(sourceSet).getAsDynamicObject();
-        task.setSource(dynamicObject.getProperty("allGroovy"));
+        SourceDirectorySet groovySourceSet =  sourceSet.getExtensions().getByType(GroovySourceDirectorySet.class);
+        task.setSource(groovySourceSet.matching(filter -> filter.include("**/*.groovy")));
     }
 }

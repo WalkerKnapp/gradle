@@ -20,14 +20,16 @@ import org.apache.commons.io.FileUtils
 import org.gradle.integtests.fixtures.AbstractIntegrationSpec
 import org.gradle.integtests.fixtures.DirectoryBuildCacheFixture
 import org.gradle.integtests.fixtures.executer.GradleContextualExecuter
+import org.gradle.internal.reflect.validation.ValidationMessageChecker
 import org.gradle.test.fixtures.file.TestFile
 import spock.lang.IgnoreIf
 import spock.lang.Issue
+import spock.lang.Requires
 import spock.lang.Unroll
 
 import static org.gradle.api.tasks.LocalStateFixture.defineTaskWithLocalState
 
-class CachedCustomTaskExecutionIntegrationTest extends AbstractIntegrationSpec implements DirectoryBuildCacheFixture {
+class CachedCustomTaskExecutionIntegrationTest extends AbstractIntegrationSpec implements DirectoryBuildCacheFixture, ValidationMessageChecker {
     def configureCacheForBuildSrc() {
         file("buildSrc/settings.gradle") << localCacheConfiguration()
     }
@@ -57,7 +59,7 @@ class CachedCustomTaskExecutionIntegrationTest extends AbstractIntegrationSpec i
 
     def "tasks stay cached after buildSrc with custom Groovy task is rebuilt"() {
         configureCacheForBuildSrc()
-        file("buildSrc/src/main/groovy/CustomTask.groovy") << customGroovyTask()
+        file("buildSrc/src/main/groovy/CustomTask.groovy") << defineCachedTask()
         file("input.txt") << "input"
         buildFile << """
             task customTask(type: CustomTask) {
@@ -83,7 +85,7 @@ class CachedCustomTaskExecutionIntegrationTest extends AbstractIntegrationSpec i
     def "changing custom Groovy task implementation in buildSrc invalidates its cached result"() {
         configureCacheForBuildSrc()
         def taskSourceFile = file("buildSrc/src/main/groovy/CustomTask.groovy")
-        taskSourceFile << customGroovyTask()
+        taskSourceFile << defineCachedTask()
         file("input.txt") << "input"
         buildFile << """
             task customTask(type: CustomTask) {
@@ -98,7 +100,7 @@ class CachedCustomTaskExecutionIntegrationTest extends AbstractIntegrationSpec i
         file("build/output.txt").text == "input"
 
         when:
-        taskSourceFile.text = customGroovyTask(" modified")
+        taskSourceFile.text = defineCachedTask(" modified")
 
         cleanBuildDir()
         withBuildCache().run "customTask"
@@ -107,32 +109,10 @@ class CachedCustomTaskExecutionIntegrationTest extends AbstractIntegrationSpec i
         file("build/output.txt").text == "input modified"
     }
 
-    private static String customGroovyTask(String suffix = "") {
-        """
-            import org.gradle.api.*
-            import org.gradle.api.tasks.*
-
-            @CacheableTask
-            class CustomTask extends DefaultTask {
-                @InputFile
-                @PathSensitive(PathSensitivity.NONE)
-                File inputFile
-
-                @OutputFile
-                File outputFile
-
-                @TaskAction
-                void doSomething() {
-                    outputFile.text = inputFile.text + "$suffix"
-                }
-            }
-        """
-    }
-
     def "cacheable task with cache disabled doesn't get cached"() {
         configureCacheForBuildSrc()
         file("input.txt") << "data"
-        file("buildSrc/src/main/groovy/CustomTask.groovy") << customGroovyTask()
+        file("buildSrc/src/main/groovy/CustomTask.groovy") << defineCachedTask()
         buildFile << """
             task customTask(type: CustomTask) {
                 inputFile = file("input.txt")
@@ -515,8 +495,6 @@ class CachedCustomTaskExecutionIntegrationTest extends AbstractIntegrationSpec i
         file("input.txt") << "data"
 
         buildFile << """
-            import javax.inject.Inject
-
             @CacheableTask
             abstract class CustomTask extends DefaultTask {
                 @InputFile
@@ -621,92 +599,6 @@ class CachedCustomTaskExecutionIntegrationTest extends AbstractIntegrationSpec i
         expected | actual | message
         "file"   | "dir"  | "Expected 'PATH' to be a file"
         "dir"    | "file" | "Expected 'PATH' to be a directory"
-    }
-
-    def "task loaded with custom classloader is not cached"() {
-        file("input.txt").text = "data"
-        buildFile << """
-            def CustomTask = new GroovyClassLoader(getClass().getClassLoader()).parseClass '''
-                import org.gradle.api.*
-                import org.gradle.api.tasks.*
-
-                @CacheableTask
-                class CustomTask extends DefaultTask {
-                    @InputFile
-                    @PathSensitive(PathSensitivity.NONE)
-                    File inputFile
-
-                    @OutputFile
-                    File outputFile
-
-                    @TaskAction
-                    void action() {
-                        outputFile.text = inputFile.text
-                    }
-                }
-            '''
-
-            task customTask(type: CustomTask) {
-                inputFile = file("input.txt")
-                outputFile = file("build/output.txt")
-            }
-        """
-
-        when:
-        withBuildCache().run "customTask", "--info"
-        then:
-        output.contains "Caching disabled for task ':customTask' because:\n" +
-            "  Implementation type was loaded with an unknown classloader (class 'CustomTask_Decorated').\n"
-        "  Additional implementation type was loaded with an unknown classloader (class 'CustomTask_Decorated')."
-    }
-
-    def "task with custom action loaded with custom classloader is not cached"() {
-        file("input.txt").text = "data"
-        buildFile << """
-            import org.gradle.api.*
-            import org.gradle.api.tasks.*
-
-            @CacheableTask
-            class CustomTask extends DefaultTask {
-                @InputFile
-                @PathSensitive(PathSensitivity.NONE)
-                File inputFile
-
-                @OutputFile
-                File outputFile
-
-                @TaskAction
-                void action() {
-                    outputFile.text = inputFile.text
-                }
-            }
-
-            def CustomTaskAction = new GroovyClassLoader(getClass().getClassLoader()).parseClass '''
-                import org.gradle.api.*
-
-                class CustomTaskAction implements Action<Task> {
-                    static Action<Task> create() {
-                        return new CustomTaskAction()
-                    }
-
-                    @Override
-                    void execute(Task task) {
-                    }
-                }
-            '''
-
-            task customTask(type: CustomTask) {
-                inputFile = file("input.txt")
-                outputFile = file("build/output.txt")
-                doFirst(CustomTaskAction.create())
-            }
-        """
-
-        when:
-        withBuildCache().run "customTask", "--info"
-        then:
-        output.contains "Caching disabled for task ':customTask' because:\n" +
-            "  Additional implementation type was loaded with an unknown classloader (class 'CustomTaskAction')."
     }
 
     def "task stays up-to-date after loaded from cache"() {
@@ -917,11 +809,70 @@ class CachedCustomTaskExecutionIntegrationTest extends AbstractIntegrationSpec i
         noExceptionThrown()
     }
 
+    @Requires({ GradleContextualExecuter.embedded })
+    // this test only works in embedded mode because of the use of validation test fixtures
+    def "invalid tasks are not cached"() {
+        buildFile << """
+            import org.gradle.api.*
+            import org.gradle.api.tasks.*
+            import org.gradle.integtests.fixtures.validation.ValidationProblem
+
+            @CacheableTask
+            abstract class InvalidTask extends DefaultTask {
+                @ValidationProblem File input
+                @OutputFile outputFile
+                @TaskAction action() {
+                    outputFile.text = "created"
+                }
+            }
+
+            task invalid(type: InvalidTask) {
+                input = file("input.txt")
+                outputFile = file("build/output.txt")
+            }
+        """
+
+        executer.beforeExecute {
+            expectThatExecutionOptimizationDisabledWarningIsDisplayed(executer, dummyValidationProblem('InvalidTask', 'input'))
+        }
+
+        when:
+        withBuildCache().run "invalid", "--info"
+        then:
+        outputContains("""
+            |Caching disabled for task ':invalid' because:
+            |  Caching has been disabled to ensure correctness. Please consult deprecation warnings for more details.
+        """.stripMargin())
+        executedAndNotSkipped(":invalid")
+        listCacheFiles().isEmpty()
+    }
+
+    private static String defineCachedTask(String suffix = "") {
+        """
+            import org.gradle.api.*
+            import org.gradle.api.tasks.*
+
+            @CacheableTask
+            class CustomTask extends DefaultTask {
+                @InputFile
+                @PathSensitive(PathSensitivity.NONE)
+                File inputFile
+
+                @OutputFile
+                File outputFile
+
+                @TaskAction
+                void doSomething() {
+                    outputFile.text = inputFile.text + "$suffix"
+                }
+            }
+        """
+    }
+
     private static String defineProducerTask() {
         """
             import org.gradle.api.*
             import org.gradle.api.tasks.*
-            import javax.inject.Inject
 
             @CacheableTask
             abstract class ProducerTask extends DefaultTask {

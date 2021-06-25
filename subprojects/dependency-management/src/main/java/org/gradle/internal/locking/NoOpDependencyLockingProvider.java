@@ -21,6 +21,7 @@ import org.gradle.api.artifacts.dsl.LockMode;
 import org.gradle.api.file.RegularFileProperty;
 import org.gradle.api.internal.artifacts.dsl.dependencies.DependencyLockingProvider;
 import org.gradle.api.internal.artifacts.dsl.dependencies.DependencyLockingState;
+import org.gradle.api.provider.ListProperty;
 import org.gradle.api.provider.Property;
 
 import java.util.Set;
@@ -59,6 +60,16 @@ public class NoOpDependencyLockingProvider implements DependencyLockingProvider 
 
     @Override
     public void buildFinished() {
+        // No-op
+    }
+
+    @Override
+    public ListProperty<String> getIgnoredDependencies() {
+        throw new IllegalStateException("Should not be invoked on the no-op instance");
+    }
+
+    @Override
+    public void confirmConfigurationNotLocked(String configurationName) {
         // No-op
     }
 }

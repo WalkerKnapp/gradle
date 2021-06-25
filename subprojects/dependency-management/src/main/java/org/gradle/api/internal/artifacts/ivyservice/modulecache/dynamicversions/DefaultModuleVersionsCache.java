@@ -21,7 +21,7 @@ import org.gradle.cache.PersistentIndexedCache;
 import org.gradle.internal.serialize.AbstractSerializer;
 import org.gradle.internal.serialize.Decoder;
 import org.gradle.internal.serialize.Encoder;
-import org.gradle.util.BuildCommencedTimeProvider;
+import org.gradle.util.internal.BuildCommencedTimeProvider;
 
 import java.util.LinkedHashSet;
 import java.util.Set;
@@ -57,7 +57,7 @@ public class DefaultModuleVersionsCache extends AbstractModuleVersionsCache {
 
     @Override
     protected ModuleVersionsCacheEntry get(ModuleAtRepositoryKey key) {
-        return getCache().get(key);
+        return getCache().getIfPresent(key);
     }
 
     private static class ModuleKeySerializer extends AbstractSerializer<ModuleAtRepositoryKey> {

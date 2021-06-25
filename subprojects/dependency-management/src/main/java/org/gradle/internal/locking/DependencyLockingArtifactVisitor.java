@@ -84,7 +84,7 @@ public class DependencyLockingArtifactVisitor implements ValidatingArtifactsVisi
         if (metadata != null && metadata.isChanging()) {
             changing = true;
         }
-        if (identifier instanceof ModuleComponentIdentifier) {
+        if (!node.isRoot() && identifier instanceof ModuleComponentIdentifier) {
             ModuleComponentIdentifier id = (ModuleComponentIdentifier) identifier;
             if (identifier instanceof MavenUniqueSnapshotComponentIdentifier) {
                 id = ((MavenUniqueSnapshotComponentIdentifier) id).getSnapshotComponent();
@@ -97,7 +97,9 @@ public class DependencyLockingArtifactVisitor implements ValidatingArtifactsVisi
                     if (dependencyLockingState.mustValidateLockState()) {
                         ModuleComponentIdentifier lockedId = modulesToBeLocked.remove(id.getModuleIdentifier());
                         if (lockedId == null) {
-                            extraModules.add(id);
+                            if (!dependencyLockingState.getIgnoredEntryFilter().isSatisfiedBy(id)) {
+                                extraModules.add(id);
+                            }
                         } else if (!lockedId.getVersion().equals(id.getVersion()) && !isNodeRejected(node)) {
                             // Need to check that versions do match, mismatch indicates a force was used
                             forcedModules.put(lockedId, id.getVersion());

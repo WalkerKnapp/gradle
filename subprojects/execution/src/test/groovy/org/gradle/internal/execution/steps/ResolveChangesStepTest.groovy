@@ -18,9 +18,6 @@ package org.gradle.internal.execution.steps
 
 import com.google.common.collect.ImmutableList
 import com.google.common.collect.ImmutableSortedMap
-import org.gradle.internal.execution.CachingContext
-import org.gradle.internal.execution.IncrementalChangesContext
-import org.gradle.internal.execution.Result
 import org.gradle.internal.execution.UnitOfWork
 import org.gradle.internal.execution.history.AfterPreviousExecutionState
 import org.gradle.internal.execution.history.BeforeExecutionState
@@ -40,13 +37,13 @@ class ResolveChangesStepTest extends StepSpec<CachingContext> {
 
     def "doesn't provide input file changes when rebuild is forced"() {
         when:
-        def result = step.execute(context)
+        def result = step.execute(work, context)
 
         then:
         result == delegateResult
 
         _ * work.inputChangeTrackingStrategy >> UnitOfWork.InputChangeTrackingStrategy.NONE
-        1 * delegate.execute(_) >> { IncrementalChangesContext delegateContext ->
+        1 * delegate.execute(work, _ as IncrementalChangesContext) >> { UnitOfWork work, IncrementalChangesContext delegateContext ->
             def changes = delegateContext.changes.get()
             assert changes.allChangeMessages == ImmutableList.of("Forced rebuild.")
             try {
@@ -64,12 +61,12 @@ class ResolveChangesStepTest extends StepSpec<CachingContext> {
 
     def "doesn't provide changes when change tracking is disabled"() {
         when:
-        def result = step.execute(context)
+        def result = step.execute(work, context)
 
         then:
         result == delegateResult
 
-        1 * delegate.execute(_) >> { IncrementalChangesContext delegateContext ->
+        1 * delegate.execute(work, _ as IncrementalChangesContext) >> { UnitOfWork work, IncrementalChangesContext delegateContext ->
             assert !delegateContext.changes.present
             return delegateResult
         }
@@ -80,13 +77,13 @@ class ResolveChangesStepTest extends StepSpec<CachingContext> {
 
     def "doesn't provide input file changes when no history is available"() {
         when:
-        def result = step.execute(context)
+        def result = step.execute(work, context)
 
         then:
         result == delegateResult
 
         _ * work.inputChangeTrackingStrategy >> UnitOfWork.InputChangeTrackingStrategy.NONE
-        1 * delegate.execute(_) >> { IncrementalChangesContext delegateContext ->
+        1 * delegate.execute(work, _ as IncrementalChangesContext) >> { UnitOfWork work, IncrementalChangesContext delegateContext ->
             def changes = delegateContext.changes.get()
             assert !changes.createInputChanges().incremental
             assert changes.allChangeMessages == ImmutableList.of("No history is available.")
@@ -99,18 +96,41 @@ class ResolveChangesStepTest extends StepSpec<CachingContext> {
         0 * _
     }
 
-    def "provides input file changes when history is available"() {
-        def beforeExecutionState = Mock(BeforeExecutionState)
+    def "doesn't provide input file changes when work fails validation"() {
         def afterPreviousExecutionState = Mock(AfterPreviousExecutionState)
-        def changes = Mock(ExecutionStateChanges)
-
         when:
-        def result = step.execute(context)
+        def result = step.execute(work, context)
 
         then:
         result == delegateResult
 
-        1 * delegate.execute(_) >> { IncrementalChangesContext delegateContext ->
+        _ * work.inputChangeTrackingStrategy >> UnitOfWork.InputChangeTrackingStrategy.NONE
+        1 * delegate.execute(work, _ as IncrementalChangesContext) >> { UnitOfWork work, IncrementalChangesContext delegateContext ->
+            def changes = delegateContext.changes.get()
+            assert !changes.createInputChanges().incremental
+            assert changes.allChangeMessages == ImmutableList.of("Incremental execution has been disabled to ensure correctness. Please consult deprecation warnings for more details.")
+            return delegateResult
+        }
+        _ * context.rebuildReason >> Optional.empty()
+        _ * context.beforeExecutionState >> Optional.of(beforeExecutionState)
+        _ * context.afterPreviousExecutionState >> Optional.of(afterPreviousExecutionState)
+        _ * context.validationProblems >> Optional.of({ ImmutableList.of("Validation problem") } as ValidationFinishedContext.ValidationResult)
+        1 * beforeExecutionState.getInputFileProperties() >> ImmutableSortedMap.of()
+        _ * context.afterPreviousExecutionState >> Optional.empty()
+        0 * _
+    }
+
+    def "provides input file changes when history is available"() {
+        def afterPreviousExecutionState = Mock(AfterPreviousExecutionState)
+        def changes = Mock(ExecutionStateChanges)
+
+        when:
+        def result = step.execute(work, context)
+
+        then:
+        result == delegateResult
+
+        1 * delegate.execute(work, _ as IncrementalChangesContext) >> { UnitOfWork work, IncrementalChangesContext delegateContext ->
             assert delegateContext.changes.get() == changes
             return delegateResult
         }

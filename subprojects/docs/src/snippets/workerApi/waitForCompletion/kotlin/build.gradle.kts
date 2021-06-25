@@ -1,6 +1,4 @@
 
-import javax.inject.Inject
-
 // The parameters for a single unit of work
 interface ReverseParameters : WorkParameters {
     val fileToReverse : RegularFileProperty
@@ -19,13 +17,13 @@ abstract class ReverseFile @Inject constructor(val fileSystemOperations: FileSys
 }
 
 // The WorkerExecutor will be injected by Gradle at runtime
-open class ReverseFiles @Inject constructor(
+abstract class ReverseFiles @Inject constructor(
     private val projectLayout: ProjectLayout,
     private val workerExecutor: WorkerExecutor
 ) : SourceTask() {
 
-    @OutputDirectory
-    lateinit var outputDir: File
+    @get:OutputDirectory
+    abstract val outputDir: DirectoryProperty
 
     @TaskAction
     fun reverseFiles() {
@@ -43,12 +41,12 @@ open class ReverseFiles @Inject constructor(
 
         // Wait for all asynchronous work submitted to this queue to complete before continuing
         workQueue.await()
-        logger.lifecycle("Created ${outputDir.listFiles().size} reversed files in ${outputDir.toRelativeString(projectLayout.projectDirectory.asFile)}")
+        logger.lifecycle("Created ${outputDir.get().asFile.listFiles().size} reversed files in ${outputDir.get().asFile.toRelativeString(projectLayout.projectDirectory.asFile)}")
         // end::wait-for-completion[]
     }
 }
 
 tasks.register<ReverseFiles>("reverseFiles") {
-    outputDir = file("$buildDir/reversed")
+    outputDir.set(layout.buildDirectory.dir("reversed"))
     source("sources")
 }

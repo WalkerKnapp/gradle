@@ -17,6 +17,7 @@
 package org.gradle.api.internal.tasks.compile;
 
 import org.gradle.api.JavaVersion;
+import org.gradle.api.internal.tasks.compile.incremental.compilerapi.constants.ConstantsAnalysisResult;
 import org.gradle.internal.Cast;
 import org.gradle.internal.UncheckedException;
 import org.gradle.internal.classloader.ClassLoaderFactory;
@@ -25,7 +26,6 @@ import org.gradle.internal.classloader.FilteringClassLoader;
 import org.gradle.internal.classloader.VisitableURLClassLoader;
 import org.gradle.internal.classpath.ClassPath;
 import org.gradle.internal.classpath.DefaultClassPath;
-import org.gradle.internal.jvm.JavaInfo;
 import org.gradle.internal.jvm.Jvm;
 import org.gradle.internal.reflect.DirectInstantiator;
 
@@ -41,12 +41,12 @@ import java.io.OutputStream;
 import java.io.Writer;
 import java.lang.reflect.InvocationTargetException;
 import java.nio.charset.Charset;
-import java.util.Collection;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
@@ -65,16 +65,16 @@ public class JdkTools {
 
     private Class<JavaCompiler.CompilationTask> incrementalCompileTaskClass;
 
-    JdkTools(JavaInfo javaInfo, List<File> compilerPlugins) {
+    JdkTools(Jvm jvm, List<File> compilerPlugins) {
         DefaultClassLoaderFactory defaultClassLoaderFactory = new DefaultClassLoaderFactory();
-        JavaVersion javaVersion = Jvm.current().getJavaVersion();
+        JavaVersion javaVersion = jvm.getJavaVersion();
         boolean java9Compatible = javaVersion.isJava9Compatible();
         ClassLoader filteringClassLoader = getSystemFilteringClassLoader(defaultClassLoaderFactory);
         if (!java9Compatible) {
-            File toolsJar = javaInfo.getToolsJar();
+            File toolsJar = jvm.getToolsJar();
             if (toolsJar == null) {
                 throw new IllegalStateException("Could not find tools.jar. Please check that "
-                    + javaInfo.getJavaHome().getAbsolutePath()
+                    + jvm.getJavaHome().getAbsolutePath()
                     + " contains a valid JDK installation.");
             }
             ClassPath defaultClassPath = DefaultClassPath.of(toolsJar).plus(compilerPlugins);
@@ -158,11 +158,14 @@ public class JdkTools {
         }
 
         @Override
-        public JavaCompiler.CompilationTask makeIncremental(JavaCompiler.CompilationTask task, File mappingFile, CompilationSourceDirs compilationSourceDirs) {
+        public JavaCompiler.CompilationTask makeIncremental(JavaCompiler.CompilationTask task, Map<String, Set<String>> sourceToClassMapping, ConstantsAnalysisResult constantsAnalysisResult, CompilationSourceDirs compilationSourceDirs) {
             ensureCompilerTask();
             return DirectInstantiator.instantiate(incrementalCompileTaskClass, task,
-                (Function<File, Optional<String>>) file -> compilationSourceDirs.relativize(file),
-                (Consumer<Map<String, Collection<String>>>) mapping -> SourceClassesMappingFileAccessor.writeSourceClassesMappingFile(mappingFile, mapping));
+                (Function<File, Optional<String>>) compilationSourceDirs::relativize,
+                (Consumer<Map<String, Set<String>>>) sourceToClassMapping::putAll,
+                (BiConsumer<String, String>) constantsAnalysisResult::addPublicDependent,
+                (BiConsumer<String, String>) constantsAnalysisResult::addPrivateDependent
+            );
         }
     }
 

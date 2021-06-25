@@ -32,6 +32,7 @@ import org.gradle.test.fixtures.file.TestFile
 import org.gradle.test.fixtures.file.TestNameTestDirectoryProvider
 import org.gradle.tooling.GradleConnector
 import org.gradle.tooling.ProjectConnection
+import org.gradle.tooling.internal.consumer.ConnectionParameters
 import org.gradle.tooling.internal.consumer.Distribution
 import org.gradle.tooling.internal.protocol.InternalBuildProgressListener
 import org.gradle.tooling.model.GradleProject
@@ -201,9 +202,8 @@ project.description = text
         def allProgress = new CopyOnWriteArrayList<String>()
 
         concurrent.start {
-            def connector = toolingApi.connector()
+            def connector = toolingApi.connector(file("build1"))
             distributionOperation(connector, { it.description = "download for 1"; Thread.sleep(500) } )
-            connector.forProjectDirectory(file("build1"))
 
             toolingApi.withConnection(connector) { connection ->
                 def build = connection.newBuild()
@@ -216,9 +216,8 @@ project.description = text
         }
 
         concurrent.start {
-            def connector = toolingApi.connector()
+            def connector = toolingApi.connector(file("build2"))
             distributionOperation(connector, { it.description = "download for 2"; Thread.sleep(500) } )
-            connector.forProjectDirectory(file("build2"))
 
             def connection = connector.connect()
 
@@ -289,12 +288,12 @@ project.description = text
             return 'mock'
         }
 
-        ClassPath getToolingImplementationClasspath(ProgressLoggerFactory progressLoggerFactory, InternalBuildProgressListener progressListener, File userHomeDir, BuildCancellationToken cancellationToken) {
+        ClassPath getToolingImplementationClasspath(ProgressLoggerFactory progressLoggerFactory, InternalBuildProgressListener progressListener, ConnectionParameters connectionParameters, BuildCancellationToken cancellationToken) {
             def o = progressLoggerFactory.newOperation("mock")
             operation(o)
             o.started()
             o.completed()
-            return delegate.getToolingImplementationClasspath(progressLoggerFactory, progressListener, userHomeDir, cancellationToken)
+            return delegate.getToolingImplementationClasspath(progressLoggerFactory, progressListener, connectionParameters, cancellationToken)
         }
     }
 
@@ -367,8 +366,7 @@ logger.lifecycle 'this is lifecycle: $idx'
     }
 
     def withConnectionInDir(String dir, Closure cl) {
-        GradleConnector connector = toolingApi.connector()
-        connector.forProjectDirectory(file(dir))
+        GradleConnector connector = toolingApi.connector(file(dir))
         toolingApi.withConnection(connector, cl)
     }
 }

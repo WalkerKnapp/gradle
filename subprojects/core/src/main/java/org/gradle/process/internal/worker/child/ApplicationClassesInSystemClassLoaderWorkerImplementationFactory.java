@@ -20,9 +20,10 @@ import com.google.common.base.Joiner;
 import org.gradle.api.JavaVersion;
 import org.gradle.api.UncheckedIOException;
 import org.gradle.api.internal.ClassPathRegistry;
-import org.gradle.api.internal.file.TemporaryFileProvider;
+import org.gradle.api.internal.file.temp.TemporaryFileProvider;
 import org.gradle.api.logging.LogLevel;
 import org.gradle.internal.io.StreamByteBuffer;
+import org.gradle.internal.jvm.JpmsConfiguration;
 import org.gradle.internal.jvm.inspection.JvmVersionDetector;
 import org.gradle.internal.process.ArgWriter;
 import org.gradle.internal.remote.Address;
@@ -33,7 +34,7 @@ import org.gradle.internal.stream.EncodedStream;
 import org.gradle.process.internal.JavaExecHandleBuilder;
 import org.gradle.process.internal.worker.GradleWorkerMain;
 import org.gradle.process.internal.worker.WorkerProcessBuilder;
-import org.gradle.util.GUtil;
+import org.gradle.util.internal.GUtil;
 
 import java.io.DataOutputStream;
 import java.io.File;
@@ -91,14 +92,18 @@ public class ApplicationClassesInSystemClassLoaderWorkerImplementationFactory im
         Object requestedSecurityManager = execSpec.getSystemProperties().get("java.security.manager");
         List<File> workerMainClassPath = classPathRegistry.getClassPath("WORKER_MAIN").getAsFiles();
 
-        execSpec.getMainModule().set("gradle.worker");
+        boolean runAsModule = !applicationModulePath.isEmpty() && execSpec.getModularity().getInferModulePath().get();
+
+        if (runAsModule) {
+            execSpec.getMainModule().set("gradle.worker");
+        }
         execSpec.getMainClass().set("worker." + GradleWorkerMain.class.getName());
 
         boolean useOptionsFile = shouldUseOptionsFile(execSpec);
         if (useOptionsFile) {
             // Use an options file to pass across application classpath
             File optionsFile = temporaryFileProvider.createTemporaryFile("gradle-worker-classpath", "txt");
-            List<String> jvmArgs = writeOptionsFile(execSpec.getModularity().getInferModulePath().get(), workerMainClassPath, implementationModulePath, applicationClasspath, applicationModulePath, optionsFile);
+            List<String> jvmArgs = writeOptionsFile(runAsModule, workerMainClassPath, implementationModulePath, applicationClasspath, applicationModulePath, optionsFile);
             execSpec.jvmArgs(jvmArgs);
         } else {
             // Use a dummy security manager, which hacks the application classpath into the system ClassLoader
@@ -128,7 +133,7 @@ public class ApplicationClassesInSystemClassLoaderWorkerImplementationFactory im
             }
 
             // Serialize the worker implementation classpath, this is consumed by GradleWorkerMain
-            if (execSpec.getModularity().getInferModulePath().get() || implementationModulePath == null) {
+            if (runAsModule || implementationModulePath == null) {
                 outstr.writeInt(implementationClassPath.size());
                 for (URL entry : implementationClassPath) {
                     outstr.writeUTF(entry.toString());
@@ -200,6 +205,7 @@ public class ApplicationClassesInSystemClassLoaderWorkerImplementationFactory im
         if (!classpath.isEmpty()) {
             argumentList.addAll(Arrays.asList("-cp", Joiner.on(File.pathSeparator).join(classpath)));
         }
+        argumentList.addAll(JpmsConfiguration.GRADLE_WORKER_JPMS_ARGS);
         return ArgWriter.argsFileGenerator(optionsFile, ArgWriter.javaStyleFactory()).transform(argumentList);
     }
 }

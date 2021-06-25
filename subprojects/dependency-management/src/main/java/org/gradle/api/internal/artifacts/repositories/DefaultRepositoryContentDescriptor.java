@@ -25,6 +25,11 @@ import org.gradle.api.artifacts.ModuleIdentifier;
 import org.gradle.api.artifacts.component.ModuleComponentIdentifier;
 import org.gradle.api.attributes.Attribute;
 import org.gradle.api.attributes.AttributeContainer;
+import org.gradle.api.internal.artifacts.ivyservice.ivyresolve.strategy.DefaultVersionComparator;
+import org.gradle.api.internal.artifacts.ivyservice.ivyresolve.strategy.DefaultVersionSelectorScheme;
+import org.gradle.api.internal.artifacts.ivyservice.ivyresolve.strategy.VersionParser;
+import org.gradle.api.internal.artifacts.ivyservice.ivyresolve.strategy.VersionSelector;
+import org.gradle.api.internal.artifacts.ivyservice.ivyresolve.strategy.VersionSelectorScheme;
 import org.gradle.internal.Actions;
 import org.gradle.internal.Cast;
 
@@ -32,6 +37,7 @@ import javax.annotation.Nullable;
 import java.util.Collections;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Supplier;
 import java.util.regex.Pattern;
 
@@ -45,8 +51,11 @@ class DefaultRepositoryContentDescriptor implements RepositoryContentDescriptorI
 
     private Action<? super ArtifactResolutionDetails> cachedAction;
     private final Supplier<String> repositoryNameSupplier;
+    private final VersionSelectorScheme versionSelectorScheme;
+    private final ConcurrentHashMap<String, VersionSelector> versionSelectors = new ConcurrentHashMap<>();
 
     public DefaultRepositoryContentDescriptor(Supplier<String> repositoryNameSupplier) {
+        this.versionSelectorScheme = new DefaultVersionSelectorScheme(new DefaultVersionComparator(), new VersionParser());
         this.repositoryNameSupplier = repositoryNameSupplier;
     }
 
@@ -74,6 +83,27 @@ class DefaultRepositoryContentDescriptor implements RepositoryContentDescriptorI
         }
         cachedAction = new RepositoryFilterAction(createSpecMatchers(includeSpecs), createSpecMatchers(excludeSpecs));
         return cachedAction;
+    }
+
+    @Override
+    public RepositoryContentDescriptorInternal asMutableCopy() {
+        DefaultRepositoryContentDescriptor copy = new DefaultRepositoryContentDescriptor(repositoryNameSupplier);
+        if (includedConfigurations != null) {
+            copy.includedConfigurations = Sets.newHashSet(includedConfigurations);
+        }
+        if (excludedConfigurations != null) {
+            copy.excludedConfigurations = Sets.newHashSet(excludedConfigurations);
+        }
+        if (includeSpecs != null) {
+            copy.includeSpecs = Sets.newHashSet(includeSpecs);
+        }
+        if (excludeSpecs != null) {
+            copy.excludeSpecs = Sets.newHashSet(excludeSpecs);
+        }
+        if (requiredAttributes != null) {
+            copy.requiredAttributes = Maps.newHashMap(requiredAttributes);
+        }
+        return copy;
     }
 
     @Nullable
@@ -142,7 +172,7 @@ class DefaultRepositoryContentDescriptor implements RepositoryContentDescriptorI
         if (includeSpecs == null) {
             includeSpecs = Sets.newHashSet();
         }
-        includeSpecs.add(new ContentSpec(regex, group, moduleName, version));
+        includeSpecs.add(new ContentSpec(regex, group, moduleName, version, versionSelectorScheme, versionSelectors, true));
     }
 
     @Override
@@ -192,7 +222,7 @@ class DefaultRepositoryContentDescriptor implements RepositoryContentDescriptorI
         if (excludeSpecs == null) {
             excludeSpecs = Sets.newHashSet();
         }
-        excludeSpecs.add(new ContentSpec(regex, group, moduleName, version));
+        excludeSpecs.add(new ContentSpec(regex, group, moduleName, version, versionSelectorScheme, versionSelectors, false));
     }
 
     @Override
@@ -220,19 +250,74 @@ class DefaultRepositoryContentDescriptor implements RepositoryContentDescriptorI
         requiredAttributes.put(Cast.uncheckedCast(attribute), ImmutableSet.copyOf(validValues));
     }
 
+    Supplier<String> getRepositoryNameSupplier() {
+        return repositoryNameSupplier;
+    }
+
+    @Nullable
+    Set<String> getIncludedConfigurations() {
+        return includedConfigurations;
+    }
+
+    void setIncludedConfigurations(@Nullable Set<String> includedConfigurations) {
+        this.includedConfigurations = includedConfigurations;
+    }
+
+    @Nullable
+    Set<String> getExcludedConfigurations() {
+        return excludedConfigurations;
+    }
+
+    void setExcludedConfigurations(@Nullable Set<String> excludedConfigurations) {
+        this.excludedConfigurations = excludedConfigurations;
+    }
+
+    @Nullable
+    Set<ContentSpec> getIncludeSpecs() {
+        return includeSpecs;
+    }
+
+    void setIncludeSpecs(@Nullable Set<ContentSpec> includeSpecs) {
+        this.includeSpecs = includeSpecs;
+    }
+
+    @Nullable
+    Set<ContentSpec> getExcludeSpecs() {
+        return excludeSpecs;
+    }
+
+    void setExcludeSpecs(@Nullable Set<ContentSpec> excludeSpecs) {
+        this.excludeSpecs = excludeSpecs;
+    }
+
+    @Nullable
+    Map<Attribute<Object>, Set<Object>> getRequiredAttributes() {
+        return requiredAttributes;
+    }
+
+    void setRequiredAttributes(@Nullable Map<Attribute<Object>, Set<Object>> requiredAttributes) {
+        this.requiredAttributes = requiredAttributes;
+    }
+
     private static class ContentSpec {
         private final boolean regex;
         private final String group;
         private final String module;
         private final String version;
+        private final VersionSelectorScheme versionSelectorScheme;
+        private final ConcurrentHashMap<String, VersionSelector> versionSelectors;
+        private final boolean inclusive;
         private final int hashCode;
 
-        private ContentSpec(boolean regex, String group, @Nullable String module, @Nullable String version) {
+        private ContentSpec(boolean regex, String group, @Nullable String module, @Nullable String version, VersionSelectorScheme versionSelectorScheme, ConcurrentHashMap<String, VersionSelector> versionSelectors, boolean inclusive) {
             this.regex = regex;
             this.group = group;
             this.module = module;
             this.version = version;
-            this.hashCode = Objects.hashCode(regex, group, module, version);
+            this.versionSelectorScheme = versionSelectorScheme;
+            this.versionSelectors = versionSelectors;
+            this.inclusive = inclusive;
+            this.hashCode = Objects.hashCode(regex, group, module, version, inclusive);
         }
 
         @Override
@@ -248,7 +333,8 @@ class DefaultRepositoryContentDescriptor implements RepositoryContentDescriptorI
                     hashCode == that.hashCode &&
                     Objects.equal(group, that.group) &&
                     Objects.equal(module, that.module) &&
-                    Objects.equal(version, that.version);
+                    Objects.equal(version, that.version) &&
+                    Objects.equal(inclusive, that.inclusive);
         }
 
         @Override
@@ -258,9 +344,9 @@ class DefaultRepositoryContentDescriptor implements RepositoryContentDescriptorI
 
         SpecMatcher toMatcher() {
             if (regex) {
-                return new PatternSpecMatcher(group, module, version);
+                return new PatternSpecMatcher(group, module, version, inclusive);
             }
-            return new SimpleSpecMatcher(group, module, version);
+            return new SimpleSpecMatcher(group, module, version, versionSelectorScheme, versionSelectors, inclusive);
         }
     }
 
@@ -274,24 +360,34 @@ class DefaultRepositoryContentDescriptor implements RepositoryContentDescriptorI
         private final String group;
         private final String module;
         private final String version;
+        private final VersionSelector versionSelector;
+        private final boolean inclusive;
 
-        private SimpleSpecMatcher(String group, @Nullable String module, @Nullable String version) {
+        private SimpleSpecMatcher(String group, @Nullable String module, @Nullable String version, VersionSelectorScheme versionSelectorScheme, ConcurrentHashMap<String, VersionSelector> versionSelectors, boolean inclusive) {
             this.group = group;
             this.module = module;
             this.version = version;
+            this.inclusive = inclusive;
+            this.versionSelector = getVersionSelector(versionSelectors, versionSelectorScheme, version);
         }
 
         @Override
         public boolean matches(ModuleIdentifier id) {
             return group.equals(id.getGroup())
-                    && (module == null || module.equals(id.getName()));
+                && (module == null || module.equals(id.getName()))
+                && (inclusive || version == null);
         }
 
         @Override
         public boolean matches(ModuleComponentIdentifier id) {
             return group.equals(id.getGroup())
-                    && (module == null || module.equals(id.getModule()))
-                    && (version == null || version.equals(id.getVersion()));
+                && (module == null || module.equals(id.getModule()))
+                && (version == null || version.equals(id.getVersion()) || versionSelector.accept(id.getVersion()));
+        }
+
+        @Nullable
+        private VersionSelector getVersionSelector(ConcurrentHashMap<String, VersionSelector> versionSelectors, VersionSelectorScheme versionSelectorScheme, @Nullable String version) {
+            return version != null ? versionSelectors.computeIfAbsent(version, s -> versionSelectorScheme.parseSelector(version)) : null;
         }
     }
 
@@ -299,24 +395,27 @@ class DefaultRepositoryContentDescriptor implements RepositoryContentDescriptorI
         private final Pattern groupPattern;
         private final Pattern modulePattern;
         private final Pattern versionPattern;
+        private final boolean inclusive;
 
-        private PatternSpecMatcher(String group, @Nullable String module, @Nullable String version) {
+        private PatternSpecMatcher(String group, @Nullable String module, @Nullable String version, boolean inclusive) {
             this.groupPattern = Pattern.compile(group);
             this.modulePattern = module == null ? null : Pattern.compile(module);
             this.versionPattern = version == null ? null : Pattern.compile(version);
+            this.inclusive = inclusive;
         }
 
         @Override
         public boolean matches(ModuleIdentifier id) {
             return groupPattern.matcher(id.getGroup()).matches()
-                    && (modulePattern == null || modulePattern.matcher(id.getName()).matches());
+                && (modulePattern == null || modulePattern.matcher(id.getName()).matches())
+                && (inclusive || versionPattern == null);
         }
 
         @Override
         public boolean matches(ModuleComponentIdentifier id) {
             return groupPattern.matcher(id.getGroup()).matches()
-                    && (modulePattern == null || modulePattern.matcher(id.getModule()).matches())
-                    && (versionPattern == null || versionPattern.matcher(id.getVersion()).matches());
+                && (modulePattern == null || modulePattern.matcher(id.getModule()).matches())
+                && (versionPattern == null || versionPattern.matcher(id.getVersion()).matches());
         }
     }
 

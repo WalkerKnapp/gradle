@@ -17,19 +17,20 @@ package org.gradle.api.artifacts.dsl;
 
 import groovy.lang.Closure;
 import org.gradle.api.Action;
-import org.gradle.api.Incubating;
 import org.gradle.api.artifacts.ArtifactRepositoryContainer;
 import org.gradle.api.artifacts.repositories.ArtifactRepository;
 import org.gradle.api.artifacts.repositories.ExclusiveContentRepository;
 import org.gradle.api.artifacts.repositories.FlatDirectoryArtifactRepository;
 import org.gradle.api.artifacts.repositories.IvyArtifactRepository;
 import org.gradle.api.artifacts.repositories.MavenArtifactRepository;
+import org.gradle.internal.HasInternalProtocol;
 
 import java.util.Map;
 
 /**
  * A {@code RepositoryHandler} manages a set of repositories, allowing repositories to be defined and queried.
  */
+@HasInternalProtocol
 public interface RepositoryHandler extends ArtifactRepositoryContainer {
 
     /**
@@ -106,7 +107,7 @@ public interface RepositoryHandler extends ArtifactRepositoryContainer {
      * The behavior of this repository is otherwise the same as those added by {@link #maven(org.gradle.api.Action)}.
      * <p>
      * Examples:
-     * <pre class='autoTested'>
+     * <pre class='autoTestedWithDeprecations'>
      * repositories {
      *   jcenter {
      *     artifactUrls = ["http://www.mycompany.com/artifacts1", "http://www.mycompany.com/artifacts2"]
@@ -120,7 +121,9 @@ public interface RepositoryHandler extends ArtifactRepositoryContainer {
      *
      * @param action a configuration action
      * @return the added repository
+     * @deprecated JFrog announced JCenter's <a href="https://blog.gradle.org/jcenter-shutdown">shutdown</a> in February 2021. Use {@link #mavenCentral()} instead.
      */
+    @Deprecated
     MavenArtifactRepository jcenter(Action<? super MavenArtifactRepository> action);
 
     /**
@@ -130,7 +133,7 @@ public interface RepositoryHandler extends ArtifactRepositoryContainer {
      * The behavior of this repository is otherwise the same as those added by {@link #maven(org.gradle.api.Action)}.
      * <p>
      * Examples:
-     * <pre class='autoTested'>
+     * <pre class='autoTestedWithDeprecations'>
      * repositories {
      *     jcenter()
      * }
@@ -138,7 +141,9 @@ public interface RepositoryHandler extends ArtifactRepositoryContainer {
      *
      * @return the added resolver
      * @see #jcenter(Action)
+     * @deprecated JFrog announced JCenter's <a href="https://blog.gradle.org/jcenter-shutdown">shutdown</a> in February 2021. Use {@link #mavenCentral()} instead.
      */
+    @Deprecated
     MavenArtifactRepository jcenter();
 
     /**
@@ -336,6 +341,5 @@ public interface RepositoryHandler extends ArtifactRepositoryContainer {
      *
      * @since 6.2
      */
-    @Incubating
     void exclusiveContent(Action<? super ExclusiveContentRepository> action);
 }

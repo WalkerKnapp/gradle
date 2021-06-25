@@ -16,13 +16,14 @@
 
 package org.gradle.configurationcache.serialization.codecs
 
+import com.google.common.reflect.TypeToken
 import com.nhaarman.mockitokotlin2.mock
 import org.gradle.api.Project
 import org.gradle.configurationcache.extensions.uncheckedCast
+import org.gradle.configurationcache.extensions.useToRun
 import org.gradle.configurationcache.problems.DocumentationSection.NotYetImplementedJavaSerialization
 import org.gradle.configurationcache.problems.PropertyKind
 import org.gradle.configurationcache.problems.PropertyTrace
-import org.gradle.kotlin.dsl.support.useToRun
 import org.hamcrest.CoreMatchers.equalTo
 import org.hamcrest.CoreMatchers.nullValue
 import org.hamcrest.CoreMatchers.sameInstance
@@ -105,7 +106,7 @@ class JavaObjectSerializationCodecTest : AbstractUserTypeCodecTest() {
 
     @Test
     fun `can handle writeReplace readResolve`() {
-        verifyRoundtripOf(::SerializableWriteReplaceBean) {
+        verifyRoundtripOf({ SerializableWriteReplaceBean() }) {
             assertThat(
                 it.value,
                 equalTo<Any>("42")
@@ -143,7 +144,7 @@ class JavaObjectSerializationCodecTest : AbstractUserTypeCodecTest() {
     @Ignore("wip")
     @Test
     fun `can handle Externalizable beans`() {
-        verifyRoundtripOf(::ExternalizableBean) {
+        verifyRoundtripOf({ ExternalizableBean() }) {
             assertThat(
                 it.value,
                 equalTo<Any>(42)
@@ -153,7 +154,7 @@ class JavaObjectSerializationCodecTest : AbstractUserTypeCodecTest() {
 
     @Test
     fun `can handle multiple writeObject implementations in the hierarchy`() {
-        verifyRoundtripOf(::MultiWriteObjectBean) { bean ->
+        verifyRoundtripOf({ MultiWriteObjectBean() }) { bean ->
             assertThat(
                 bean.stringValue,
                 equalTo("42")
@@ -175,7 +176,7 @@ class JavaObjectSerializationCodecTest : AbstractUserTypeCodecTest() {
 
     @Test
     fun `can handle writeObject without readObject`() {
-        verifyRoundtripOf(::SerializableWriteObjectOnlyBean) {
+        verifyRoundtripOf({ SerializableWriteObjectOnlyBean() }) {
             assertThat(
                 it.value,
                 equalTo<Any>("42")
@@ -268,6 +269,21 @@ class JavaObjectSerializationCodecTest : AbstractUserTypeCodecTest() {
                 "it allows writeReplace to initialize the object",
                 first.value,
                 equalTo("42")
+            )
+        }
+    }
+
+    @Test
+    fun `can handle circular writeReplace`() {
+        verifyRoundtripOf({ pairOf(TypeToken.of(String::class.java)) }) { (first, second) ->
+            assertThat(
+                "it preserves identity",
+                first,
+                sameInstance(second)
+            )
+            assertThat(
+                first,
+                equalTo(TypeToken.of(String::class.java))
             )
         }
     }

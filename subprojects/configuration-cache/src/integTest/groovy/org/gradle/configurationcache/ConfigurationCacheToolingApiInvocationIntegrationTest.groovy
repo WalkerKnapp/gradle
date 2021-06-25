@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 the original author or authors.
+ * Copyright 2021 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,19 +16,12 @@
 
 package org.gradle.configurationcache
 
-import org.gradle.initialization.StartParameterBuildOptions
-import org.gradle.integtests.fixtures.executer.AbstractGradleExecuter
-import org.gradle.integtests.fixtures.executer.ExecutionFailure
-import org.gradle.integtests.fixtures.executer.ExecutionResult
-import org.gradle.integtests.fixtures.executer.GradleContextualExecuter
-import org.gradle.integtests.fixtures.executer.GradleDistribution
+import org.gradle.configurationcache.fixtures.SomeToolingModelBuildAction
+import org.gradle.configurationcache.fixtures.ToolingApiBackedGradleExecuter
+import org.gradle.configurationcache.fixtures.ToolingApiSpec
 import org.gradle.integtests.fixtures.executer.GradleExecuter
-import org.gradle.integtests.fixtures.executer.IntegrationTestBuildContext
-import org.gradle.integtests.fixtures.executer.OutputScrapingExecutionResult
-import org.gradle.test.fixtures.file.TestDirectoryProvider
-import org.gradle.tooling.GradleConnector
 
-class ConfigurationCacheToolingApiInvocationIntegrationTest extends AbstractConfigurationCacheIntegrationTest {
+class ConfigurationCacheToolingApiInvocationIntegrationTest extends AbstractConfigurationCacheIntegrationTest implements ToolingApiSpec {
     @Override
     GradleExecuter createExecuter() {
         return new ToolingApiBackedGradleExecuter(distribution, temporaryFolder)
@@ -39,20 +32,42 @@ class ConfigurationCacheToolingApiInvocationIntegrationTest extends AbstractConf
             plugins {
                 id("java")
             }
+            println("script log statement")
         """
 
         when:
         configurationCacheRun("assemble")
 
         then:
-        outputContains("Configuration cache is an incubating feature.")
+        outputContains("script log statement")
 
         when:
         configurationCacheRun("assemble")
 
         then:
-        outputContains("Configuration cache is an incubating feature.")
-        outputContains("Reusing configuration cache.")
+        outputDoesNotContain("script log statement")
+    }
+
+    def "can enable configuration cache using gradle property in gradle.properties"() {
+        withConfigurationCacheEnabledInGradleProperties()
+        buildFile << """
+            plugins {
+                id("java")
+            }
+            println("script log statement")
+        """
+
+        when:
+        run("assemble")
+
+        then:
+        outputContains("script log statement")
+
+        when:
+        run("assemble")
+
+        then:
+        outputDoesNotContain("script log statement")
     }
 
     def "can enable configuration cache using system property in build arguments"() {
@@ -60,20 +75,20 @@ class ConfigurationCacheToolingApiInvocationIntegrationTest extends AbstractConf
             plugins {
                 id("java")
             }
+            println("script log statement")
         """
 
         when:
         run("assemble", ENABLE_SYS_PROP)
 
         then:
-        outputContains("Configuration cache is an incubating feature.")
+        outputContains("script log statement")
 
         when:
         run("assemble", ENABLE_SYS_PROP)
 
         then:
-        outputContains("Configuration cache is an incubating feature.")
-        outputContains("Reusing configuration cache.")
+        outputDoesNotContain("script log statement")
     }
 
     def "can enable configuration cache using system property in build JVM arguments"() {
@@ -81,6 +96,7 @@ class ConfigurationCacheToolingApiInvocationIntegrationTest extends AbstractConf
             plugins {
                 id("java")
             }
+            println("script log statement")
         """
 
         when:
@@ -88,70 +104,123 @@ class ConfigurationCacheToolingApiInvocationIntegrationTest extends AbstractConf
         run("assemble")
 
         then:
-        outputContains("Configuration cache is an incubating feature.")
+        outputContains("script log statement")
 
         when:
         executer.withJvmArgs(ENABLE_SYS_PROP)
         run("assemble")
 
         then:
-        outputContains("Configuration cache is an incubating feature.")
-        outputContains("Reusing configuration cache.")
+        outputDoesNotContain("script log statement")
     }
 
-    static class ToolingApiBackedGradleExecuter extends AbstractGradleExecuter {
-        private final List<String> jvmArgs = []
+    def "can use test launcher tooling api"() {
 
-        ToolingApiBackedGradleExecuter(GradleDistribution distribution, TestDirectoryProvider testDirectoryProvider) {
-            super(distribution, testDirectoryProvider)
-        }
-
-        void withJvmArgs(String... args) {
-            jvmArgs.addAll(args)
-        }
-
-        @Override
-        void assertCanExecute() throws AssertionError {
-        }
-
-        @Override
-        protected ExecutionResult doRun() {
-            def output = new ByteArrayOutputStream()
-            def error = new ByteArrayOutputStream()
-            def context = new IntegrationTestBuildContext()
-            def connector = GradleConnector
-                .newConnector()
-                .forProjectDirectory(workingDir)
-                .useGradleUserHomeDir(context.gradleUserHomeDir)
-                .searchUpwards(false)
-            if (GradleContextualExecuter.embedded) {
-                connector.embedded(true).useClasspathDistribution()
-            } else {
-                connector.embedded(false).useInstallation(context.gradleHomeDir)
+        given:
+        withConfigurationCacheEnabledInGradleProperties()
+        buildFile << """
+            plugins {
+                id("java")
             }
-            def args = allArgs
-            args.remove("--no-daemon")
-
-            def connection = connector.connect()
-            try {
-                connection.newBuild()
-                    .addJvmArguments(jvmArgs)
-                    .withArguments(args)
-                    .setStandardOutput(output)
-                    .setStandardError(error)
-                    .run()
-            } finally {
-                connection.close()
-                if (GradleContextualExecuter.embedded) {
-                    System.clearProperty(StartParameterBuildOptions.ConfigurationCacheOption.PROPERTY_NAME)
-                }
+            ${mavenCentralRepository()}
+            dependencies { testImplementation("junit:junit:4.13") }
+            println("script log statement")
+        """
+        file("src/test/java/my/MyTest.java") << """
+            package my;
+            import org.junit.Test;
+            public class MyTest {
+                @Test public void test() {}
             }
-            return OutputScrapingExecutionResult.from(output.toString(), error.toString())
-        }
+        """
 
-        @Override
-        protected ExecutionFailure doRunWithFailure() {
-            throw new UnsupportedOperationException("not implemented yet")
-        }
+        when:
+        runTestClasses("my.MyTest")
+
+        then:
+        outputContains("script log statement")
+
+        when:
+        runTestClasses("my.MyTest")
+
+        then:
+        outputDoesNotContain("script log statement")
+    }
+
+    def "configuration cache is disabled for direct model requests"() {
+        given:
+        withConfigurationCacheEnabledInGradleProperties()
+        buildWithSomeToolingModelAndScriptLogStatement()
+
+        when:
+        def model = fetchModel()
+
+        then:
+        model.message == "It works!"
+        outputContains("script log statement")
+
+        when:
+        def model2 = fetchModel()
+
+        then:
+        model2.message == "It works!"
+        outputContains("script log statement")
+    }
+
+    def "configuration cache is disabled for client provided build actions"() {
+        given:
+        withConfigurationCacheEnabledInGradleProperties()
+        buildWithSomeToolingModelAndScriptLogStatement()
+
+        when:
+        def model = runBuildAction(new SomeToolingModelBuildAction())
+
+        then:
+        model.message == "It works!"
+        outputContains("script log statement")
+
+        when:
+        def model2 = runBuildAction(new SomeToolingModelBuildAction())
+
+        then:
+        model2.message == "It works!"
+        outputContains("script log statement")
+    }
+
+    def "configuration cache is disabled for client provided phased build actions"() {
+        given:
+        withConfigurationCacheEnabledInGradleProperties()
+        buildWithSomeToolingModelAndScriptLogStatement()
+
+        when:
+        def model = runPhasedBuildAction(new SomeToolingModelBuildAction(), new SomeToolingModelBuildAction())
+
+        then:
+        model.left.message == "It works!"
+        model.right.message == "It works!"
+        outputContains("script log statement")
+
+        when:
+        def model2 = runPhasedBuildAction(new SomeToolingModelBuildAction(), new SomeToolingModelBuildAction())
+
+        then:
+        model2.left.message == "It works!"
+        model2.right.message == "It works!"
+        outputContains("script log statement")
+    }
+
+    private void withConfigurationCacheEnabledInGradleProperties() {
+        file("gradle.properties").text = ENABLE_GRADLE_PROP
+    }
+
+    private void buildWithSomeToolingModelAndScriptLogStatement() {
+        withSomeToolingModelBuilderPluginInBuildSrc()
+        buildFile << """
+            plugins {
+                id("java")
+            }
+            plugins.apply(my.MyPlugin)
+            println("script log statement")
+        """
     }
 }

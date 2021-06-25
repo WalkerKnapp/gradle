@@ -25,12 +25,18 @@ import spock.lang.Issue
 import spock.lang.Unroll
 
 import static org.gradle.api.internal.file.TestFiles.systemSpecificAbsolutePath
-import static org.gradle.util.TextUtil.normaliseFileSeparators
-import static org.gradle.workers.fixtures.WorkerExecutorFixture.ISOLATION_MODES
+import static org.gradle.util.internal.TextUtil.normaliseFileSeparators
 
 class WorkerExecutorLegacyApiIntegrationTest extends AbstractIntegrationSpec {
-    static final String OUTPUT_FILE_NAME = "output.txt"
+    static final ISOLATION_MODES = (org.gradle.workers.IsolationMode.values() - org.gradle.workers.IsolationMode.AUTO).collect { "IsolationMode.${it.toString()}" }
+    static final OUTPUT_FILE_NAME = "output.txt"
     boolean isOracleJDK = TestPrecondition.JDK_ORACLE.fulfilled && (Jvm.current().jre != null)
+
+    def setup() {
+       executer.beforeExecute {
+           expectDocumentedDeprecationWarning("The WorkerExecutor.submit() method has been deprecated. This is scheduled to be removed in Gradle 8.0. Please use the noIsolation(), classLoaderIsolation() or processIsolation() method instead. See https://docs.gradle.org/current/userguide/upgrading_version_5.html#method_workerexecutor_submit_is_deprecated for more details.")
+       }
+    }
 
     @Unroll
     def "can submit an item of work with the legacy API using isolation mode #isolationMode"() {
@@ -76,7 +82,7 @@ class WorkerExecutorLegacyApiIntegrationTest extends AbstractIntegrationSpec {
                 arrayOfThings = ["foo", "bar", "baz"]
                 listOfThings = ["foo", "bar", "baz"]
                 outputFile = file("${OUTPUT_FILE_NAME}")
-                
+
                 workerConfiguration = {
                     forkMode = ${forkMode}
                 }
@@ -84,7 +90,7 @@ class WorkerExecutorLegacyApiIntegrationTest extends AbstractIntegrationSpec {
                 doFirst {
                     daemonCount = services.get(org.gradle.workers.internal.WorkerDaemonClientsManager.class).allClients.size()
                 }
-                
+
                 doLast {
                     assert services.get(org.gradle.workers.internal.WorkerDaemonClientsManager.class).allClients.size() ${operator} daemonCount
                 }
@@ -169,7 +175,7 @@ class WorkerExecutorLegacyApiIntegrationTest extends AbstractIntegrationSpec {
                         }
                     }
                 }
-                
+
                 text = "foo"
                 arrayOfThings = ["foo", "bar", "baz"]
                 listOfThings = ["foo", "bar", "baz"]
@@ -232,7 +238,7 @@ class WorkerExecutorLegacyApiIntegrationTest extends AbstractIntegrationSpec {
             ${legacyWorkerTypeAndTask}
 
             ext.memoryHog = new byte[1024*1024*150] // ~150MB
-            
+
             tasks.withType(WorkerTask) { task ->
                 isolationMode = IsolationMode.PROCESS
                 displayName = "Test Work"
@@ -269,51 +275,49 @@ class WorkerExecutorLegacyApiIntegrationTest extends AbstractIntegrationSpec {
             import org.gradle.api.tasks.TaskAction
             import org.gradle.workers.IsolationMode
             import org.gradle.workers.WorkerExecutor
-            
-            import javax.inject.Inject
-            
+
             task myTask(type: MyTask) {
                 description 'My Task'
                 outputFile = file("\${buildDir}/workOutput")
             }
-            
+
             class MyTask extends DefaultTask {
                 private final WorkerExecutor workerExecutor
-            
+
                 @OutputFile
                 File outputFile
-                
+
                 @Inject
                 MyTask(WorkerExecutor workerExecutor) {
                     this.workerExecutor = workerExecutor
                 }
-            
+
                 @TaskAction
                 def run() {
                     Properties myProps = new Properties()
                     myProps.setProperty('key1', 'value1')
                     myProps.setProperty('key2', 'value2')
                     myProps.setProperty('key3', 'value3')
-            
+
                     workerExecutor.submit(MyRunner.class) { config ->
                         config.isolationMode = IsolationMode.NONE
-            
+
                         config.params(myProps, outputFile)
                     }
-            
+
                     workerExecutor.await()
                 }
-            
+
                 private static class MyRunner implements Runnable {
                     Properties myProps
                     File outputFile
-            
+
                     @Inject
                     MyRunner(Properties myProps, File outputFile) {
                         this.myProps = myProps
                         this.outputFile = outputFile
                     }
-            
+
                     @Override
                     void run() {
                         Properties myProps = this.myProps;
@@ -341,14 +345,12 @@ class WorkerExecutorLegacyApiIntegrationTest extends AbstractIntegrationSpec {
 
     String getLegacyWorkerTypeAndTask() {
         return """
-            import javax.inject.Inject
-
             class TestRunnable implements Runnable {
                 final String text
                 final String[] arrayOfThings
                 final ListProperty<String> listOfThings
                 final File outputFile
-                
+
                 @Inject
                 TestRunnable(String text, String[] arrayOfThings, ListProperty<String> listOfThings, File outputFile) {
                     this.text = text
@@ -356,7 +358,7 @@ class WorkerExecutorLegacyApiIntegrationTest extends AbstractIntegrationSpec {
                     this.listOfThings = listOfThings
                     this.outputFile = outputFile
                 }
-                
+
                 void run() {
                     outputFile.withWriter { writer ->
                         PrintWriter out = new PrintWriter(writer)
@@ -366,7 +368,7 @@ class WorkerExecutorLegacyApiIntegrationTest extends AbstractIntegrationSpec {
                     }
                 }
             }
-            
+
             class WorkerTask extends DefaultTask {
                 private final WorkerExecutor workerExecutor
 
@@ -386,13 +388,13 @@ class WorkerExecutorLegacyApiIntegrationTest extends AbstractIntegrationSpec {
                 String displayName
                 @Internal
                 Closure workerConfiguration
-                
+
                 @Inject
                 WorkerTask(WorkerExecutor workerExecutor) {
                     this.workerExecutor = workerExecutor
                     this.listOfThings = project.objects.listProperty(String)
                 }
-                
+
                 @TaskAction
                 void doWork() {
                     workerExecutor.submit(runnableClass) { config ->
@@ -404,7 +406,7 @@ class WorkerExecutorLegacyApiIntegrationTest extends AbstractIntegrationSpec {
                             workerConfiguration(config)
                         }
                     }
-                }    
+                }
             }
         """
     }
@@ -413,7 +415,7 @@ class WorkerExecutorLegacyApiIntegrationTest extends AbstractIntegrationSpec {
         return """
             public class RunnableWithDifferentConstructor implements Runnable {
                 @javax.inject.Inject
-                public RunnableWithDifferentConstructor(List<String> files, File outputDir) { 
+                public RunnableWithDifferentConstructor(List<String> files, File outputDir) {
                 }
                 public void run() {
                 }
@@ -427,7 +429,6 @@ class WorkerExecutorLegacyApiIntegrationTest extends AbstractIntegrationSpec {
             import java.util.List;
             import java.lang.management.ManagementFactory;
             import java.lang.management.RuntimeMXBean;
-            import javax.inject.Inject;
 
             public class OptionVerifyingRunnable extends TestRunnable {
                 @Inject

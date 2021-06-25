@@ -16,9 +16,189 @@
 
 package org.gradle.configurationcache
 
+import org.gradle.internal.reflect.problems.ValidationProblemId
+import org.gradle.internal.reflect.validation.ValidationMessageChecker
+import org.gradle.internal.reflect.validation.ValidationTestFor
+import spock.lang.Issue
 import spock.lang.Unroll
 
-class ConfigurationCacheBuildOptionsIntegrationTest extends AbstractConfigurationCacheIntegrationTest {
+import static org.junit.Assume.assumeFalse
+
+class ConfigurationCacheBuildOptionsIntegrationTest extends AbstractConfigurationCacheIntegrationTest implements ValidationMessageChecker {
+
+    def setup() {
+        expectReindentedValidationMessage()
+    }
+
+    @Issue("https://github.com/gradle/gradle/issues/13333")
+    @Unroll
+    def "absent #operator orElse #orElseKind used as task input"() {
+
+        assumeFalse(
+            'task dependency inference for orElse(taskOutput) not implemented yet!',
+            orElseKind == 'task output'
+        )
+
+        given:
+        def configurationCache = newConfigurationCacheFixture()
+        buildKotlinFile """
+            abstract class PrintString : DefaultTask() {
+                @get:Input
+                abstract val string: Property<String>
+                @TaskAction
+                fun printString() {
+                    println("The string is " + string.get())
+                }
+            }
+            abstract class ProduceString : DefaultTask() {
+                @get:OutputFile
+                abstract val outputFile: RegularFileProperty
+                @TaskAction
+                fun printString() {
+                    outputFile.get().asFile.writeText("absent")
+                }
+            }
+            val producer = tasks.register<ProduceString>("produceString") {
+                outputFile.set(layout.buildDirectory.file("output.txt"))
+            }
+            val stringProvider = providers
+                .$operator("string")
+                .orElse($orElseArgument)
+            tasks.register<PrintString>("printString") {
+                string.set(stringProvider)
+            }
+        """
+        def printString = { string ->
+            switch (operator) {
+                case 'systemProperty':
+                    configurationCacheRun "printString", "-Dstring=$string"
+                    break
+                case 'gradleProperty':
+                    configurationCacheRun "printString", "-Pstring=$string"
+                    break
+                case 'environmentVariable':
+                    withEnvironmentVars(string: string)
+                    configurationCacheRun "printString"
+                    break
+            }
+        }
+
+        when:
+        configurationCacheRun "printString"
+
+        then:
+        output.count("The string is absent") == 1
+        configurationCache.assertStateStored()
+
+        when:
+        printString "alice"
+
+        then:
+        output.count("The string is alice") == 1
+        configurationCache.assertStateLoaded()
+
+        when:
+        printString "bob"
+
+        then:
+        output.count("The string is bob") == 1
+        configurationCache.assertStateLoaded()
+
+        where:
+        [operator, orElseKind] << [
+            ['systemProperty', 'gradleProperty', 'environmentVariable'],
+            ['primitive', 'provider', 'task output']
+        ].combinations()
+        orElseArgument = orElseKind == 'primitive'
+            ? '"absent"'
+            : orElseKind == 'provider'
+            ? 'providers.provider { "absent" }'
+            : 'producer.flatMap { it.outputFile }.map { it.asFile.readText() }'
+    }
+
+    @ValidationTestFor(
+        ValidationProblemId.VALUE_NOT_SET
+    )
+    @Issue("https://github.com/gradle/gradle/issues/13334")
+    @Unroll
+    def "task input property with convention set to absent #operator is reported correctly"() {
+
+        given:
+        def configurationCache = newConfigurationCacheFixture()
+        buildKotlinFile """
+            val stringProvider = providers
+                .$operator("string")
+            abstract class PrintString @Inject constructor(objects: ObjectFactory) : DefaultTask() {
+                @get:Input
+                val string: Property<String> = objects.property<String>().convention("absent")
+                @TaskAction
+                fun printString() {
+                    println("The string is " + string.orNull)
+                }
+            }
+            tasks.register<PrintString>("printString") {
+                string.set(stringProvider)
+            }
+        """
+
+        when:
+        configurationCacheFails "printString"
+
+        then:
+        failureDescriptionContains missingValueMessage { type('Build_gradle.PrintString').property('string') }
+        configurationCache.assertStateStored()
+
+        when:
+        configurationCacheFails "printString"
+
+        then:
+        failureDescriptionContains missingValueMessage { type('Build_gradle.PrintString').property('string') }
+        configurationCache.assertStateLoaded()
+
+        where:
+        operator << ['systemProperty', 'gradleProperty', 'environmentVariable']
+    }
+
+    @Issue("https://github.com/gradle/gradle/issues/13334")
+    @Unroll
+    def "absent #operator used as optional task input"() {
+
+        given:
+        def configurationCache = newConfigurationCacheFixture()
+        buildKotlinFile """
+            val stringProvider = providers
+                .$operator("string")
+            abstract class PrintString : DefaultTask() {
+                @get:Input
+                @get:Optional
+                abstract val string: Property<String>
+                @TaskAction
+                fun printString() {
+                    println("The string is " + (string.orNull ?: "absent"))
+                }
+            }
+            tasks.register<PrintString>("printString") {
+                string.set(stringProvider)
+            }
+        """
+
+        when:
+        configurationCacheRun "printString"
+
+        then:
+        output.count("The string is absent") == 1
+        configurationCache.assertStateStored()
+
+        when:
+        configurationCacheRun "printString"
+
+        then:
+        output.count("The string is absent") == 1
+        configurationCache.assertStateLoaded()
+
+        where:
+        operator << ['systemProperty', 'gradleProperty', 'environmentVariable']
+    }
 
     @Unroll
     def "system property from #systemPropertySource used as task and build logic input"() {
@@ -50,12 +230,6 @@ class ConfigurationCacheBuildOptionsIntegrationTest extends AbstractConfiguratio
                 case SystemPropertySource.GRADLE_PROPERTIES:
                     file('root/gradle.properties').text = "systemProp.greeting=$greeting"
                     return configurationCacheRun('greet')
-                case SystemPropertySource.GRADLE_PROPERTIES_FROM_MASTER_SETTINGS_DIR:
-                    file('master/gradle.properties').text = "systemProp.greeting=$greeting"
-                    file('master/settings.gradle').text = """
-                        rootProject.projectDir = file('../root')
-                    """
-                    return configurationCacheRun('greet')
             }
             throw new IllegalArgumentException('source')
         }
@@ -86,8 +260,7 @@ class ConfigurationCacheBuildOptionsIntegrationTest extends AbstractConfiguratio
 
     enum SystemPropertySource {
         COMMAND_LINE,
-        GRADLE_PROPERTIES,
-        GRADLE_PROPERTIES_FROM_MASTER_SETTINGS_DIR;
+        GRADLE_PROPERTIES
 
         @Override
         String toString() {
@@ -237,7 +410,7 @@ class ConfigurationCacheBuildOptionsIntegrationTest extends AbstractConfiguratio
 
         given:
         def configurationCache = newConfigurationCacheFixture()
-        buildKotlinFile """
+        buildKotlinFile("""
 
             val sysPropProvider = providers
                 .systemProperty("thread.pool.size")
@@ -258,7 +431,7 @@ class ConfigurationCacheBuildOptionsIntegrationTest extends AbstractConfiguratio
             tasks.register<TaskA>("a") {
                 threadPoolSize.set(sysPropProvider)
             }
-        """
+        """)
 
         when:
         configurationCacheRun("a")
@@ -621,13 +794,13 @@ class ConfigurationCacheBuildOptionsIntegrationTest extends AbstractConfiguratio
 
             abstract class MyTask extends DefaultTask {
                 @OutputDirectory
-                public abstract DirectoryProperty getOutputDir()
+                abstract DirectoryProperty getOutputDir()
 
                 @Input
-                public abstract Property<Integer> getInputCount()
+                abstract Property<Integer> getInputCount()
 
                 @TaskAction
-                public void doTask() {
+                void doTask() {
                     File outputFile = getOutputDir().get().asFile
                     outputFile.deleteDir()
                     outputFile.mkdirs()
@@ -639,13 +812,13 @@ class ConfigurationCacheBuildOptionsIntegrationTest extends AbstractConfiguratio
 
             abstract class ConsumerTask extends DefaultTask {
                 @InputFiles
-                public abstract ConfigurableFileCollection getMyInputs()
+                abstract ConfigurableFileCollection getMyInputs()
 
                 @OutputFile
-                public abstract RegularFileProperty getOutputFile()
+                abstract RegularFileProperty getOutputFile()
 
                 @TaskAction
-                public void doTask() {
+                void doTask() {
                     File outputFile = getOutputFile().get().asFile
                     outputFile.delete()
                     outputFile.parentFile.mkdirs()
@@ -701,6 +874,85 @@ class ConfigurationCacheBuildOptionsIntegrationTest extends AbstractConfiguratio
         then:
         consumedFileNames() == ['0', '2', '4'] as Set
         configurationCache.assertStateLoaded()
+    }
+
+    def "system property used at configuration time can be captured by task"() {
+        given:
+        buildFile """
+            def sysProp = providers.systemProperty("some.prop").forUseAtConfigurationTime()
+            println('sys prop value at configuration time = ' + sysProp.orNull)
+
+            task ok {
+                doLast {
+                    println('sys prop value at execution time = ' + sysProp.orNull)
+                }
+            }
+        """
+        def configurationCache = newConfigurationCacheFixture()
+
+        when:
+        configurationCacheRun 'ok', '-Dsome.prop=42'
+
+        then:
+        outputContains 'sys prop value at configuration time = 42'
+        outputContains 'sys prop value at execution time = 42'
+        configurationCache.assertStateStored()
+
+        when:
+        configurationCacheRun 'ok', '-Dsome.prop=42'
+
+        then:
+        outputDoesNotContain 'sys prop value at configuration time = 42'
+        outputContains 'sys prop value at execution time = 42'
+        configurationCache.assertStateLoaded()
+
+        when:
+        configurationCacheRun 'ok', '-Dsome.prop=37'
+
+        then:
+        outputContains 'sys prop value at configuration time = 37'
+        outputContains 'sys prop value at execution time = 37'
+        configurationCache.assertStateStored()
+    }
+
+    @Issue("gradle/gradle#14465")
+    def "configuration is cacheable when providers are used in settings"() {
+
+        given:
+        def configurationCache = newConfigurationCacheFixture()
+        settingsFile << """
+            providers.systemProperty("org.gradle.booleanProperty").forUseAtConfigurationTime().orElse(false).get()
+        """
+
+        when:
+        configurationCacheRun "help", "-Dorg.gradle.booleanProperty=true"
+
+        then:
+        configurationCache.assertStateStored()
+
+        when:
+        configurationCacheRun "help", "-Dorg.gradle.booleanProperty=true"
+
+        then:
+        configurationCache.assertStateLoaded()
+    }
+
+    @Issue("gradle/gradle#14465")
+    def "configuration cache is invalidated after property change when providers are used in settings"() {
+
+        given:
+        def configurationCache = newConfigurationCacheFixture()
+        settingsFile << """
+            providers.systemProperty("org.gradle.booleanProperty").forUseAtConfigurationTime().orElse(false).get()
+        """
+        configurationCacheRun "help", "-Dorg.gradle.booleanProperty=true"
+
+        when:
+        configurationCacheRun "help", "-Dorg.gradle.booleanProperty=false"
+
+        then:
+        configurationCache.assertStateStored()
+        output.contains("because system property 'org.gradle.booleanProperty' has changed.")
     }
 
     private static String getGreetTask() {

@@ -28,7 +28,9 @@ class GroovyDocStampsIntegrationTest extends MultiVersionIntegrationSpec {
 
     def setup() {
         buildFile << """
-            apply plugin: "groovy"
+            plugins {
+                id("groovy")
+            }
 
             ${mavenCentralRepository()}
 

@@ -18,7 +18,7 @@ package org.gradle.internal.resource.transport.file;
 import org.gradle.api.internal.artifacts.ivyservice.ArtifactCacheLockingManager;
 import org.gradle.api.internal.artifacts.ivyservice.resolutionstrategy.DefaultExternalResourceCachePolicy;
 import org.gradle.api.internal.artifacts.ivyservice.resolutionstrategy.ExternalResourceCachePolicy;
-import org.gradle.api.internal.file.TemporaryFileProvider;
+import org.gradle.api.internal.file.temp.TemporaryFileProvider;
 import org.gradle.cache.internal.ProducerGuard;
 import org.gradle.internal.hash.ChecksumService;
 import org.gradle.internal.resource.ExternalResourceName;
@@ -31,7 +31,7 @@ import org.gradle.internal.resource.local.LocallyAvailableResourceCandidates;
 import org.gradle.internal.resource.transfer.CacheAwareExternalResourceAccessor;
 import org.gradle.internal.resource.transfer.DefaultCacheAwareExternalResourceAccessor;
 import org.gradle.internal.resource.transport.AbstractRepositoryTransport;
-import org.gradle.util.BuildCommencedTimeProvider;
+import org.gradle.util.internal.BuildCommencedTimeProvider;
 
 import javax.annotation.Nullable;
 import java.io.IOException;

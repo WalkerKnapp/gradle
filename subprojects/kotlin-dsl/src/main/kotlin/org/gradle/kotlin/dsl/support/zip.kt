@@ -18,7 +18,7 @@ package org.gradle.kotlin.dsl.support
 
 import org.gradle.api.internal.file.archive.ZipCopyAction.CONSTANT_TIME_FOR_ZIP_ENTRIES
 
-import org.gradle.util.TextUtil.normaliseFileSeparators
+import org.gradle.util.internal.TextUtil.normaliseFileSeparators
 
 import java.io.File
 import java.io.InputStream
@@ -89,10 +89,12 @@ fun zipTo(outputStream: OutputStream, entries: Sequence<Pair<String, ByteArray>>
     ZipOutputStream(outputStream).use { zos ->
         entries.forEach { entry ->
             val (path, bytes) = entry
-            zos.putNextEntry(ZipEntry(path).apply {
-                time = CONSTANT_TIME_FOR_ZIP_ENTRIES
-                size = bytes.size.toLong()
-            })
+            zos.putNextEntry(
+                ZipEntry(path).apply {
+                    time = CONSTANT_TIME_FOR_ZIP_ENTRIES
+                    size = bytes.size.toLong()
+                }
+            )
             zos.write(bytes)
             zos.closeEntry()
         }

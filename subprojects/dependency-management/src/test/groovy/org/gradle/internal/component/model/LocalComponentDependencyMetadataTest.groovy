@@ -39,7 +39,6 @@ import org.gradle.internal.component.AmbiguousConfigurationSelectionException
 import org.gradle.internal.component.IncompatibleConfigurationSelectionException
 import org.gradle.internal.component.external.descriptor.DefaultExclude
 import org.gradle.internal.component.local.model.LocalConfigurationMetadata
-import org.gradle.internal.component.local.model.OpaqueComponentIdentifier
 import org.gradle.util.AttributeTestUtil
 import org.gradle.util.SnapshotTestUtil
 import org.gradle.util.TestUtil
@@ -47,12 +46,17 @@ import spock.lang.Specification
 import spock.lang.Unroll
 
 import static com.google.common.collect.ImmutableList.copyOf
-import static org.gradle.util.TextUtil.toPlatformLineSeparators
+import static org.gradle.util.internal.TextUtil.toPlatformLineSeparators
 
 class LocalComponentDependencyMetadataTest extends Specification {
     AttributesSchemaInternal attributesSchema
     ImmutableAttributesFactory factory
-    ComponentIdentifier componentId = new OpaqueComponentIdentifier("foo")
+    ComponentIdentifier componentId = new ComponentIdentifier() {
+        @Override
+        String getDisplayName() {
+            return "example"
+        }
+    }
 
     def setup() {
         attributesSchema = new DefaultAttributesSchema(new ComponentAttributeMatcher(), TestUtil.instantiatorFactory(), SnapshotTestUtil.valueSnapshotter())

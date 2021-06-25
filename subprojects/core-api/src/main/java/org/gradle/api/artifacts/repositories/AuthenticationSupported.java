@@ -16,7 +16,6 @@
 package org.gradle.api.artifacts.repositories;
 
 import org.gradle.api.Action;
-import org.gradle.api.Incubating;
 import org.gradle.api.credentials.Credentials;
 import org.gradle.internal.HasInternalProtocol;
 
@@ -115,13 +114,13 @@ public interface AuthenticationSupported {
      * <ul>
      * <li>{@link org.gradle.api.credentials.PasswordCredentials}</li>
      * <li>{@link org.gradle.api.credentials.AwsCredentials}</li>
+     * <li>{@link org.gradle.api.credentials.HttpHeaderCredentials}</li>
      * </ul>
      *
      * @throws IllegalArgumentException if {@code credentialsType} is not of a supported type
      *
      * @since 6.6
      */
-    @Incubating
     void credentials(Class<? extends Credentials> credentialsType);
 
     /**

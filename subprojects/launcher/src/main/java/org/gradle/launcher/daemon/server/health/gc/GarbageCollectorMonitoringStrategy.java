@@ -21,7 +21,7 @@ import org.gradle.api.logging.Logger;
 import org.gradle.api.logging.Logging;
 import org.gradle.api.specs.Spec;
 import org.gradle.internal.jvm.Jvm;
-import org.gradle.util.CollectionUtils;
+import org.gradle.util.internal.CollectionUtils;
 
 import java.lang.management.GarbageCollectorMXBean;
 import java.lang.management.ManagementFactory;
@@ -100,7 +100,7 @@ public enum GarbageCollectorMonitoringStrategy {
         });
 
         if (gcStrategy == null) {
-            LOGGER.info("Unable to determine a garbage collection monitoring strategy for " + Jvm.current().toString());
+            LOGGER.info("Unable to determine a garbage collection monitoring strategy for {}", Jvm.current());
             return GarbageCollectorMonitoringStrategy.UNKNOWN;
         } else {
             List<String> memoryPools = CollectionUtils.collect(ManagementFactory.getMemoryPoolMXBeans(), new Transformer<String, MemoryPoolMXBean>() {
@@ -110,7 +110,7 @@ public enum GarbageCollectorMonitoringStrategy {
                 }
             });
             if (!memoryPools.contains(gcStrategy.heapPoolName) || !memoryPools.contains(gcStrategy.nonHeapPoolName)) {
-                LOGGER.info("Unable to determine which memory pools to monitor for " + Jvm.current().toString());
+                LOGGER.info("Unable to determine which memory pools to monitor for {}", Jvm.current());
                 return GarbageCollectorMonitoringStrategy.UNKNOWN;
             }
             return gcStrategy;

@@ -71,6 +71,16 @@ class SnapshotSerializerTest extends Specification {
         new ShortValueSnapshot(Short.MIN_VALUE) | _
     }
 
+    def "serializes hash properties"() {
+        def value = new HashCodeSnapshot(HashCode.fromInt(123))
+
+        when:
+        write(value)
+
+        then:
+        value == written
+    }
+
     enum Thing {
         THING_1, THING_2
     }
@@ -195,7 +205,7 @@ class SnapshotSerializerTest extends Specification {
         copy.typeName == original.typeName
         copy.classLoaderHash == null
         copy.unknown
-        copy.unknownReason.contains("unknown classloader")
+        copy.unknownReason == ImplementationSnapshot.UnknownReason.UNKNOWN_CLASSLOADER
     }
 
     def "serializes implementation properties with lambda"() {
@@ -207,7 +217,7 @@ class SnapshotSerializerTest extends Specification {
         copy.typeName == original.typeName
         copy.classLoaderHash == null
         copy.isUnknown()
-        copy.unknownReason.contains("lambda")
+        copy.unknownReason == ImplementationSnapshot.UnknownReason.LAMBDA
     }
 
     private ArrayValueSnapshot array(ValueSnapshot... elements) {

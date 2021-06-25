@@ -19,13 +19,16 @@ package org.gradle.integtests
 import org.gradle.api.internal.tasks.execution.CleanupStaleOutputsExecuter
 import org.gradle.integtests.fixtures.AbstractIntegrationSpec
 import org.gradle.integtests.fixtures.BuildOperationsFixture
+import org.gradle.integtests.fixtures.MissingTaskDependenciesFixture
+import org.gradle.internal.reflect.problems.ValidationProblemId
+import org.gradle.internal.reflect.validation.ValidationTestFor
 import org.gradle.test.fixtures.file.TestFile
-import org.gradle.util.ToBeImplemented
+import org.gradle.util.internal.ToBeImplemented
 import spock.lang.Issue
 import spock.lang.Unroll
 
 @Unroll
-class StaleOutputIntegrationTest extends AbstractIntegrationSpec {
+class StaleOutputIntegrationTest extends AbstractIntegrationSpec implements MissingTaskDependenciesFixture {
 
     @Issue(['GRADLE-2440', 'GRADLE-2579'])
     def 'stale output file is removed after input source directory is emptied.'() {
@@ -123,7 +126,7 @@ class StaleOutputIntegrationTest extends AbstractIntegrationSpec {
     def "two tasks can output in the same directory with --rerun-tasks"() {
         buildFile << """
             apply plugin: 'base'
-            
+
             task firstCopy {
                 inputs.file('first.file')
                 outputs.dir('build/destination')
@@ -131,7 +134,7 @@ class StaleOutputIntegrationTest extends AbstractIntegrationSpec {
                     file('build/destination/first.file').text = file('first.file').text
                 }
             }
-            
+
             task secondCopy {
                 inputs.file('second.file')
                 outputs.dir('build/destination')
@@ -139,7 +142,7 @@ class StaleOutputIntegrationTest extends AbstractIntegrationSpec {
                     file('build/destination/second.file').text = file('second.file').text
                 }
             }
-            
+
             secondCopy.dependsOn firstCopy
         """
         file("first.file").createFile()
@@ -156,14 +159,14 @@ class StaleOutputIntegrationTest extends AbstractIntegrationSpec {
         given:
         buildFile << """
             apply plugin: 'base'
-            
+
             task myTask {
                 outputs.dir "external/output"
                 outputs.file "customFile"
                 outputs.dir "build/dir"
                 doLast {}
             }
-            
+
             clean {
                 delete "customFile"
             }
@@ -363,7 +366,7 @@ class StaleOutputIntegrationTest extends AbstractIntegrationSpec {
         String taskName = 'test'
 
         String getBuildScript() {
-            """       
+            """
                 apply plugin: 'base'
 
                 task ${taskName} {
@@ -436,6 +439,9 @@ class StaleOutputIntegrationTest extends AbstractIntegrationSpec {
         skipped(taskWithLocalState.taskPath)
     }
 
+    @ValidationTestFor(
+        ValidationProblemId.IMPLICIT_DEPENDENCY
+    )
     def "up-to-date checks detect removed stale outputs"() {
 
         given:
@@ -469,6 +475,8 @@ class StaleOutputIntegrationTest extends AbstractIntegrationSpec {
         }
 
         when:
+        expectMissingDependencyDeprecation(":restore", ":backup", file('build/original'))
+        expectMissingDependencyDeprecation(":backup", ":restore", file('backup'))
         run 'backup', 'restore'
 
         then:
@@ -485,6 +493,8 @@ class StaleOutputIntegrationTest extends AbstractIntegrationSpec {
         //
         // If cleaning up stale output files does not invalidate the file system mirror, then the restore task would be up-to-date.
         invalidateBuildOutputCleanupState()
+        expectMissingDependencyDeprecation(":restore", ":backup", file('build/original'))
+        expectMissingDependencyDeprecation(":backup", ":restore", file('backup'))
         run 'backup', 'restore', '--info'
 
         then:
@@ -497,8 +507,6 @@ class StaleOutputIntegrationTest extends AbstractIntegrationSpec {
 
     def "task with file tree output can be up-to-date"() {
         buildFile << """
-            import javax.inject.Inject
-
             plugins {
                 id 'base'
             }
@@ -517,14 +525,14 @@ class StaleOutputIntegrationTest extends AbstractIntegrationSpec {
                 FileCollection getOutputFileTree() {
                     objectFactory.fileTree().setDir(outputDir).include('**/myOutput.txt')
                 }
-                
+
                 @TaskAction
                 void generateOutputs() {
                     outputDir.mkdirs()
                     new File(outputDir, 'myOutput.txt').text = input
                 }
             }
-            
+
             task custom(type: TaskWithFileTreeOutput) {
                 outputDir = file('build/outputs')
                 input = 'input'
@@ -551,7 +559,7 @@ class StaleOutputIntegrationTest extends AbstractIntegrationSpec {
         String taskName = 'test'
 
         String getBuildScript() {
-            """       
+            """
                 apply plugin: 'base'
 
                 task ${taskName} {
@@ -677,8 +685,6 @@ class StaleOutputIntegrationTest extends AbstractIntegrationSpec {
 
         String getBuildScript() {
             """
-            import javax.inject.Inject
-
             apply plugin: 'base'
 
             task ${taskName}(type: MyTask) {
@@ -706,10 +712,10 @@ class StaleOutputIntegrationTest extends AbstractIntegrationSpec {
                         from(inputDir) {
                             into 'subDir'
                         }
-                        from inputFile 
+                        from inputFile
                     }
                 }
-            }                        
+            }
 
             if (project.findProperty('assertRemoved')) {
                 ${taskName}.doFirst {
@@ -718,10 +724,10 @@ class StaleOutputIntegrationTest extends AbstractIntegrationSpec {
                     assert !file('${outputFilePath}').exists()
                 }
             }
-                
+
             task writeDirectlyToOutputDir {
                 outputs.dir('${buildDir}')
-                
+
                 doLast {
                     file("${getOverlappingOutputDir()}").mkdirs()
                     file("${getOverlappingOutputDir()}/new-output.txt").text = "new output"
@@ -731,5 +737,4 @@ class StaleOutputIntegrationTest extends AbstractIntegrationSpec {
         """.stripIndent()
         }
     }
-
 }

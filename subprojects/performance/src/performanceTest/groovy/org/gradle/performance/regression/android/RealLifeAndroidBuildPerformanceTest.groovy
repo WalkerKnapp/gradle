@@ -16,54 +16,82 @@
 
 package org.gradle.performance.regression.android
 
-
+import org.gradle.integtests.fixtures.versions.AndroidGradlePluginVersions
+import org.gradle.performance.AbstractCrossVersionPerformanceTest
+import org.gradle.performance.annotations.RunFor
+import org.gradle.performance.annotations.Scenario
+import org.gradle.performance.fixture.AndroidTestProject
+import org.gradle.profiler.mutations.AbstractCleanupMutator
+import org.gradle.profiler.mutations.ClearArtifactTransformCacheMutator
 import spock.lang.Unroll
 
-import static org.gradle.performance.regression.android.AndroidTestProject.K9_ANDROID
-import static org.gradle.performance.regression.android.AndroidTestProject.LARGE_ANDROID_BUILD
-import static org.gradle.performance.regression.android.IncrementalAndroidTestProject.SANTA_TRACKER_KOTLIN
+import static org.gradle.performance.annotations.ScenarioType.PER_COMMIT
+import static org.gradle.performance.annotations.ScenarioType.PER_DAY
+import static org.gradle.performance.fixture.AndroidTestProject.LARGE_ANDROID_BUILD
+import static org.gradle.performance.results.OperatingSystem.LINUX
 
-class RealLifeAndroidBuildPerformanceTest extends AbstractRealLifeAndroidBuildPerformanceTest {
+class RealLifeAndroidBuildPerformanceTest extends AbstractCrossVersionPerformanceTest implements AndroidPerformanceTestFixture {
+
+    def setup() {
+        runner.args = [AndroidGradlePluginVersions.OVERRIDE_VERSION_CHECK]
+        runner.targetVersions = ["7.2-20210526220136+0000"]
+        AndroidTestProject.useStableAgpVersion(runner)
+        // AGP 4.1 requires 6.5+
+        // forUseAtConfigurationTime API used in this scenario
+        runner.minimumBaseVersion = "6.5"
+    }
+
     @Unroll
-    def "#tasks on #testProject"() {
+    @RunFor([
+        @Scenario(type = PER_COMMIT, operatingSystems = LINUX, testProjects = "largeAndroidBuild", iterationMatcher = "run help"),
+        @Scenario(type = PER_COMMIT, operatingSystems = LINUX, testProjects = ["largeAndroidBuild", "santaTrackerAndroidBuild"], iterationMatcher = "run assembleDebug"),
+        @Scenario(type = PER_COMMIT, operatingSystems = LINUX, testProjects = "largeAndroidBuild", iterationMatcher = ".*phthalic.*")
+    ])
+    def "run #tasks"() {
         given:
+        AndroidTestProject testProject = androidTestProject
         testProject.configure(runner)
         runner.tasksToRun = tasks.split(' ')
-        if (parallel) {
-            runner.args.add('-Dorg.gradle.parallel=true')
-        }
+        runner.args.add('-Dorg.gradle.parallel=true')
         runner.warmUpRuns = warmUpRuns
         runner.runs = runs
         applyEnterprisePlugin()
 
-        and:
-        if (testProject == SANTA_TRACKER_KOTLIN) {
-            (testProject as IncrementalAndroidTestProject).configureForLatestAgpVersionOfMinor(runner, SANTA_AGP_TARGET_VERSION)
+        when:
+        def result = runner.run()
+
+        then:
+        result.assertCurrentVersionHasNotRegressed()
+
+        where:
+        tasks                          | warmUpRuns | runs
+        'help'                         | null       | null
+        'assembleDebug'                | null       | null
+        'clean phthalic:assembleDebug' | 2          | 8
+    }
+
+    @RunFor([
+        @Scenario(type = PER_DAY, operatingSystems = LINUX, testProjects = ["largeAndroidBuild", "santaTrackerAndroidBuild"], iterationMatcher = "clean assemble.*"),
+        @Scenario(type = PER_DAY, operatingSystems = LINUX, testProjects = "largeAndroidBuild", iterationMatcher = "clean phthalic.*")
+    ])
+    @Unroll
+    def "clean #tasks with clean transforms cache"() {
+        given:
+        def testProject = androidTestProject
+        boolean isLargeProject = androidTestProject == LARGE_ANDROID_BUILD
+        if (isLargeProject) {
+            runner.warmUpRuns = 2
+            runner.runs = 8
         }
 
-        when:
-        def result = runner.run()
-
-        then:
-        result.assertCurrentVersionHasNotRegressed()
-
-        where:
-        testProject          | parallel | warmUpRuns | runs | tasks
-        K9_ANDROID           | false    | null       | null | 'help'
-        K9_ANDROID           | false    | null       | null | 'assembleDebug'
-//        K9_ANDROID    | false    | null       | null | 'clean k9mail:assembleDebug'
-        LARGE_ANDROID_BUILD  | true     | null       | null | 'help'
-        LARGE_ANDROID_BUILD  | true     | null       | null | 'assembleDebug'
-        LARGE_ANDROID_BUILD  | true     | 2          | 8    | 'clean phthalic:assembleDebug'
-        SANTA_TRACKER_KOTLIN | true     | null       | null | 'assembleDebug'
-    }
-
-    @Unroll
-    def "abi change on #testProject"() {
-        given:
-        testProject.configureForAbiChange(runner)
-        testProject.configureForLatestAgpVersionOfMinor(runner, SANTA_AGP_TARGET_VERSION)
+        testProject.configure(runner)
+        runner.tasksToRun = tasks.split(' ')
         runner.args.add('-Dorg.gradle.parallel=true')
+        runner.cleanTasks = ["clean"]
+        runner.useDaemon = false
+        runner.addBuildMutator { invocationSettings ->
+            new ClearArtifactTransformCacheMutator(invocationSettings.getGradleUserHome(), AbstractCleanupMutator.CleanupSchedule.BUILD)
+        }
         applyEnterprisePlugin()
 
         when:
@@ -73,24 +101,6 @@ class RealLifeAndroidBuildPerformanceTest extends AbstractRealLifeAndroidBuildPe
         result.assertCurrentVersionHasNotRegressed()
 
         where:
-        testProject << [SANTA_TRACKER_KOTLIN]
-    }
-
-    @Unroll
-    def "non-abi change on #testProject"() {
-        given:
-        testProject.configureForNonAbiChange(runner)
-        testProject.configureForLatestAgpVersionOfMinor(runner, SANTA_AGP_TARGET_VERSION)
-        runner.args.add('-Dorg.gradle.parallel=true')
-        applyEnterprisePlugin()
-
-        when:
-        def result = runner.run()
-
-        then:
-        result.assertCurrentVersionHasNotRegressed()
-
-        where:
-        testProject << [SANTA_TRACKER_KOTLIN]
+        tasks << ['assembleDebug', 'phthalic:assembleDebug']
     }
 }

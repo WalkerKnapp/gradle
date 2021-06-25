@@ -20,18 +20,24 @@ import org.gradle.api.tasks.CompileClasspath
 import org.gradle.api.tasks.InputDirectory
 import org.gradle.api.tasks.InputFile
 import org.gradle.integtests.fixtures.AbstractIntegrationSpec
+import org.gradle.internal.reflect.problems.ValidationProblemId
+import org.gradle.internal.reflect.validation.ValidationMessageChecker
+import org.gradle.internal.reflect.validation.ValidationTestFor
 import org.gradle.util.Requires
 import org.gradle.util.TestPrecondition
 import spock.lang.Issue
 import spock.lang.Unroll
 
-import static org.gradle.util.TextUtil.escapeString
+import static org.gradle.util.internal.TextUtil.escapeString
 import static org.gradle.work.ChangeType.ADDED
 import static org.gradle.work.ChangeType.MODIFIED
 
 @Unroll
 @Requires(TestPrecondition.SYMLINKS)
-class FileCollectionSymlinkIntegrationTest extends AbstractIntegrationSpec {
+class FileCollectionSymlinkIntegrationTest extends AbstractIntegrationSpec implements ValidationMessageChecker {
+    def setup() {
+        expectReindentedValidationMessage()
+    }
 
     def "#desc can handle symlinks"() {
         def buildScript = file("build.gradle")
@@ -56,7 +62,6 @@ class FileCollectionSymlinkIntegrationTest extends AbstractIntegrationSpec {
         """
 
         when:
-        maybeDeprecated(code)
         run()
 
         then:
@@ -67,7 +72,6 @@ class FileCollectionSymlinkIntegrationTest extends AbstractIntegrationSpec {
         "project.files()"                    | "project.files(file, symlink, symlinked)"
         "project.fileTree()"                 | "project.fileTree(baseDir)"
         "project.layout.files()"             | "project.layout.files(file, symlink, symlinked)"
-        "project.layout.configurableFiles()" | "project.layout.configurableFiles(file, symlink, symlinked)"
         "project.objects.fileCollection()"   | "project.objects.fileCollection().from(file, symlink, symlinked)"
     }
 
@@ -176,7 +180,7 @@ class FileCollectionSymlinkIntegrationTest extends AbstractIntegrationSpec {
         target.createFile()
         run 'producesLink'
         then:
-        skipped ':producesLink'
+        executedAndNotSkipped ':producesLink'
     }
 
     @Issue('https://github.com/gradle/gradle/issues/1365')
@@ -360,6 +364,9 @@ class FileCollectionSymlinkIntegrationTest extends AbstractIntegrationSpec {
         output.text == "${[MODIFIED]}"
     }
 
+    @ValidationTestFor(
+        ValidationProblemId.INPUT_FILE_DOES_NOT_EXIST
+    )
     def "broken symlink in #inputType.simpleName fails validation"() {
         def brokenInputFile = file('brokenInput').createLink("brokenInputFileTarget")
         buildFile << """
@@ -375,8 +382,15 @@ class FileCollectionSymlinkIntegrationTest extends AbstractIntegrationSpec {
 
         when:
         fails 'brokenInput'
+
         then:
-        failure.assertHasCause("${inputName} '${brokenInputFile}' specified for property 'brokenInputFile' does not exist.")
+        failureDescriptionContains(inputDoesNotExist {
+            type('CustomTask')
+            property('brokenInputFile')
+            kind(inputName)
+            missing(brokenInputFile)
+            includeLink()
+        })
 
         where:
         inputName   | inputType
@@ -464,11 +478,5 @@ class FileCollectionSymlinkIntegrationTest extends AbstractIntegrationSpec {
         fails 'brokenDirectoryWithSkipWhenEmpty'
         then:
         failure.assertHasCause("Couldn't follow symbolic link '${brokenInputFile}'.")
-    }
-
-    void maybeDeprecated(String expression) {
-        if (expression.contains("configurableFiles")) {
-            executer.expectDocumentedDeprecationWarning("The ProjectLayout.configurableFiles() method has been deprecated. This is scheduled to be removed in Gradle 7.0. Please use the ObjectFactory.fileCollection() method instead. See https://docs.gradle.org/current/userguide/lazy_configuration.html#property_files_api_reference for more details.")
-        }
     }
 }

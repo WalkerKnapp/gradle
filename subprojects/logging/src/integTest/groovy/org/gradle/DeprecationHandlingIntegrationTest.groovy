@@ -16,11 +16,10 @@
 
 package org.gradle
 
-import org.gradle.api.JavaVersion
 import org.gradle.api.logging.configuration.WarningMode
 import org.gradle.integtests.fixtures.AbstractIntegrationSpec
 import org.gradle.internal.featurelifecycle.LoggingDeprecatedFeatureHandler
-import org.gradle.util.GradleVersion
+import org.gradle.util.internal.DefaultGradleVersion
 import spock.lang.Unroll
 
 class DeprecationHandlingIntegrationTest extends AbstractIntegrationSpec {
@@ -36,17 +35,17 @@ class DeprecationHandlingIntegrationTest extends AbstractIntegrationSpec {
             public class DeprecatedTask extends DefaultTask {
                 @TaskAction
                 void causeDeprecationWarning() {
-                    DeprecationLogger.deprecateTask("deprecated").replaceWith("foobar").willBeRemovedInGradle7().undocumented().nagUser();
+                    DeprecationLogger.deprecateTask("deprecated").replaceWith("foobar").willBeRemovedInGradle8().undocumented().nagUser();
                     System.out.println("DeprecatedTask.causeDeprecationWarning() executed.");
                 }
 
                 public static void someFeature() {
-                    DeprecationLogger.deprecateMethod(DeprecatedTask.class, "someFeature()").willBeRemovedInGradle7().undocumented().nagUser();
+                    DeprecationLogger.deprecateMethod(DeprecatedTask.class, "someFeature()").willBeRemovedInGradle8().undocumented().nagUser();
                     System.out.println("DeprecatedTask.someFeature() executed.");
                 }
 
                 void otherFeature() {
-                    DeprecationLogger.deprecateMethod(DeprecatedTask.class, "otherFeature()").withAdvice("Relax. This is just a test.").willBeRemovedInGradle7().undocumented().nagUser();
+                    DeprecationLogger.deprecateMethod(DeprecatedTask.class, "otherFeature()").withAdvice("Relax. This is just a test.").willBeRemovedInGradle8().undocumented().nagUser();
                     System.out.println("DeprecatedTask.otherFeature() executed.");
                 }
 
@@ -60,7 +59,7 @@ class DeprecationHandlingIntegrationTest extends AbstractIntegrationSpec {
             public class DeprecatedPlugin implements Plugin<Project> {
                 @Override
                 public void apply(Project project) {
-                    DeprecationLogger.deprecatePlugin("DeprecatedPlugin").replaceWithExternalPlugin("Foobar").willBeRemovedInGradle7().undocumented().nagUser();
+                    DeprecationLogger.deprecatePlugin("DeprecatedPlugin").replaceWithExternalPlugin("Foobar").willBeRemovedInGradle8().undocumented().nagUser();
                     project.getTasks().create("deprecated", DeprecatedTask.class);
                 }
             }
@@ -87,8 +86,8 @@ class DeprecationHandlingIntegrationTest extends AbstractIntegrationSpec {
         """.stripIndent()
 
         when:
-        if (!fullStacktraceEnabled) {
-            executer.withFullDeprecationStackTraceDisabled()
+        if (fullStacktraceEnabled) {
+            executer.withFullDeprecationStackTraceEnabled()
         }
         if (warningsCountInConsole > 0) {
             executer.expectDeprecationWarnings(warningsCountInConsole)
@@ -109,7 +108,7 @@ class DeprecationHandlingIntegrationTest extends AbstractIntegrationSpec {
 
         and:
         output.contains(LoggingDeprecatedFeatureHandler.WARNING_SUMMARY) == (warningsCountInSummary > 0)
-        output.contains("Use '--warning-mode all' to show the individual deprecation warnings.") == (warningsCountInSummary > 0)
+        output.contains("You can use '--warning-mode all' to show the individual deprecation warnings and determine if they come from your own scripts or plugins.") == (warningsCountInSummary > 0)
         output.contains(LoggingDeprecatedFeatureHandler.WARNING_LOGGING_DOCS_MESSAGE) == (warningsCountInSummary > 0)
 
         and: "system stack frames are filtered"
@@ -124,7 +123,7 @@ class DeprecationHandlingIntegrationTest extends AbstractIntegrationSpec {
 
         and:
         if (warnings == WarningMode.Fail) {
-            failure.assertHasDescription("Deprecated Gradle features were used in this build, making it incompatible with Gradle ${GradleVersion.current().nextMajor.version}")
+            failure.assertHasDescription("Deprecated Gradle features were used in this build, making it incompatible with ${DefaultGradleVersion.current().nextMajorVersion}")
         }
 
         where:
@@ -152,7 +151,7 @@ class DeprecationHandlingIntegrationTest extends AbstractIntegrationSpec {
         """.stripIndent()
 
         when:
-        executer.expectDeprecationWarning("The DeprecatedPlugin plugin has been deprecated. This is scheduled to be removed in ${GradleVersion.current().nextMajor}. Consider using the Foobar plugin instead.")
+        executer.expectDeprecationWarning("The DeprecatedPlugin plugin has been deprecated. This is scheduled to be removed in Gradle 8.0. Consider using the Foobar plugin instead.")
         executer.withWarningMode(WarningMode.Fail)
 
         then:
@@ -166,12 +165,11 @@ class DeprecationHandlingIntegrationTest extends AbstractIntegrationSpec {
         given:
         def initScript = file("init.gradle") << """
             allprojects {
-                org.gradle.internal.deprecation.DeprecationLogger.deprecatePlugin("DeprecatedPlugin").replaceWithExternalPlugin("Foobar").willBeRemovedInGradle7().undocumented().nagUser() // line 2
+                org.gradle.internal.deprecation.DeprecationLogger.deprecatePlugin("DeprecatedPlugin").replaceWithExternalPlugin("Foobar").willBeRemovedInGradle8().undocumented().nagUser() // line 2
             }
         """.stripIndent()
 
         when:
-        executer.withFullDeprecationStackTraceDisabled()
         executer.expectDeprecationWarning()
         executer.usingInitScript(initScript)
         run '-s'
@@ -199,8 +197,8 @@ class DeprecationHandlingIntegrationTest extends AbstractIntegrationSpec {
         """.stripIndent()
 
         when:
-        if (!withFullStacktrace) {
-            executer.withFullDeprecationStackTraceDisabled()
+        if (withFullStacktrace) {
+            executer.withFullDeprecationStackTraceEnabled()
         }
         executer.expectDeprecationWarning()
         run()
@@ -223,7 +221,7 @@ class DeprecationHandlingIntegrationTest extends AbstractIntegrationSpec {
     def 'DeprecatedPlugin from applied kotlin script - #scenario'() {
         given:
         file("project.gradle.kts") << """
-           apply(plugin = "org.acme.deprecated") // line 1
+           apply(plugin = "org.acme.deprecated") // line 2
         """.stripIndent()
 
         buildFile << """
@@ -233,16 +231,16 @@ class DeprecationHandlingIntegrationTest extends AbstractIntegrationSpec {
         """.stripIndent()
 
         when:
-        if (!withFullStacktrace) {
-            executer.withFullDeprecationStackTraceDisabled()
+        if (withFullStacktrace) {
+            executer.withFullDeprecationStackTraceEnabled()
         }
         executer.expectDeprecationWarning()
         run()
 
         then:
-        output.contains('build.gradle:3)')
+        output.contains('project.gradle.kts:2)')
+        output.contains('build.gradle:3)') == withFullStacktrace
         output.contains('build.gradle:2)') == withFullStacktrace
-        output.contains('Project_gradle.<init>') == withFullStacktrace
         output.count(PLUGIN_DEPRECATION_MESSAGE) == 1
 
         withFullStacktrace ? (output.count('\tat') > 1) : (output.count('\tat') == 1)
@@ -252,10 +250,6 @@ class DeprecationHandlingIntegrationTest extends AbstractIntegrationSpec {
         scenario                  | withFullStacktrace
         'without full stacktrace' | false
         'with full stacktrace'    | true
-    }
-
-    def incrementWarningCountIfJava7(int warningCount) {
-        return JavaVersion.current().isJava7() ? warningCount + 1 : warningCount
     }
 
     boolean assertFullStacktraceResult(boolean fullStacktraceEnabled, int warningsCountInConsole) {

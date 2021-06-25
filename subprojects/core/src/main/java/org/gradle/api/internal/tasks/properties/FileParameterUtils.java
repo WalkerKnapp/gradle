@@ -35,7 +35,7 @@ import org.gradle.internal.fingerprint.AbsolutePathInputNormalizer;
 import org.gradle.internal.fingerprint.IgnoredPathInputNormalizer;
 import org.gradle.internal.fingerprint.NameOnlyInputNormalizer;
 import org.gradle.internal.fingerprint.RelativePathInputNormalizer;
-import org.gradle.util.DeferredUtil;
+import org.gradle.util.internal.DeferredUtil;
 
 import javax.annotation.Nullable;
 import java.io.File;
@@ -64,7 +64,7 @@ public class FileParameterUtils {
 
     public static Class<? extends FileNormalizer> normalizerOrDefault(@Nullable Class<? extends FileNormalizer> fileNormalizer) {
         // If this default is ever changed, ensure the documentation on PathSensitive is updated as well as this guide:
-        // https://guides.gradle.org/using-build-cache/#relocatability
+        // https://docs.gradle.org/current/userguide/build_cache_concepts.html#relocatability
         return fileNormalizer == null ? AbsolutePathInputNormalizer.class : fileNormalizer;
     }
 
@@ -93,11 +93,10 @@ public class FileParameterUtils {
      * The value is the file tree rooted at the provided path for an input directory, and the provided path otherwise.
      */
     public static FileCollectionInternal resolveInputFileValue(FileCollectionFactory fileCollectionFactory, InputFilePropertyType inputFilePropertyType, Object path) {
-        if (inputFilePropertyType == InputFilePropertyType.DIRECTORY) {
-            return fileCollectionFactory.resolving(path).getAsFileTree();
-        } else {
-            return fileCollectionFactory.resolving(path);
-        }
+        FileCollectionInternal fileCollection = fileCollectionFactory.resolvingLeniently(path);
+        return inputFilePropertyType == InputFilePropertyType.DIRECTORY
+            ? fileCollection.getAsFileTree()
+            : fileCollection;
     }
 
     /**
@@ -118,6 +117,7 @@ public class FileParameterUtils {
         if (unpackedValue == null) {
             return;
         }
+        // From here on, we already unpacked providers, so we can fail if any of the file collections contains a provider which is not present.
         if (filePropertyType == OutputFilePropertyType.DIRECTORIES || filePropertyType == OutputFilePropertyType.FILES) {
             resolveCompositeOutputFilePropertySpecs(ownerDisplayName, propertyName, unpackedValue, filePropertyType.getOutputType(), fileCollectionFactory, consumer);
         } else {

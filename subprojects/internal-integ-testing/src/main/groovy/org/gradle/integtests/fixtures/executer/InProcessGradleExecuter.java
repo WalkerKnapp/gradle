@@ -43,16 +43,17 @@ import org.gradle.initialization.DefaultBuildRequestContext;
 import org.gradle.initialization.DefaultBuildRequestMetaData;
 import org.gradle.initialization.NoOpBuildEventConsumer;
 import org.gradle.initialization.layout.BuildLayoutFactory;
+import org.gradle.integtests.fixtures.FileSystemWatchingHelper;
 import org.gradle.integtests.fixtures.logging.GroupedOutputFixture;
 import org.gradle.internal.Factory;
 import org.gradle.internal.InternalListener;
 import org.gradle.internal.IoActions;
 import org.gradle.internal.SystemProperties;
+import org.gradle.internal.UncheckedException;
 import org.gradle.internal.classpath.ClassPath;
 import org.gradle.internal.deprecation.DeprecationLogger;
 import org.gradle.internal.event.ListenerManager;
 import org.gradle.internal.exceptions.LocationAwareException;
-import org.gradle.internal.hash.HashUtil;
 import org.gradle.internal.invocation.BuildAction;
 import org.gradle.internal.jvm.Jvm;
 import org.gradle.internal.logging.LoggingManagerInternal;
@@ -62,7 +63,6 @@ import org.gradle.internal.time.Time;
 import org.gradle.launcher.Main;
 import org.gradle.launcher.cli.Parameters;
 import org.gradle.launcher.cli.ParametersConverter;
-import org.gradle.launcher.cli.action.ExecuteBuildAction;
 import org.gradle.launcher.exec.BuildActionExecuter;
 import org.gradle.launcher.exec.BuildActionParameters;
 import org.gradle.launcher.exec.BuildActionResult;
@@ -71,14 +71,15 @@ import org.gradle.process.internal.JavaExecHandleBuilder;
 import org.gradle.test.fixtures.file.TestDirectoryProvider;
 import org.gradle.test.fixtures.file.TestFile;
 import org.gradle.testfixtures.internal.NativeServicesTestFixture;
+import org.gradle.tooling.internal.provider.action.ExecuteBuildAction;
 import org.gradle.tooling.internal.provider.serialization.DeserializeMap;
 import org.gradle.tooling.internal.provider.serialization.PayloadClassLoaderRegistry;
 import org.gradle.tooling.internal.provider.serialization.PayloadSerializer;
 import org.gradle.tooling.internal.provider.serialization.SerializeMap;
-import org.gradle.util.CollectionUtils;
-import org.gradle.util.GUtil;
 import org.gradle.util.GradleVersion;
-import org.gradle.util.IncubationLogger;
+import org.gradle.util.internal.CollectionUtils;
+import org.gradle.util.internal.GUtil;
+import org.gradle.util.internal.IncubationLogger;
 import org.hamcrest.Matcher;
 import org.hamcrest.StringDescription;
 
@@ -111,6 +112,7 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import static org.gradle.integtests.fixtures.executer.OutputScrapingExecutionResult.flattenTaskPaths;
+import static org.gradle.internal.hash.Hashing.hashString;
 import static org.gradle.util.Matchers.normalizedLineSeparators;
 import static org.hamcrest.CoreMatchers.containsString;
 import static org.hamcrest.CoreMatchers.equalTo;
@@ -138,6 +140,18 @@ public class InProcessGradleExecuter extends DaemonGradleExecuter {
 
     public InProcessGradleExecuter(GradleDistribution distribution, TestDirectoryProvider testDirectoryProvider, GradleVersion gradleVersion, IntegrationTestBuildContext buildContext) {
         super(distribution, testDirectoryProvider, gradleVersion, buildContext);
+        waitForChangesToBePickedUpBeforeExecution();
+    }
+
+    private void waitForChangesToBePickedUpBeforeExecution() {
+        // File system watching is now on by default, so we need to wait for changes to be picked up before each execution.
+        beforeExecute(executer -> {
+            try {
+                FileSystemWatchingHelper.waitForChangesToBePickedUp();
+            } catch (InterruptedException e) {
+                throw UncheckedException.throwAsUncheckedException(e);
+            }
+        });
     }
 
     @Override
@@ -217,7 +231,7 @@ public class InProcessGradleExecuter extends DaemonGradleExecuter {
             builder.jvmArgs(invocation.launcherJvmArgs);
             builder.environment(invocation.environmentVars);
 
-            builder.setMain(Main.class.getName());
+            builder.getMainClass().set(Main.class.getName());
             builder.args(invocation.args);
             builder.setStandardInput(connectStdIn());
 
@@ -253,7 +267,7 @@ public class InProcessGradleExecuter extends DaemonGradleExecuter {
             .map(File::toURI)
             .map(Object::toString)
             .collect(Collectors.joining(" "));
-        File cpJar = new File(getDefaultTmpDir(), "daemon-classpath-manifest-" + HashUtil.createCompactMD5(cpString) + ".jar");
+        File cpJar = new File(getDefaultTmpDir(), "daemon-classpath-manifest-" + hashString(cpString).toCompactString() + ".jar");
         if (!cpJar.isFile()) {
             // Make sure the parent exists or the jar creation might fail
             cpJar.getParentFile().mkdirs();
@@ -331,7 +345,7 @@ public class InProcessGradleExecuter extends DaemonGradleExecuter {
         parametersConverter.configure(parser);
         Parameters parameters = parametersConverter.convert(parser.parse(getAllArgs()), getWorkingDir());
 
-        BuildActionExecuter<BuildActionParameters> actionExecuter = GLOBAL_SERVICES.get(BuildActionExecuter.class);
+        BuildActionExecuter<BuildActionParameters, BuildRequestContext> actionExecuter = GLOBAL_SERVICES.get(BuildActionExecuter.class);
 
         ListenerManager listenerManager = GLOBAL_SERVICES.get(ListenerManager.class);
         listenerManager.addListener(listener);
@@ -349,7 +363,7 @@ public class InProcessGradleExecuter extends DaemonGradleExecuter {
             try {
                 startMeasurement();
                 try {
-                    BuildActionResult result = actionExecuter.execute(action, buildRequestContext, buildActionParameters, GLOBAL_SERVICES);
+                    BuildActionResult result = actionExecuter.execute(action, buildActionParameters, buildRequestContext);
                     if (result.getException() != null) {
                         return new BuildResult(null, result.getException());
                     }
@@ -376,7 +390,6 @@ public class InProcessGradleExecuter extends DaemonGradleExecuter {
             SystemProperties.getInstance().getCurrentDir(),
             startParameter.getLogLevel(),
             false,
-            startParameter.isContinuous(),
             ClassPath.EMPTY
         );
     }
@@ -529,6 +542,12 @@ public class InProcessGradleExecuter extends DaemonGradleExecuter {
         @Override
         public ExecutionResult assertHasPostBuildOutput(String expectedOutput) {
             outputResult.assertHasPostBuildOutput(expectedOutput);
+            return this;
+        }
+
+        @Override
+        public ExecutionResult assertNotPostBuildOutput(String expectedOutput) {
+            outputResult.assertNotPostBuildOutput(expectedOutput);
             return this;
         }
 

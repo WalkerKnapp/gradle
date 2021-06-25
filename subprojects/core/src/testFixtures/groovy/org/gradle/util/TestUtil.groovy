@@ -33,7 +33,6 @@ import org.gradle.api.internal.model.NamedObjectInstantiator
 import org.gradle.api.internal.project.ProjectInternal
 import org.gradle.api.internal.project.taskfactory.TaskInstantiator
 import org.gradle.api.internal.provider.DefaultPropertyFactory
-import org.gradle.api.internal.provider.DefaultProviderFactory
 import org.gradle.api.internal.provider.PropertyFactory
 import org.gradle.api.internal.provider.PropertyHost
 import org.gradle.api.internal.tasks.DefaultTaskDependencyFactory
@@ -48,11 +47,13 @@ import org.gradle.internal.hash.Hashing
 import org.gradle.internal.instantiation.InjectAnnotationHandler
 import org.gradle.internal.instantiation.InstantiatorFactory
 import org.gradle.internal.instantiation.generator.DefaultInstantiatorFactory
+import org.gradle.internal.model.CalculatedValueContainerFactory
 import org.gradle.internal.service.DefaultServiceRegistry
 import org.gradle.internal.service.ServiceRegistry
 import org.gradle.internal.state.ManagedFactoryRegistry
 import org.gradle.test.fixtures.file.TestDirectoryProvider
 import org.gradle.test.fixtures.file.TestFile
+import org.gradle.test.fixtures.work.TestWorkerLeaseService
 import org.gradle.testfixtures.ProjectBuilder
 import org.gradle.testfixtures.internal.NativeServicesTestFixture
 import org.gradle.testfixtures.internal.ProjectBuilderImpl
@@ -109,10 +110,14 @@ class TestUtil {
         return createServices(fileResolver, fileCollectionFactory).get(ObjectFactory)
     }
 
+    static CalculatedValueContainerFactory calculatedValueContainerFactory() {
+        return new CalculatedValueContainerFactory(new TestWorkerLeaseService(), services())
+    }
+
     private static ServiceRegistry createServices(FileResolver fileResolver, FileCollectionFactory fileCollectionFactory) {
         def services = new DefaultServiceRegistry()
         services.register {
-            it.add(ProviderFactory, new DefaultProviderFactory())
+            it.add(ProviderFactory, new TestProviderFactory())
             it.add(TestCrossBuildInMemoryCacheFactory)
             it.add(NamedObjectInstantiator)
             it.add(CollectionCallbackActionDecorator, CollectionCallbackActionDecorator.NOOP)
@@ -122,7 +127,7 @@ class TestUtil {
             it.add(DefaultPropertyFactory)
             it.addProvider(new Object() {
                 InstantiatorFactory createInstantiatorFactory() {
-                    instantiatorFactory()
+                    TestUtil.instantiatorFactory()
                 }
 
                 ObjectFactory createObjectFactory(InstantiatorFactory instantiatorFactory, NamedObjectInstantiator namedObjectInstantiator, DomainObjectCollectionFactory domainObjectCollectionFactory, PropertyFactory propertyFactory) {

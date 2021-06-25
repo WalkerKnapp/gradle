@@ -20,7 +20,7 @@ import org.gradle.api.JavaVersion
 import org.gradle.api.attributes.java.TargetJvmVersion
 import org.gradle.test.fixtures.GradleModuleMetadata
 import org.gradle.test.fixtures.PublishedJavaModule
-import org.gradle.util.GUtil
+import org.gradle.util.internal.GUtil
 
 class MavenJavaModule extends DelegatingMavenModule<MavenFileModule> implements PublishedJavaModule {
     final static String MAIN_FEATURE = 'main'
@@ -176,7 +176,7 @@ class MavenJavaModule extends DelegatingMavenModule<MavenFileModule> implements 
         }
     }
 
-    private void assertDependencies(String feature, String variant, String mavenScope, List<GradleModuleMetadata.Dependency> additionalGMMDependencies, String... expected) {
+    void assertDependencies(String feature, String variant, String mavenScope, List<GradleModuleMetadata.Dependency> additionalGMMDependencies, String... expected) {
         if (feature != MAIN_FEATURE) {
             // no dependencies for optional features in this test
             assert parsedModuleMetadata.variant(variantName(feature, variant)).dependencies.empty

@@ -21,9 +21,9 @@ import org.gradle.api.Project
 import org.gradle.api.artifacts.Dependency
 import org.gradle.api.artifacts.ExternalModuleDependency
 import org.gradle.api.artifacts.dsl.DependencyHandler
-import org.gradle.api.internal.HasConvention
 import org.gradle.api.plugins.Convention
 import org.gradle.api.plugins.ExtensionAware
+import org.gradle.api.provider.Provider
 
 import org.gradle.kotlin.dsl.support.mapOfNonNullValuesOf
 import org.gradle.kotlin.dsl.support.uncheckedCast
@@ -34,6 +34,7 @@ fun extensionOf(target: Any, extensionName: String): Any =
 
 
 fun conventionPluginOf(target: Any, name: String) =
+    @Suppress("deprecation")
     conventionPluginByName(conventionOf(target), name)
 
 
@@ -41,9 +42,10 @@ fun conventionPluginByName(convention: Convention, name: String): Any =
     convention.plugins[name] ?: throw IllegalStateException("A convention named '$name' could not be found.")
 
 
+@Suppress("deprecation")
 fun conventionOf(target: Any): Convention = when (target) {
     is Project -> target.convention
-    is HasConvention -> target.convention
+    is org.gradle.api.internal.HasConvention -> target.convention
     else -> throw IllegalStateException("Object `$target` doesn't support conventions!")
 }
 
@@ -58,6 +60,16 @@ fun <T : Dependency> addDependencyTo(
         configurationAction.execute(dependency)
         add(configuration, dependency)
     }
+}
+
+
+fun addConfiguredDependencyTo(
+    dependencies: DependencyHandler,
+    configuration: String,
+    dependencyNotation: Provider<*>,
+    configurationAction: Action<ExternalModuleDependency>
+) {
+    dependencies.addProvider(configuration, dependencyNotation, configurationAction)
 }
 
 
@@ -103,3 +115,7 @@ fun externalModuleDependencyFor(
         "ext" to ext
     )
 ) as ExternalModuleDependency
+
+
+fun functionToAction(f: (Any?) -> Unit): Action<Any?> =
+    Action { f(this) }

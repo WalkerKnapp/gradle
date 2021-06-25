@@ -239,10 +239,11 @@ class IncrementalInputsIntegrationTest extends AbstractIncrementalTasksIntegrati
         """
 
         file("input").createDir()
+        def inputPath = file('input').absolutePath
 
         expect:
         fails("myTask")
-        failureHasCause("Multiple entries with same key: ${file('input').absolutePath}=inputTwo and ${file('input').absolutePath}=inputOne")
+        failureHasCause("Multiple entries with same value: inputTwo=$inputPath and inputOne=$inputPath")
     }
 
     def "two incremental file properties can point to the same file"() {
@@ -392,8 +393,6 @@ class IncrementalInputsIntegrationTest extends AbstractIncrementalTasksIntegrati
     def "provides the file type"() {
         file("buildSrc").deleteDir()
         buildFile.text = """
-            import javax.inject.Inject
-
             abstract class MyCopy extends DefaultTask {
                 @Incremental
                 @PathSensitive(PathSensitivity.RELATIVE)

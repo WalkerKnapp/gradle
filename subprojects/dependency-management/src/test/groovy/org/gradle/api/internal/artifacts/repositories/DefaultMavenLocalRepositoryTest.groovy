@@ -67,6 +67,7 @@ class DefaultMavenLocalRepositoryTest extends Specification {
             TestUtil.objectFactory(),
             urlArtifactRepositoryFactory,
             TestUtil.checksumService
+
         )
     }
 

@@ -25,12 +25,15 @@ import org.gradle.api.internal.file.collections.MinimalFileTree;
 import org.gradle.api.tasks.TaskDependency;
 import org.gradle.internal.Factory;
 import org.gradle.internal.file.PathToFileResolver;
+import org.gradle.internal.service.scopes.Scope;
+import org.gradle.internal.service.scopes.ServiceScope;
 
 import java.io.File;
 import java.io.OutputStream;
 import java.util.Collection;
 import java.util.List;
 
+@ServiceScope(Scope.Global.class)
 public interface FileCollectionFactory {
     /**
      * Creates a copy of this factory that uses the given resolver to convert various types to File instances.
@@ -93,6 +96,8 @@ public interface FileCollectionFactory {
      * Creates a {@link FileCollection} with the given files as content.
      *
      * <p>The collection is live and resolves the files on each query.
+     *
+     * <p>The collection fails to resolve if it contains providers which are not present.
      */
     FileCollectionInternal resolving(String displayName, Object sources);
 
@@ -100,8 +105,28 @@ public interface FileCollectionFactory {
      * Creates a {@link FileCollection} with the given files as content.
      *
      * <p>The collection is live and resolves the files on each query.
+     *
+     * <p>The collection ignores providers which are not present.
+     */
+    FileCollectionInternal resolvingLeniently(String displayName, Object sources);
+
+    /**
+     * Creates a {@link FileCollection} with the given files as content.
+     *
+     * <p>The collection is live and resolves the files on each query.
+     *
+     * <p>The collection fails to resolve if it contains providers which are not present.
      */
     FileCollectionInternal resolving(Object sources);
+
+    /**
+     * Creates a {@link FileCollection} with the given files as content.
+     *
+     * <p>The collection is live and resolves the files on each query.
+     *
+     * <p>The collection ignores providers which are not present.
+     */
+    FileCollectionInternal resolvingLeniently(Object sources);
 
     /**
      * Creates an empty {@link ConfigurableFileCollection} instance.

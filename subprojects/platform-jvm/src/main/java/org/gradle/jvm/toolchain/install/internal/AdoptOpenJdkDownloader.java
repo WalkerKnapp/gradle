@@ -17,6 +17,8 @@
 package org.gradle.jvm.toolchain.install.internal;
 
 import org.apache.commons.io.IOUtils;
+import org.gradle.api.GradleException;
+import org.gradle.api.InvalidUserCodeException;
 import org.gradle.api.internal.artifacts.repositories.transport.RepositoryTransport;
 import org.gradle.api.internal.artifacts.repositories.transport.RepositoryTransportFactory;
 import org.gradle.api.resources.MissingResourceException;
@@ -33,6 +35,10 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
+import java.net.URISyntaxException;
+import java.nio.file.AtomicMoveNotSupportedException;
+import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
 import java.util.Collections;
 
 public class AdoptOpenJdkDownloader {
@@ -46,7 +52,7 @@ public class AdoptOpenJdkDownloader {
     }
 
     public void download(URI source, File tmpFile) {
-        final ExternalResource resource = getTransport().getRepository().withProgressLogging().resource(new ExternalResourceName(source));
+        final ExternalResource resource = createExternalResource(source, tmpFile.getName());
         try {
             downloadResource(source, tmpFile, resource);
         } catch (MissingResourceException e) {
@@ -57,11 +63,37 @@ public class AdoptOpenJdkDownloader {
         }
     }
 
-    private void downloadResource(URI source, File tmpFile, ExternalResource resource) {
-        resource.withContent(inputStream -> {
-            LOGGER.info("Downloading {} to {}", resource.getDisplayName(), tmpFile);
-            copyIntoFile(source, inputStream, tmpFile);
-        });
+    private ExternalResource createExternalResource(URI source, String name) {
+        final ExternalResourceName resourceName = new ExternalResourceName(source) {
+            @Override
+            public String getShortDisplayName() {
+                return name;
+            }
+        };
+        return getTransport(source).getRepository().withProgressLogging().resource(resourceName);
+    }
+
+    private void downloadResource(URI source, File targetFile, ExternalResource resource) {
+        final File downloadFile = new File(targetFile.getAbsoluteFile() + ".part");
+        try {
+            resource.withContent(inputStream -> {
+                LOGGER.info("Downloading {} to {}", resource.getDisplayName(), targetFile);
+                copyIntoFile(source, inputStream, downloadFile);
+            });
+            moveFile(targetFile, downloadFile);
+        } catch (IOException e) {
+            throw new GradleException("Unable to move downloaded toolchain to target destination", e);
+        } finally {
+            downloadFile.delete();
+        }
+    }
+
+    private void moveFile(File targetFile, File downloadFile) throws IOException {
+        try {
+            Files.move(downloadFile.toPath(), targetFile.toPath(), StandardCopyOption.ATOMIC_MOVE);
+        } catch (AtomicMoveNotSupportedException e) {
+            Files.move(downloadFile.toPath(), targetFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
+        }
     }
 
     private void copyIntoFile(URI source, InputStream inputStream, File destination) {
@@ -72,8 +104,17 @@ public class AdoptOpenJdkDownloader {
         }
     }
 
-    private RepositoryTransport getTransport() {
-        final HttpRedirectVerifier redirectVerifier = HttpRedirectVerifierFactory.create(null, true, null, null);
+    private RepositoryTransport getTransport(URI source) {
+        final HttpRedirectVerifier redirectVerifier;
+        try {
+            redirectVerifier = HttpRedirectVerifierFactory.create(new URI(source.getScheme(), source.getAuthority(), null, null, null), false, () -> {
+                throw new InvalidUserCodeException("Attempting to download a JDK from an insecure URI " + source + ". This is not supported, use a secure URI instead.");
+            }, uri -> {
+                throw new InvalidUserCodeException("Attempting to download a JDK from an insecure URI " + uri + ". This URI was reached as a redirect from " + source + ". This is not supported, make sure no insecure URIs appear in the redirect");
+            });
+        } catch (URISyntaxException e) {
+            throw new InvalidUserCodeException("Cannot extract host information from specified URI " + source);
+        }
         return repositoryTransportFactory.createTransport("https", "adoptopenjdk toolchains", Collections.emptyList(), redirectVerifier);
     }
 

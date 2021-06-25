@@ -40,14 +40,18 @@ import org.gradle.api.tasks.OutputFiles
 import org.gradle.api.tasks.options.OptionValues
 import org.gradle.integtests.fixtures.AbstractDependencyResolutionTest
 import org.gradle.internal.reflect.Instantiator
+import org.gradle.internal.reflect.problems.ValidationProblemId
+import org.gradle.internal.reflect.validation.ValidationMessageChecker
+import org.gradle.internal.reflect.validation.ValidationTestFor
 import org.gradle.process.ExecOperations
 import spock.lang.Unroll
 
 import java.util.concurrent.atomic.AtomicInteger
 
 import static org.gradle.util.Matchers.matchesRegexp
+import static org.hamcrest.Matchers.containsString
 
-class ArtifactTransformValuesInjectionIntegrationTest extends AbstractDependencyResolutionTest implements ArtifactTransformTestFixture {
+class ArtifactTransformValuesInjectionIntegrationTest extends AbstractDependencyResolutionTest implements ArtifactTransformTestFixture, ValidationMessageChecker {
 
     @Unroll
     def "transform can receive parameters, workspace and input artifact (#inputArtifactType) via abstract getter"() {
@@ -107,7 +111,7 @@ class ArtifactTransformValuesInjectionIntegrationTest extends AbstractDependency
 
         where:
         inputArtifactType              | convertToFile   | expectedDeprecation
-        'File'                         | ''              | "Injecting the input artifact of a transform as a File has been deprecated. This is scheduled to be removed in Gradle 7.0. Declare the input artifact as Provider<FileSystemLocation> instead. See https://docs.gradle.org/current/userguide/artifact_transforms.html#sec:implementing-artifact-transforms for more details."
+        'File'                         | ''              | "Injecting the input artifact of a transform as a File has been deprecated. This will fail with an error in Gradle 8.0. Declare the input artifact as Provider<FileSystemLocation> instead. See https://docs.gradle.org/current/userguide/artifact_transforms.html#sec:implementing-artifact-transforms for more details."
         'Provider<FileSystemLocation>' | '.get().asFile' | null
     }
 
@@ -301,6 +305,14 @@ class ArtifactTransformValuesInjectionIntegrationTest extends AbstractDependency
         ].collect { it.name }
     }
 
+    @ValidationTestFor([
+        ValidationProblemId.MISSING_NORMALIZATION_ANNOTATION,
+        ValidationProblemId.CACHEABLE_TRANSFORM_CANT_USE_ABSOLUTE_SENSITIVITY,
+        ValidationProblemId.VALUE_NOT_SET,
+        ValidationProblemId.ANNOTATION_INVALID_IN_CONTEXT,
+        ValidationProblemId.MISSING_ANNOTATION,
+        ValidationProblemId.INCOMPATIBLE_ANNOTATIONS
+    ])
     def "transform parameters are validated for input output annotations"() {
         settingsFile << """
             include 'a', 'b'
@@ -379,27 +391,30 @@ class ArtifactTransformValuesInjectionIntegrationTest extends AbstractDependency
         fails(":a:resolve")
 
         then:
-        failure.assertThatDescription(matchesRegexp('Could not isolate parameters MakeGreen\\$Parameters_Decorated@.* of artifact transform MakeGreen'))
+        failure.assertHasDescription("Execution failed for task ':a:resolve'.")
+        failure.assertHasCause("Could not resolve all files for configuration ':a:implementation'.")
+        failure.assertHasCause("Failed to transform b.jar (project :b) to match attributes {artifactType=jar, color=green}.")
+        failure.assertThatCause(matchesRegexp('Could not isolate parameters MakeGreen\\$Parameters_Decorated@.* of artifact transform MakeGreen'))
         failure.assertHasCause('Some problems were found with the configuration of the artifact transform parameter MakeGreen.Parameters.')
         assertPropertyValidationErrors(
-            absolutePathSensitivity: 'is declared to be sensitive to absolute paths. This is not allowed for cacheable transforms',
-            extension: 'is not annotated with an input annotation',
+            absolutePathSensitivity: invalidUseOfAbsoluteSensitivity { includeLink().noIntro() },
+            extension: missingAnnotationMessage { property('extension').missingInput().includeLink().noIntro() },
             fileInput: [
-                'does not have a value specified',
-                'has @Input annotation used on property of type \'File\'',
+                missingValueMessage { property('fileInput').includeLink().noIntro() },
+                incorrectUseOfInputAnnotation { property('fileInput').propertyType('File').includeLink().noIntro() },
             ],
             incrementalNonFileInput: [
-                'does not have a value specified',
-                'is annotated with @Incremental that is not allowed for @Input properties',
+                missingValueMessage { property('incrementalNonFileInput').includeLink().noIntro() },
+                incompatibleAnnotations { property('incrementalNonFileInput').annotatedWith('Incremental').incompatibleWith('Input').includeLink().noIntro() },
             ],
-            missingInput: 'does not have a value specified',
-            'nested.outputDirectory': 'is annotated with invalid property type @OutputDirectory',
-            'nested.inputFile': 'is declared without normalization specified. Properties of cacheable work must declare their normalization via @PathSensitive, @Classpath or @CompileClasspath. Defaulting to PathSensitivity.ABSOLUTE',
-            'nested.stringProperty': 'is not annotated with an input annotation',
-            noPathSensitivity: 'is declared without normalization specified. Properties of cacheable work must declare their normalization via @PathSensitive, @Classpath or @CompileClasspath. Defaulting to PathSensitivity.ABSOLUTE',
-            noPathSensitivityDir: 'is declared without normalization specified. Properties of cacheable work must declare their normalization via @PathSensitive, @Classpath or @CompileClasspath. Defaulting to PathSensitivity.ABSOLUTE',
-            noPathSensitivityFile: 'is declared without normalization specified. Properties of cacheable work must declare their normalization via @PathSensitive, @Classpath or @CompileClasspath. Defaulting to PathSensitivity.ABSOLUTE',
-            outputDir: 'is annotated with invalid property type @OutputDirectory',
+            missingInput: missingValueMessage { property('missingInput').includeLink().noIntro() },
+            'nested.outputDirectory': annotationInvalidInContext { annotation('OutputDirectory').includeLink() },
+            'nested.inputFile': missingNormalizationStrategy { annotatedWith('InputFile').includeLink().noIntro() },
+            'nested.stringProperty': missingAnnotationMessage { property('nested.stringProperty').missingInput().includeLink().noIntro() },
+            noPathSensitivity: missingNormalizationStrategy { annotatedWith('InputFiles').includeLink().noIntro() },
+            noPathSensitivityDir: missingNormalizationStrategy { annotatedWith('InputDirectory').includeLink().noIntro() },
+            noPathSensitivityFile: missingNormalizationStrategy { annotatedWith('InputFile').includeLink().noIntro() },
+            outputDir: annotationInvalidInContext { annotation('OutputDirectory').includeLink() }
         )
     }
 
@@ -431,6 +446,9 @@ class ArtifactTransformValuesInjectionIntegrationTest extends AbstractDependency
         failure.assertHasCause("Cannot query the parameters of an instance of TransformAction that takes no parameters.")
     }
 
+    @ValidationTestFor(
+        ValidationProblemId.INVALID_USE_OF_CACHEABLE_ANNOTATION
+    )
     def "transform parameters type cannot use caching annotations"() {
         settingsFile << """
             include 'a', 'b'
@@ -465,14 +483,24 @@ class ArtifactTransformValuesInjectionIntegrationTest extends AbstractDependency
         fails(":a:resolve")
 
         then:
-        failure.assertThatDescription(matchesRegexp('Could not isolate parameters MakeGreen\\$Parameters_Decorated@.* of artifact transform MakeGreen'))
+        failure.assertHasDescription("Execution failed for task ':a:resolve'.")
+        failure.assertHasCause("Could not resolve all files for configuration ':a:implementation'.")
+        failure.assertHasCause("Failed to transform b.jar (project :b) to match attributes {artifactType=jar, color=green}.")
+        failure.assertThatCause(matchesRegexp('Could not isolate parameters MakeGreen\\$Parameters_Decorated@.* of artifact transform MakeGreen'))
         failure.assertHasCause('Some problems were found with the configuration of the artifact transform parameter MakeGreen.Parameters.')
-        failure.assertHasCause("Type 'MakeGreen.Parameters': Cannot use @CacheableTask on type. This annotation can only be used with Task types.")
-        failure.assertHasCause("Type 'MakeGreen.Parameters': Cannot use @CacheableTransform on type. This annotation can only be used with TransformAction types.")
+        failure.assertHasCause(invalidUseOfCacheableAnnotation {
+            type('MakeGreen.Parameters').invalidAnnotation('CacheableTask').onlyMakesSenseOn('Task').includeLink()
+        })
+        failure.assertHasCause(invalidUseOfCacheableAnnotation {
+            type('MakeGreen.Parameters').invalidAnnotation('CacheableTransform').onlyMakesSenseOn('TransformAction').includeLink()
+        })
     }
 
+    @ValidationTestFor(
+        ValidationProblemId.ANNOTATION_INVALID_IN_CONTEXT
+    )
     @Unroll
-    def "transform parameters type cannot use annotation @#annotation.simpleName"() {
+    def "transform parameters type cannot use annotation @#ann.simpleName"() {
         settingsFile << """
             include 'a', 'b'
         """
@@ -493,7 +521,7 @@ class ArtifactTransformValuesInjectionIntegrationTest extends AbstractDependency
                     @Input
                     String getExtension()
                     void setExtension(String value)
-                    @${annotation.simpleName}
+                    @${ann.simpleName}
                     String getBad()
                     void setBad(String value)
                 }
@@ -508,12 +536,15 @@ class ArtifactTransformValuesInjectionIntegrationTest extends AbstractDependency
         fails(":a:resolve")
 
         then:
-        failure.assertThatDescription(matchesRegexp('Could not isolate parameters MakeGreen\\$Parameters_Decorated@.* of artifact transform MakeGreen'))
+        failure.assertHasDescription("Execution failed for task ':a:resolve'.")
+        failure.assertHasCause("Could not resolve all files for configuration ':a:implementation'.")
+        failure.assertHasCause("Failed to transform b.jar (project :b) to match attributes {artifactType=jar, color=green}.")
+        failure.assertThatCause(matchesRegexp('Could not isolate parameters MakeGreen\\$Parameters_Decorated@.* of artifact transform MakeGreen'))
         failure.assertHasCause('A problem was found with the configuration of the artifact transform parameter MakeGreen.Parameters.')
-        assertPropertyValidationErrors(bad: "is annotated with invalid property type @${annotation.simpleName}")
+        assertPropertyValidationErrors(bad: annotationInvalidInContext { annotation(ann.simpleName) })
 
         where:
-        annotation << [OutputFile, OutputFiles, OutputDirectory, OutputDirectories, Destroys, LocalState, OptionValues]
+        ann << [OutputFile, OutputFiles, OutputDirectory, OutputDirectories, Destroys, LocalState, OptionValues]
     }
 
     @Unroll
@@ -562,6 +593,13 @@ class ArtifactTransformValuesInjectionIntegrationTest extends AbstractDependency
         annotation << [InputArtifact, InputArtifactDependencies]
     }
 
+    @ValidationTestFor([
+        ValidationProblemId.MISSING_NORMALIZATION_ANNOTATION,
+        ValidationProblemId.CACHEABLE_TRANSFORM_CANT_USE_ABSOLUTE_SENSITIVITY,
+        ValidationProblemId.CONFLICTING_ANNOTATIONS,
+        ValidationProblemId.ANNOTATION_INVALID_IN_CONTEXT,
+        ValidationProblemId.MISSING_ANNOTATION
+    ])
     def "transform action is validated for input output annotations"() {
         settingsFile << """
             include 'a', 'b', 'c'
@@ -615,18 +653,24 @@ class ArtifactTransformValuesInjectionIntegrationTest extends AbstractDependency
         then:
         failure.assertHasDescription('A problem occurred evaluating root project')
         failure.assertHasCause('Some problems were found with the configuration of MakeGreen.')
+        String conflictingAnnotationsMessage = conflictingAnnotationsMessage {
+            inConflict('InputFile', 'InputArtifact', 'InputArtifactDependencies')
+        }
         assertPropertyValidationErrors(
-            absolutePathSensitivityDependencies: 'is declared to be sensitive to absolute paths. This is not allowed for cacheable transforms',
+            absolutePathSensitivityDependencies: invalidUseOfAbsoluteSensitivity { includeLink().noIntro() },
             'conflictingAnnotations': [
-                'has conflicting type annotations declared: @InputFile, @InputArtifact, @InputArtifactDependencies; assuming @InputFile',
-                'is annotated with invalid property type @InputFile'
+                conflictingAnnotationsMessage,
+                annotationInvalidInContext { annotation('InputFile').forTransformAction() }
             ],
-            inputFile: 'is annotated with invalid property type @InputFile',
-            noPathSensitivity: 'is declared without normalization specified. Properties of cacheable work must declare their normalization via @PathSensitive, @Classpath or @CompileClasspath. Defaulting to PathSensitivity.ABSOLUTE',
-            notAnnotated: 'is not annotated with an input annotation',
+            inputFile: annotationInvalidInContext { annotation('InputFile').forTransformAction() },
+            noPathSensitivity: missingNormalizationStrategy { annotatedWith('InputArtifact').noIntro() },
+            notAnnotated: missingAnnotationMessage { property('extension').missingInput().includeLink().noIntro() },
         )
     }
 
+    @ValidationTestFor(
+        ValidationProblemId.INVALID_USE_OF_CACHEABLE_ANNOTATION
+    )
     def "transform action type cannot use cacheable task annotation"() {
         settingsFile << """
             include 'a', 'b', 'c'
@@ -654,11 +698,16 @@ class ArtifactTransformValuesInjectionIntegrationTest extends AbstractDependency
         then:
         failure.assertHasDescription('A problem occurred evaluating root project')
         failure.assertHasCause('A problem was found with the configuration of MakeGreen.')
-        failure.assertHasCause("Type 'MakeGreen': Cannot use @CacheableTask on type. This annotation can only be used with Task types.")
+        failure.assertHasCause(invalidUseOfCacheableAnnotation {
+            type('MakeGreen').invalidAnnotation('CacheableTask').onlyMakesSenseOn('Task').includeLink()
+        })
     }
 
+    @ValidationTestFor(
+        ValidationProblemId.ANNOTATION_INVALID_IN_CONTEXT
+    )
     @Unroll
-    def "transform action type cannot use annotation @#annotation.simpleName"() {
+    def "transform action type cannot use annotation @#ann.simpleName"() {
         settingsFile << """
             include 'a', 'b', 'c'
         """
@@ -682,7 +731,7 @@ class ArtifactTransformValuesInjectionIntegrationTest extends AbstractDependency
                     void setExtension(String value)
                 }
 
-                @${annotation.simpleName}
+                @${ann.simpleName}
                 String getBad() { }
 
                 void transform(TransformOutputs outputs) {
@@ -697,10 +746,10 @@ class ArtifactTransformValuesInjectionIntegrationTest extends AbstractDependency
         then:
         failure.assertHasDescription('A problem occurred evaluating root project')
         failure.assertHasCause('A problem was found with the configuration of MakeGreen.')
-        assertPropertyValidationErrors(bad: "is annotated with invalid property type @${annotation.simpleName}")
+        assertPropertyValidationErrors(bad: annotationInvalidInContext { annotation(ann.simpleName).forTransformAction() })
 
         where:
-        annotation << [Input, InputFile, InputDirectory, OutputFile, OutputFiles, OutputDirectory, OutputDirectories, Destroys, LocalState, OptionValues, Console, Internal]
+        ann << [Input, InputFile, InputDirectory, OutputFile, OutputFiles, OutputDirectory, OutputDirectories, Destroys, LocalState, OptionValues, Console, Internal]
     }
 
     @Unroll
@@ -789,6 +838,7 @@ abstract class MakeGreen extends ArtifactTransform {
 """
 
         when:
+        executer.expectDeprecationWarning("Registering artifact transforms extending ArtifactTransform has been deprecated. This is scheduled to be removed in Gradle 8.0. Implement TransformAction instead.")
         fails(":a:resolve")
 
         then:
@@ -949,7 +999,11 @@ abstract class MakeGreen implements TransformAction<TransformParameters.None> {
         failure.assertHasCause("No service of type class ${File.name} available.")
     }
 
+    @ValidationTestFor(
+        ValidationProblemId.INVALID_USE_OF_CACHEABLE_ANNOTATION
+    )
     def "task implementation cannot use cacheable transform annotation"() {
+        expectReindentedValidationMessage()
         buildFile << """
             @CacheableTransform
             class MyTask extends DefaultTask {
@@ -962,10 +1016,16 @@ abstract class MakeGreen implements TransformAction<TransformParameters.None> {
         expect:
         fails('broken')
         failure.assertHasDescription("A problem was found with the configuration of task ':broken' (type 'MyTask').")
-        failure.assertHasCause("Type 'MyTask': Cannot use @CacheableTransform on type. This annotation can only be used with TransformAction types.")
+        failure.assertThatDescription(containsString(invalidUseOfCacheableAnnotation {
+            type('MyTask').invalidAnnotation('CacheableTransform').onlyMakesSenseOn('TransformAction').includeLink()
+        }))
     }
 
+    @ValidationTestFor(
+        ValidationProblemId.INVALID_USE_OF_CACHEABLE_ANNOTATION
+    )
     def "task @Nested bean cannot use cacheable annotations"() {
+        expectReindentedValidationMessage()
         buildFile << """
             class MyTask extends DefaultTask {
                 @Nested
@@ -986,8 +1046,12 @@ abstract class MakeGreen implements TransformAction<TransformParameters.None> {
         // Probably should be eager
         fails('broken')
         failure.assertHasDescription("Some problems were found with the configuration of task ':broken' (type 'MyTask').")
-        failure.assertHasCause("Type 'Options': Cannot use @CacheableTask on type. This annotation can only be used with Task types.")
-        failure.assertHasCause("Type 'Options': Cannot use @CacheableTransform on type. This annotation can only be used with TransformAction types.")
+        failure.assertThatDescription(containsString(invalidUseOfCacheableAnnotation {
+            type('Options').invalidAnnotation('CacheableTask').onlyMakesSenseOn('Task').includeLink()
+        }))
+        failure.assertThatDescription(containsString(invalidUseOfCacheableAnnotation {
+            invalidAnnotation('CacheableTransform').onlyMakesSenseOn('TransformAction').includeLink()
+        }))
     }
 
     @Unroll
@@ -1018,9 +1082,11 @@ abstract class MakeGreen implements TransformAction<TransformParameters.None> {
             def errorMessages = errorMessageOrMessages instanceof Iterable ? [*errorMessageOrMessages] : [errorMessageOrMessages]
             errorMessages.each { errorMessage ->
                 count++
-                failure.assertHasCause("Property '${propertyName}' ${errorMessage}.")
+                System.err.println("Verifying assertion for $propertyName")
+                failure.assertHasCause("Property '${propertyName}' ${errorMessage}")
             }
         }
         assert errorOutput.count("> Property") == count
     }
+
 }

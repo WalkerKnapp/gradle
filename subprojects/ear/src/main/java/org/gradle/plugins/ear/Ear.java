@@ -21,6 +21,7 @@ import org.gradle.api.Action;
 import org.gradle.api.Incubating;
 import org.gradle.api.InvalidUserDataException;
 import org.gradle.api.file.CopySpec;
+import org.gradle.api.file.DirectoryProperty;
 import org.gradle.api.file.DuplicatesStrategy;
 import org.gradle.api.file.FileCopyDetails;
 import org.gradle.api.file.FileTree;
@@ -40,8 +41,8 @@ import org.gradle.plugins.ear.descriptor.EarModule;
 import org.gradle.plugins.ear.descriptor.internal.DefaultDeploymentDescriptor;
 import org.gradle.plugins.ear.descriptor.internal.DefaultEarModule;
 import org.gradle.plugins.ear.descriptor.internal.DefaultEarWebModule;
-import org.gradle.util.ConfigureUtil;
-import org.gradle.util.GUtil;
+import org.gradle.util.internal.ConfigureUtil;
+import org.gradle.util.internal.GUtil;
 
 import javax.annotation.Nullable;
 import javax.inject.Inject;
@@ -64,6 +65,7 @@ public class Ear extends Jar {
     private final Property<Boolean> generateDeploymentDescriptor;
     private DeploymentDescriptor deploymentDescriptor;
     private CopySpec lib;
+    private final DirectoryProperty appDir;
 
     public Ear() {
         getArchiveExtension().set(EAR_EXTENSION);
@@ -119,6 +121,8 @@ public class Ear extends Jar {
 
             return null;
         });
+
+        appDir = getObjectFactory().directoryProperty();
     }
 
     private Cached<byte[]> cachedContentsOf(DeploymentDescriptor descriptor) {
@@ -256,7 +260,6 @@ public class Ear extends Jar {
      * @since 6.0
      */
     @Input
-    @Incubating
     public Property<Boolean> getGenerateDeploymentDescriptor() {
         return generateDeploymentDescriptor;
     }
@@ -273,4 +276,18 @@ public class Ear extends Jar {
         this.deploymentDescriptor = deploymentDescriptor;
     }
 
+    /**
+     * The application directory. Added to the produced archive by default.
+     * <p>
+     * The {@code ear} plugin sets the default value for all {@code Ear} tasks to {@code src/main/application}.
+     * <p>
+     * Note, that if the {@code ear} plugin is not applied then this property is ignored.
+     *
+     * @since 7.1
+     */
+    @Internal
+    @Incubating
+    public DirectoryProperty getAppDirectory() {
+        return appDir;
+    }
 }

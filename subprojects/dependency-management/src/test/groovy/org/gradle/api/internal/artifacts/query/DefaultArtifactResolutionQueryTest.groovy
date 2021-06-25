@@ -42,7 +42,7 @@ import org.gradle.internal.resolve.result.BuildableComponentResolveResult
 import org.gradle.internal.serialize.Serializer
 import org.gradle.internal.snapshot.ValueSnapshotter
 import org.gradle.util.AttributeTestUtil
-import org.gradle.util.BuildCommencedTimeProvider
+import org.gradle.util.internal.BuildCommencedTimeProvider
 import spock.lang.Shared
 import spock.lang.Specification
 import spock.lang.Unroll
@@ -143,7 +143,7 @@ class DefaultArtifactResolutionQueryTest extends Specification {
     }
 
     private DefaultArtifactResolutionQuery createArtifactResolutionQuery(ComponentTypeRegistry componentTypeRegistry) {
-        new DefaultArtifactResolutionQuery(configurationContainerInternal, repositoryHandler, resolveIvyFactory, globalDependencyResolutionRules, componentTypeRegistry, AttributeTestUtil.attributesFactory(), ruleExecutor)
+        new DefaultArtifactResolutionQuery(configurationContainerInternal, { [] }, resolveIvyFactory, globalDependencyResolutionRules, componentTypeRegistry, AttributeTestUtil.attributesFactory(), ruleExecutor)
     }
 
     private ComponentTypeRegistry createTestComponentTypeRegistry() {

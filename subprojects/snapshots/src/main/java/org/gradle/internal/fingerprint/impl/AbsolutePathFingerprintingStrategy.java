@@ -17,14 +17,15 @@
 package org.gradle.internal.fingerprint.impl;
 
 import com.google.common.collect.ImmutableMap;
-import org.gradle.internal.file.FileType;
+
+import org.gradle.internal.fingerprint.DirectorySensitivity;
 import org.gradle.internal.fingerprint.FileSystemLocationFingerprint;
 import org.gradle.internal.fingerprint.FingerprintHashingStrategy;
 import org.gradle.internal.fingerprint.FingerprintingStrategy;
-import org.gradle.internal.snapshot.CompleteDirectorySnapshot;
-import org.gradle.internal.snapshot.CompleteFileSystemLocationSnapshot;
+import org.gradle.internal.snapshot.FileSystemLocationSnapshot;
 import org.gradle.internal.snapshot.FileSystemSnapshot;
-import org.gradle.internal.snapshot.FileSystemSnapshotVisitor;
+import org.gradle.internal.snapshot.RootTrackingFileSystemSnapshotHierarchyVisitor;
+import org.gradle.internal.snapshot.SnapshotVisitResult;
 
 import java.util.HashSet;
 import java.util.Map;
@@ -33,67 +34,46 @@ import java.util.Map;
  * Fingerprint files without path or content normalization.
  */
 public class AbsolutePathFingerprintingStrategy extends AbstractFingerprintingStrategy {
-    public static final FingerprintingStrategy INCLUDE_MISSING = new AbsolutePathFingerprintingStrategy(true);
-    public static final FingerprintingStrategy IGNORE_MISSING = new AbsolutePathFingerprintingStrategy(false);
+    public static final FingerprintingStrategy DEFAULT = new AbsolutePathFingerprintingStrategy(DirectorySensitivity.DEFAULT);
+    public static final FingerprintingStrategy IGNORE_DIRECTORIES = new AbsolutePathFingerprintingStrategy(DirectorySensitivity.IGNORE_DIRECTORIES);
     public static final String IDENTIFIER = "ABSOLUTE_PATH";
 
-    private final boolean includeMissingRoots;
+    private final DirectorySensitivity directorySensitivity;
 
-    private AbsolutePathFingerprintingStrategy(boolean includeMissingRoots) {
+    private AbsolutePathFingerprintingStrategy(DirectorySensitivity directorySensitivity) {
         super(IDENTIFIER);
-        this.includeMissingRoots = includeMissingRoots;
+        this.directorySensitivity = directorySensitivity;
     }
 
     @Override
-    public String normalizePath(CompleteFileSystemLocationSnapshot snapshot) {
+    public String normalizePath(FileSystemLocationSnapshot snapshot) {
         return snapshot.getAbsolutePath();
     }
 
     @Override
-    public Map<String, FileSystemLocationFingerprint> collectFingerprints(Iterable<? extends FileSystemSnapshot> roots) {
-        final ImmutableMap.Builder<String, FileSystemLocationFingerprint> builder = ImmutableMap.builder();
-        final HashSet<String> processedEntries = new HashSet<String>();
-        for (FileSystemSnapshot root : roots) {
-            root.accept(new FileSystemSnapshotVisitor() {
-                private int treeDepth = 0;
-
-                @Override
-                public boolean preVisitDirectory(CompleteDirectorySnapshot directorySnapshot) {
-                    treeDepth++;
-                    String absolutePath = directorySnapshot.getAbsolutePath();
-                    if (processedEntries.add(absolutePath)) {
-                        builder.put(absolutePath, new DefaultFileSystemLocationFingerprint(directorySnapshot.getAbsolutePath(), directorySnapshot));
-                    }
-                    return true;
+    public Map<String, FileSystemLocationFingerprint> collectFingerprints(FileSystemSnapshot roots) {
+        ImmutableMap.Builder<String, FileSystemLocationFingerprint> builder = ImmutableMap.builder();
+        HashSet<String> processedEntries = new HashSet<>();
+        roots.accept(new RootTrackingFileSystemSnapshotHierarchyVisitor() {
+            @Override
+            public SnapshotVisitResult visitEntry(FileSystemLocationSnapshot snapshot, boolean isRoot) {
+                String absolutePath = snapshot.getAbsolutePath();
+                if (processedEntries.add(absolutePath) && directorySensitivity.shouldFingerprint(snapshot)) {
+                    builder.put(absolutePath, new DefaultFileSystemLocationFingerprint(snapshot.getAbsolutePath(), snapshot));
                 }
-
-                @Override
-                public void visitFile(CompleteFileSystemLocationSnapshot fileSnapshot) {
-                    if (!includeMissingRoots && isRoot() && fileSnapshot.getType() == FileType.Missing) {
-                        return;
-                    }
-                    String absolutePath = fileSnapshot.getAbsolutePath();
-                    if (processedEntries.add(absolutePath)) {
-                        builder.put(absolutePath, new DefaultFileSystemLocationFingerprint(fileSnapshot.getAbsolutePath(), fileSnapshot));
-                    }
-                }
-
-                @Override
-                public void postVisitDirectory(CompleteDirectorySnapshot directorySnapshot) {
-                    treeDepth--;
-                }
-
-                private boolean isRoot() {
-                    return treeDepth == 0;
-                }
-
-            });
-        }
+                return SnapshotVisitResult.CONTINUE;
+            }
+        });
         return builder.build();
     }
 
     @Override
     public FingerprintHashingStrategy getHashingStrategy() {
         return FingerprintHashingStrategy.SORT;
+    }
+
+    @Override
+    public DirectorySensitivity getDirectorySensitivity() {
+        return directorySensitivity;
     }
 }

@@ -35,8 +35,6 @@ import org.gradle.api.invocation.Gradle;
 import org.gradle.api.plugins.scala.ScalaBasePlugin;
 import org.gradle.api.tasks.ScalaRuntime;
 import org.gradle.internal.Cast;
-import org.gradle.internal.Factory;
-import org.gradle.language.scala.internal.DefaultScalaPlatform;
 import org.gradle.plugins.ide.idea.IdeaPlugin;
 import org.gradle.plugins.ide.idea.model.Dependency;
 import org.gradle.plugins.ide.idea.model.FilePath;
@@ -44,9 +42,8 @@ import org.gradle.plugins.ide.idea.model.IdeaModel;
 import org.gradle.plugins.ide.idea.model.IdeaModule;
 import org.gradle.plugins.ide.idea.model.ModuleLibrary;
 import org.gradle.plugins.ide.idea.model.ProjectLibrary;
-import org.gradle.util.VersionNumber;
+import org.gradle.util.internal.VersionNumber;
 
-import javax.annotation.Nullable;
 import java.io.File;
 import java.util.Collection;
 import java.util.List;
@@ -60,6 +57,7 @@ public class IdeaScalaConfigurer {
 
     // More information: http://blog.jetbrains.com/scala/2014/10/30/scala-plugin-update-for-intellij-idea-14-rc-is-out/
     private static final VersionNumber IDEA_VERSION_WHEN_SCALA_SDK_WAS_INTRODUCED = VersionNumber.version(14);
+    public static final String DEFAULT_SCALA_PLATFORM_VERSION = "2.10.7";
     private final Project rootProject;
 
     public IdeaScalaConfigurer(Project rootProject) {
@@ -113,14 +111,7 @@ public class IdeaScalaConfigurer {
         for (final Project scalaProject : scalaProjects) {
             final IdeaModule ideaModule = scalaProject.getExtensions().getByType(IdeaModel.class).getModule();
             final Iterable<File> files = getIdeaModuleLibraryDependenciesAsFiles(ideaModule);
-            ProjectLibrary library = ((ProjectInternal)scalaProject).getMutationState().withMutableState(new Factory<ProjectLibrary>() {
-                @Nullable
-                @Override
-                public ProjectLibrary create() {
-                    return createScalaSdkLibrary(scalaProject, files, useScalaSdk, ideaModule);
-                }
-            });
-
+            ProjectLibrary library = ((ProjectInternal) scalaProject).getOwner().fromMutableState(p -> createScalaSdkLibrary(scalaProject, files, useScalaSdk, ideaModule));
             if (library != null) {
                 ProjectLibrary duplicate = Iterables.find(scalaCompilerLibraries.values(), Predicates.equalTo(library), null);
                 scalaCompilerLibraries.put(scalaProject.getPath(), duplicate == null ? library : duplicate);
@@ -133,7 +124,7 @@ public class IdeaScalaConfigurer {
         // could make resolveDependencies() cache its result for later use by GenerateIdeaModule
         Set<Dependency> dependencies = ideaModule.resolveDependencies();
         List<File> files = Lists.newArrayList();
-        for(ModuleLibrary moduleLibrary : Iterables.filter(dependencies, ModuleLibrary.class)) {
+        for (ModuleLibrary moduleLibrary : Iterables.filter(dependencies, ModuleLibrary.class)) {
             for (FilePath filePath : Iterables.filter(moduleLibrary.getClasses(), FilePath.class)) {
                 files.add(filePath.getFile());
             }
@@ -145,14 +136,10 @@ public class IdeaScalaConfigurer {
     private static ProjectLibrary createScalaSdkLibrary(Project scalaProject, Iterable<File> files, boolean useScalaSdk, IdeaModule ideaModule) {
         ScalaRuntime runtime = scalaProject.getExtensions().findByType(ScalaRuntime.class);
         if (runtime != null) {
-            // Old Scala Plugin does not specify a ScalaPlatform
             FileCollection scalaClasspath = runtime.inferScalaClasspath(files);
             File compilerJar = runtime.findScalaJar(scalaClasspath, "compiler");
-            org.gradle.language.scala.ScalaPlatform scalaPlatform = compilerJar != null ? new DefaultScalaPlatform(runtime.getScalaVersion(compilerJar)) : new DefaultScalaPlatform();
-            return createScalaSdkFromPlatform(scalaPlatform, scalaClasspath, useScalaSdk);
-        } else if (ideaModule.getScalaPlatform() != null) {
-            // TODO: Wrong, using the full classpath of the application
-            return createScalaSdkFromPlatform(ideaModule.getScalaPlatform(), scalaProject.getLayout().files(files), useScalaSdk);
+            String scalaVersion = compilerJar != null ? runtime.getScalaVersion(compilerJar) : DEFAULT_SCALA_PLATFORM_VERSION;
+            return createScalaSdkFromScalaVersion(scalaVersion, scalaClasspath, useScalaSdk);
         } else {
             // One of the Scala plugins is applied, but ScalaRuntime extension is missing or the ScalaPlatform is undefined.
             // we can't create a Scala SDK without either one
@@ -160,9 +147,7 @@ public class IdeaScalaConfigurer {
         }
     }
 
-    @SuppressWarnings("deprecation")
-    private static ProjectLibrary createScalaSdkFromPlatform(org.gradle.language.scala.ScalaPlatform platform, FileCollection scalaClasspath, boolean useScalaSdk) {
-        String version = platform.getScalaVersion();
+    private static ProjectLibrary createScalaSdkFromScalaVersion(String version, FileCollection scalaClasspath, boolean useScalaSdk) {
         if (useScalaSdk) {
             return createScalaSdkLibrary("scala-sdk-" + version, scalaClasspath);
         }
@@ -220,13 +205,11 @@ public class IdeaScalaConfigurer {
 
     private Collection<Project> findProjectsApplyingIdeaAndScalaPlugins() {
         return Collections2.filter(rootProject.getAllprojects(), new Predicate<Project>() {
-            @SuppressWarnings("deprecation")
             @Override
             public boolean apply(Project project) {
                 final boolean hasIdeaPlugin = project.getPlugins().hasPlugin(IdeaPlugin.class);
                 final boolean hasScalaPlugin = project.getPlugins().hasPlugin(ScalaBasePlugin.class);
-                final boolean hasLegacyScalaPlugin = project.getPlugins().hasPlugin(org.gradle.language.scala.plugins.ScalaLanguagePlugin.class);
-                return hasIdeaPlugin && (hasScalaPlugin || hasLegacyScalaPlugin);
+                return hasIdeaPlugin && hasScalaPlugin;
             }
         });
     }

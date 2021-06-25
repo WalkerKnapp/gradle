@@ -16,44 +16,10 @@
 
 package org.gradle.java.compile.incremental
 
-import groovy.transform.NotYetImplemented
 import org.gradle.integtests.fixtures.CompiledLanguage
-import org.gradle.util.ToBeImplemented
-import spock.lang.Issue
-import spock.lang.Unroll
 
 abstract class BaseJavaSourceIncrementalCompilationIntegrationTest extends AbstractSourceIncrementalCompilationIntegrationTest {
     CompiledLanguage language = CompiledLanguage.JAVA
-
-    void recompiledWithFailure(String expectedFailure, String... recompiledClasses) {
-        fails language.compileTaskName
-        failure.assertHasErrorOutput(expectedFailure)
-    }
-
-    @Unroll
-    def "change to #retention retention annotation class recompiles #desc"() {
-        def annotationClass = file("src/main/${language.name}/SomeAnnotation.${language.name}") << """
-            import java.lang.annotation.*;
-
-            @Retention(RetentionPolicy.$retention)
-            public @interface SomeAnnotation {}
-        """
-        source "@SomeAnnotation class A {}", "class B {}"
-        outputs.snapshot { run language.compileTaskName }
-
-        when:
-        annotationClass.text += "/* change */"
-        run language.compileTaskName
-
-        then:
-        outputs.recompiledClasses(expected as String[])
-
-        where:
-        desc              | retention | expected
-        'all'             | 'SOURCE'  | ['A', 'B', 'SomeAnnotation']
-        'annotated types' | 'CLASS'   | ['SomeAnnotation', 'A']
-        'annotated types' | 'RUNTIME' | ['SomeAnnotation', 'A']
-    }
 
     def "deletes headers when source file is deleted"() {
         given:
@@ -88,32 +54,6 @@ abstract class BaseJavaSourceIncrementalCompilationIntegrationTest extends Abstr
         generatedHeaderFile.assertDoesNotExist()
         generatedInnerClassHeaderFile.assertDoesNotExist()
         file("build/generated/sources/headers/java/main/Bar.h").assertExists()
-    }
-
-    def "changed class with used non-private constant incurs full rebuild"() {
-        source "class A { int foo() { return 1; } }", "class B { final static int x = 1;}"
-        outputs.snapshot { run language.compileTaskName }
-
-        when:
-        source "class B { /* change */ }"
-        run language.compileTaskName
-
-        then:
-        outputs.recompiledClasses 'B', 'A'
-    }
-
-    @NotYetImplemented
-    //  Can re-enable with compiler plugins. See gradle/gradle#1474
-    def "changing an unused non-private constant incurs partial rebuild"() {
-        source "class A { int foo() { return 2; } }", "class B { final static int x = 1;}"
-        outputs.snapshot { run language.compileTaskName }
-
-        when:
-        source "class B { /* change */ }"
-        run language.compileTaskName
-
-        then:
-        outputs.recompiledClasses 'B'
     }
 
     def "reports source type that does not support detection of source root"() {
@@ -158,32 +98,4 @@ abstract class BaseJavaSourceIncrementalCompilationIntegrationTest extends Abstr
         succeeds language.compileTaskName
         outputs.noneRecompiled()
     }
-
-    @ToBeImplemented
-    @Issue("https://github.com/gradle/gradle/issues/8590")
-    def "adding a class with higher resolution priority should trigger recompilation"() {
-        file("src/main/java/foo/A.java") << """
-package foo;
-import bar.*;
-public class A {
-  Other getOther() { return null; }
-}
-"""
-        file("src/main/java/bar/Other.java") << """
-package bar;
-public class Other {}
-"""
-        outputs.snapshot { run language.compileTaskName }
-
-        when:
-        file("src/main/java/foo/Other.java") << """
-package foo;
-public class Other {}
-        """
-
-        then:
-        succeeds language.compileTaskName
-        outputs.recompiledFqn("foo.Other") // should be foo.A and foo.Other
-    }
-
 }

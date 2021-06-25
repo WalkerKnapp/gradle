@@ -60,7 +60,7 @@ This will create a minimal distribution at `subprojects/distributions-full/build
 
 You can then use it as a Gradle Wrapper local distribution in a Gradle based project by using a `file:/` URL pointing to the built distribution:
 
-    ./gradle wrapper --gradle-distribution-url=file:/path/to/gradle-<version>-bin.zip
+    ./gradlew wrapper --gradle-distribution-url=file:/path/to/gradle-<version>-bin.zip
 
 To create a full distribution (includes sources and docs):
 
@@ -68,7 +68,7 @@ To create a full distribution (includes sources and docs):
 
 The full distribution will be created at `subprojects/distributions-full/build/distributions/gradle-<version>-all.zip`. You can then use it as a Gradle Wrapper local distribution:
 
-    ./gradle wrapper --gradle-distribution-url=file:/path/to/gradle-<version>-all.zip
+    ./gradlew wrapper --gradle-distribution-url=file:/path/to/gradle-<version>-all.zip
 
 ### Development Setup
 
@@ -98,18 +98,29 @@ NOTE: Due to the project size, the initial import can take a while and IntelliJ 
 
 IntelliJ automatically hides stacktrace elements from the `org.gradle` package, which makes running/debugging tests more difficult.  You can disable this behavior by changing IntelliJ Preferences under Editor -> General -> Console. In the "Fold lines that contain" section, remove the `org.gradle` entry.
 
+### Java Toolchain
+
+The build leverages the built-in [Java Toolchain](https://docs.gradle.org/current/userguide/toolchains.html) support to compile and execute tests.
+Available JDKs on your machine are automatically detected and wired for the various compile and test tasks.
+
+If you want to explicitly run tests with a different Java version:
+Specify either a Gradle or System property `testJavaVersion` with the major version of the JDK you want the tests to run with (e.g. `-PtestJavaVersion=14`).
+
+If some JDKs on your machine are not automatically detected, you can use the [toolchain mechanisms](https://docs.gradle.org/current/userguide/toolchains.html#sec:custom_loc) to let Gradle know about
+specific JDK installations.
+
 ### Code Change Guidelines
 
 All code contributions should contain the following:
 
-* Unit Tests (using [Spock](http://spockframework.org/spock/docs/1.1-rc-2/index.html)) for any logic introduced
+* Unit Tests (using [Spock](https://spockframework.org/spock/docs/2.0/index.html)) for any logic introduced
 * Integration Test coverage of the bug/feature at the level of build execution. Please annotate tests guarding against a specific GitHub issue `@Issue("gradle/gradle#123")`.
 * Documentation in the User Manual and DSL Reference (under `subprojects/docs/src/docs`). You can generate docs by running `./gradlew :docs:docs`.
 
 Your code needs to run on all supported Java versions and operating systems. The [Gradle CI](http://builds.gradle.org/) will verify this, but here are some pointers that will avoid surprises:
 
 * Be careful when using features introduced in Java 1.7 or later. Some parts of Gradle still need to run on Java 6.
-* Normalise file paths in tests. The `org.gradle.util.TextUtil` class has some useful functions for this purpose.
+* Normalise file paths in tests. The `org.gradle.util.internal.TextUtil` class has some useful functions for this purpose.
 
 ### Development Workflow
 
@@ -122,7 +133,7 @@ Install: `./gradlew install -Pgradle_installPath=/any/path`. Use: `/any/path/bin
 
 You can debug Gradle by adding `-Dorg.gradle.debug=true` when executing. Gradle will wait for you to attach a debugger at `localhost:5005` by default.
 
-If you made changes to build logic in `buildSrc`, you can test them by executing `./gradlew help -PbuildSrcCheck=true`.
+If you made changes to build logic in `build-logic`, you can test them by executing `./gradlew :build-logic:check`.
 
 ### Creating Commits And Writing Commit Messages
 
@@ -149,7 +160,7 @@ To sign off a single commit:
 
 To sign off one or multiple commits:
 
-`git filter-branch --msg-filter "cat - && echo && echo 'Signed-off-by: Your Name <Your.Name@example.com>'" HEAD`
+`git rebase --signoff origin/master`
 
 Then force push your branch:
 

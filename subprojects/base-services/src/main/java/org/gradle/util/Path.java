@@ -19,11 +19,15 @@ package org.gradle.util;
 import com.google.common.base.Strings;
 import org.apache.commons.lang.StringUtils;
 import org.gradle.api.InvalidUserDataException;
+import org.gradle.util.internal.GUtil;
 
 import javax.annotation.Nullable;
 import java.util.Arrays;
 import java.util.Comparator;
 
+/**
+ * Represents a path in Gradle.
+ */
 public class Path implements Comparable<Path> {
     public static final Path ROOT = new Path(new String[0], true);
 
@@ -208,6 +212,11 @@ public class Path implements Comparable<Path> {
         return append(path);
     }
 
+
+    public boolean isAbsolute() {
+        return absolute;
+    }
+
     /**
      * Calculates a path relative to this path. If the given path is not a child of this path, it is returned unmodified.
      */
@@ -232,5 +241,27 @@ public class Path implements Comparable<Path> {
         }
         String[] newSegments = Arrays.copyOfRange(path.segments, segments.length, path.segments.length);
         return new Path(newSegments, false);
+    }
+
+    public int segmentCount() {
+        return segments.length;
+    }
+
+    public Path removeFirstSegments(int n) {
+        if (n == 0) {
+            return this;
+        } else if (n < 0 || n >= segments.length) {
+            throw new IllegalArgumentException("Cannot remove " + n + " segments from path " + getPath());
+        }
+
+        return new Path(Arrays.copyOfRange(segments, n, segments.length), absolute);
+    }
+
+    public String segment(int index) {
+        if (index < 0 || index >= segments.length) {
+            throw new IllegalArgumentException("Segment index " + index + " is invalid for path " + getPath());
+        }
+
+        return segments[index];
     }
 }

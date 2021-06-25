@@ -17,7 +17,6 @@ package org.gradle.buildinit.plugins
 
 import org.gradle.buildinit.plugins.fixtures.ScriptDslFixture
 import org.gradle.buildinit.plugins.internal.modifiers.BuildInitDsl
-import org.gradle.integtests.fixtures.ToBeFixedForConfigurationCache
 import org.gradle.integtests.fixtures.executer.ExecutionResult
 import org.hamcrest.Matcher
 import spock.lang.Unroll
@@ -32,7 +31,6 @@ class BuildInitPluginIntegrationTest extends AbstractInitIntegrationSpec {
     @Override
     String subprojectName() { 'app' }
 
-    @ToBeFixedForConfigurationCache(because = ":tasks")
     def "init shows up on tasks overview "() {
         given:
         targetDir.file("settings.gradle").touch()
@@ -47,20 +45,19 @@ class BuildInitPluginIntegrationTest extends AbstractInitIntegrationSpec {
     @Unroll
     def "creates a simple project with #scriptDsl build scripts when no pom file present and no type specified"() {
         given:
-        def dslFixture = dslFixtureFor(scriptDsl)
+        def dslFixture = ScriptDslFixture.of(scriptDsl, targetDir, null)
 
         when:
         runInitWith scriptDsl
 
         then:
-        commonFilesGenerated(scriptDsl)
+        commonFilesGenerated(scriptDsl, dslFixture)
 
         and:
         dslFixture.buildFile.assertContents(
             allOf(
                 containsString("This is a general purpose Gradle build"),
-                containsString("Learn how to create Gradle builds at")))
-        outputContains("Get more help with your project: ")
+                containsString("Learn more about Gradle by exploring our samples at")))
 
         expect:
         succeeds 'help'
@@ -124,10 +121,9 @@ class BuildInitPluginIntegrationTest extends AbstractInitIntegrationSpec {
         def targetDslFixture = dslFixtureFor(targetScriptDsl as BuildInitDsl)
 
         and:
-        def customBuildScript = existingDslFixture.scriptFile("customBuild").createFile()
+        def customBuildScript = existingDslFixture.scriptFile("build").createFile()
 
         when:
-        executer.usingBuildScript(customBuildScript)
         runInitWith targetScriptDsl as BuildInitDsl
 
         then:
@@ -152,11 +148,12 @@ class BuildInitPluginIntegrationTest extends AbstractInitIntegrationSpec {
         and:
         def customSettings = existingDslFixture.scriptFile("customSettings")
         customSettings << """
-include("child")
-"""
+            include("child")
+        """
 
         when:
         executer.usingSettingsFile(customSettings)
+        executer.expectDocumentedDeprecationWarning("Specifying custom settings file location has been deprecated. This is scheduled to be removed in Gradle 8.0. Consult the upgrading guide for further information: https://docs.gradle.org/current/userguide/upgrading_version_7.html#configuring_custom_build_layout");
         runInitWith targetScriptDsl as BuildInitDsl
 
         then:
@@ -217,6 +214,7 @@ include("child")
   - 'kotlin-gradle-plugin'
   - 'kotlin-library'
   - 'pom'
+  - 'scala-application'
   - 'scala-library'""")
     }
 
@@ -279,6 +277,8 @@ include("child")
 
      --project-name     Set the project name.
 
+     --split-project     Split functionality across multiple subprojects?
+
      --test-framework     Set the test framework to be used.
                           Available values are:
                                junit
@@ -303,6 +303,7 @@ include("child")
                      kotlin-gradle-plugin
                      kotlin-library
                      pom
+                     scala-application
                      scala-library""")
     }
 

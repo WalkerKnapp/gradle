@@ -42,7 +42,7 @@ import org.gradle.launcher.daemon.registry.DaemonRegistry;
 import org.gradle.launcher.daemon.registry.DaemonStopEvent;
 import org.gradle.launcher.daemon.registry.DaemonStopEvents;
 import org.gradle.launcher.daemon.server.api.DaemonStateControl;
-import org.gradle.util.CollectionUtils;
+import org.gradle.util.internal.CollectionUtils;
 
 import java.util.Collection;
 import java.util.Date;
@@ -108,6 +108,11 @@ public class DefaultDaemonConnector implements DaemonConnector {
             LOGGER.debug("Cannot connect to daemon {} due to {}. Ignoring.", daemon, e);
         }
         return null;
+    }
+
+    @Override
+    public void markDaemonAsUnavailable(DaemonConnectDetails daemon) {
+        removeDaemonFromRegistry(daemon, "unable to communicate with daemon");
     }
 
     @Override
@@ -276,6 +281,14 @@ public class DefaultDaemonConnector implements DaemonConnector {
         return new DaemonClientConnection(connection, daemon, staleAddressDetector);
     }
 
+    private void removeDaemonFromRegistry(DaemonConnectDetails daemon, String reason) {
+        LOGGER.info("{}{}", DaemonMessages.REMOVING_DAEMON_ADDRESS_ON_FAILURE, daemon);
+        final Date timestamp = new Date(System.currentTimeMillis());
+        final DaemonStopEvent stopEvent = new DaemonStopEvent(timestamp, daemon.getPid(), null, reason);
+        daemonRegistry.storeStopEvent(stopEvent);
+        daemonRegistry.remove(daemon.getAddress());
+    }
+
     private class CleanupOnStaleAddress implements DaemonClientConnection.StaleAddressDetector {
         private final DaemonConnectDetails daemon;
         private final boolean exposeAsStale;
@@ -287,11 +300,7 @@ public class DefaultDaemonConnector implements DaemonConnector {
 
         @Override
         public boolean maybeStaleAddress(Exception failure) {
-            LOGGER.info("{}{}", DaemonMessages.REMOVING_DAEMON_ADDRESS_ON_FAILURE, daemon);
-            final Date timestamp = new Date(System.currentTimeMillis());
-            final DaemonStopEvent stopEvent = new DaemonStopEvent(timestamp, daemon.getPid(), null, "by user or operating system");
-            daemonRegistry.storeStopEvent(stopEvent);
-            daemonRegistry.remove(daemon.getAddress());
+            removeDaemonFromRegistry(daemon, "by user or operating system");
             return exposeAsStale;
         }
     }

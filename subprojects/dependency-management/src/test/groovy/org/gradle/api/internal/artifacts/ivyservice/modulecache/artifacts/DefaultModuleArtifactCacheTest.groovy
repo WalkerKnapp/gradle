@@ -26,7 +26,7 @@ import org.gradle.internal.serialize.Decoder
 import org.gradle.internal.serialize.Encoder
 import org.gradle.internal.serialize.Serializer
 import org.gradle.test.fixtures.file.TestNameTestDirectoryProvider
-import org.gradle.util.BuildCommencedTimeProvider
+import org.gradle.util.internal.BuildCommencedTimeProvider
 import org.junit.Rule
 import spock.lang.Specification
 import spock.lang.Subject
@@ -167,7 +167,7 @@ class DefaultModuleArtifactCacheTest extends Specification {
         1 * cacheLockingManager.createCache(persistentCacheFile, _, _) >> persistentIndexedCache
         1 * cacheLockingManager.useCache(_) >> { Factory<?> factory -> factory.create()}
         def key = new ArtifactAtRepositoryKey("RepoID", Stub(ModuleComponentArtifactIdentifier))
-        1 * persistentIndexedCache.get(key) >> cachedArtifact
+        1 * persistentIndexedCache.getIfPresent(key) >> cachedArtifact
         key
     }
 }

@@ -19,25 +19,25 @@ import org.gradle.api.internal.changedetection.TaskExecutionMode;
 import org.gradle.api.internal.tasks.TaskExecutionContext;
 import org.gradle.api.internal.tasks.properties.TaskProperties;
 import org.gradle.execution.plan.LocalTaskNode;
+import org.gradle.internal.execution.WorkValidationContext;
 import org.gradle.internal.operations.BuildOperationContext;
-import org.gradle.internal.time.Time;
-import org.gradle.internal.time.Timer;
 
 import java.util.Optional;
 
 public class DefaultTaskExecutionContext implements TaskExecutionContext {
 
     private final LocalTaskNode localTaskNode;
+    private final TaskProperties properties;
+    private final WorkValidationContext validationContext;
+    private final ValidationAction validationAction;
     private TaskExecutionMode taskExecutionMode;
-    private TaskProperties properties;
-    private Long executionTime;
     private BuildOperationContext snapshotTaskInputsBuildOperationContext;
 
-    private final Timer executionTimer;
-
-    public DefaultTaskExecutionContext(LocalTaskNode localTaskNode) {
+    public DefaultTaskExecutionContext(LocalTaskNode localTaskNode, TaskProperties taskProperties, WorkValidationContext validationContext, ValidationAction validationAction) {
         this.localTaskNode = localTaskNode;
-        this.executionTimer = Time.startTimer();
+        this.properties = taskProperties;
+        this.validationContext = validationContext;
+        this.validationAction = validationAction;
     }
 
     @Override
@@ -51,22 +51,18 @@ public class DefaultTaskExecutionContext implements TaskExecutionContext {
     }
 
     @Override
+    public WorkValidationContext getValidationContext() {
+        return validationContext;
+    }
+
+    @Override
+    public ValidationAction getValidationAction() {
+        return validationAction;
+    }
+
+    @Override
     public void setTaskExecutionMode(TaskExecutionMode taskExecutionMode) {
         this.taskExecutionMode = taskExecutionMode;
-    }
-
-    @Override
-    public long markExecutionTime() {
-        if (this.executionTime != null) {
-            throw new IllegalStateException("execution time already set");
-        }
-
-        return this.executionTime = executionTimer.getElapsedMillis();
-    }
-
-    @Override
-    public void setTaskProperties(TaskProperties properties) {
-        this.properties = properties;
     }
 
     @Override

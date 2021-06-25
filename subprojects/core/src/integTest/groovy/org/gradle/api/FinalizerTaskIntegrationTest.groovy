@@ -17,7 +17,7 @@
 package org.gradle.api
 
 import org.gradle.integtests.fixtures.AbstractIntegrationSpec
-import org.gradle.util.ToBeImplemented
+import org.gradle.util.internal.ToBeImplemented
 import spock.lang.Ignore
 import spock.lang.Issue
 import spock.lang.Unroll
@@ -143,7 +143,7 @@ class FinalizerTaskIntegrationTest extends AbstractIntegrationSpec {
     }
 
     void 'finalizers for finalizers are executed when finalized is executed'() {
-        buildFile << """
+        buildFile """
             task a {
                 finalizedBy 'b'
             }
@@ -161,7 +161,7 @@ class FinalizerTaskIntegrationTest extends AbstractIntegrationSpec {
     }
 
     void 'finalizer tasks are executed after their dependencies'() {
-        buildFile << """
+        buildFile """
             task a {
                 dependsOn 'b', 'c'
             }
@@ -179,7 +179,7 @@ class FinalizerTaskIntegrationTest extends AbstractIntegrationSpec {
     }
 
     void 'circular dependency errors are detected for finalizer tasks'() {
-        buildFile << """
+        buildFile """
             task a {
                 finalizedBy 'b'
                 dependsOn 'c'
@@ -203,8 +203,65 @@ class FinalizerTaskIntegrationTest extends AbstractIntegrationSpec {
         }
     }
 
+    @Issue("https://github.com/gradle/gradle/issues/2293")
+    void 'circular dependency is detected on cycle within chained finalizers'() {
+        buildFile """
+            task a {
+                finalizedBy 'b'
+            }
+            task b {
+                finalizedBy 'c'
+            }
+            task c {
+                finalizedBy 'c'
+            }
+        """
+
+        expect:
+        2.times {
+            fails 'a'
+            failure.assertHasDescription """Circular dependency between the following tasks:
+:c
+\\--- :c (*)
+
+(*) - details omitted (listed previously)"""
+        }
+    }
+
+    @Issue("https://github.com/gradle/gradle/issues/2293")
+    def "circular dependency detected with complex finalizedBy cycle in the graph"() {
+        buildFile """
+            task a
+            task b
+            task c
+            task d
+            task e
+            task f
+
+            a.dependsOn b
+            b.dependsOn c
+            b.finalizedBy d
+            d.dependsOn f
+            e.dependsOn d
+            f.dependsOn e
+        """
+
+        expect:
+        2.times {
+            fails 'a'
+            failure.assertHasDescription """Circular dependency between the following tasks:
+:d
+\\--- :f
+     \\--- :e
+          \\--- :d (*)
+
+(*) - details omitted (listed previously)"""
+        }
+    }
+
+
     void 'finalizer task can be used by multiple tasks that depend on one another'() {
-        buildFile << """
+        buildFile """
             task a {
                 finalizedBy 'c'
             }
@@ -228,7 +285,7 @@ class FinalizerTaskIntegrationTest extends AbstractIntegrationSpec {
             include "a"
             include "b"
         """
-        buildFile << """
+        buildFile """
             configure(project(':a')) {
                 task finalizer {
                     doLast {
@@ -267,7 +324,7 @@ class FinalizerTaskIntegrationTest extends AbstractIntegrationSpec {
             include 'a'
             include 'b'
         """
-        buildFile << """
+        buildFile """
             configure(project(':a')) {
                 task finalizer {
                     doLast {
@@ -303,7 +360,7 @@ class FinalizerTaskIntegrationTest extends AbstractIntegrationSpec {
         }
 
         and: "Apply workaround"
-        buildFile << """
+        buildFile """
             configure(project(':b')) {
                 work.mustRunAfter(":a:work")
             }
@@ -315,7 +372,7 @@ class FinalizerTaskIntegrationTest extends AbstractIntegrationSpec {
     }
 
     private void setupProject() {
-        buildFile << """
+        buildFile """
             class NotParallel extends DefaultTask {}
 
             task a {

@@ -41,8 +41,6 @@ class DependencyVerificationWritingIntegTest extends AbstractDependencyVerificat
         assertMetadataExists()
         hasNoModules()
 
-        and:
-        output.contains("Dependency verification is an incubating feature.")
     }
 
     @Unroll
@@ -627,7 +625,6 @@ class DependencyVerificationWritingIntegTest extends AbstractDependencyVerificat
 """
     }
 
-    @ToBeFixedForConfigurationCache(because = "composite builds")
     def "included build dependencies are used when generating the verification file"() {
         given:
         javaLibrary()
@@ -917,7 +914,7 @@ class DependencyVerificationWritingIntegTest extends AbstractDependencyVerificat
         javaLibrary()
         uncheckedModule("org", "foo")
         uncheckedModule("org", "bar", "1.0") {
-            artifact(classifier:'classy')
+            artifact(classifier: 'classy')
         }
         buildFile << """
             dependencies {
@@ -1013,7 +1010,7 @@ class DependencyVerificationWritingIntegTest extends AbstractDependencyVerificat
         )
         MavenFileModule otherFile = alternateRepo.module("org", "foo", "1.0")
             .publish()
-        otherFile.artifactFile.bytes = [0,0,0,0]
+        otherFile.artifactFile.bytes = [0, 0, 0, 0]
 
         buildFile << """
             dependencies {
@@ -1309,15 +1306,8 @@ class DependencyVerificationWritingIntegTest extends AbstractDependencyVerificat
         run ":help", "--offline"
 
         then:
-        hasModules(["org:foo"])
+        hasModules(artifact == 'pom' ? [] : ["org:foo"])
 
-        and:
-        if (artifact == 'pom') {
-            // there's a technical limitation due to the code path used for regular artifacts
-            // which makes it that we don't even try to snapshot if the file is missing so we can't
-            // provide an error message
-            outputContains("Cannot compute checksum for")
-        }
         where:
         artifact << ['jar', 'pom']
     }

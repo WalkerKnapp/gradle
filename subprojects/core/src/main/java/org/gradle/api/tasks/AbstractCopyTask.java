@@ -27,6 +27,7 @@ import org.gradle.api.file.FileCopyDetails;
 import org.gradle.api.file.FileTree;
 import org.gradle.api.file.FileTreeElement;
 import org.gradle.api.internal.ConventionTask;
+import org.gradle.api.internal.DocumentationRegistry;
 import org.gradle.api.internal.file.FileLookup;
 import org.gradle.api.internal.file.FileResolver;
 import org.gradle.api.internal.file.collections.DirectoryFileTreeFactory;
@@ -40,7 +41,7 @@ import org.gradle.api.internal.file.copy.DefaultCopySpec;
 import org.gradle.api.specs.Spec;
 import org.gradle.internal.nativeintegration.filesystem.FileSystem;
 import org.gradle.internal.reflect.Instantiator;
-import org.gradle.util.ClosureBackedAction;
+import org.gradle.util.internal.ClosureBackedAction;
 
 import javax.annotation.Nullable;
 import javax.inject.Inject;
@@ -126,6 +127,11 @@ public abstract class AbstractCopyTask extends ConventionTask implements CopySpe
         throw new UnsupportedOperationException();
     }
 
+    @Inject
+    protected DocumentationRegistry getDocumentationRegistry() {
+        throw new UnsupportedOperationException();
+    }
+
     @TaskAction
     protected void copy() {
         CopyActionExecuter copyActionExecuter = createCopyActionExecuter();
@@ -138,7 +144,7 @@ public abstract class AbstractCopyTask extends ConventionTask implements CopySpe
         Instantiator instantiator = getInstantiator();
         FileSystem fileSystem = getFileSystem();
 
-        return new CopyActionExecuter(instantiator, fileSystem, false);
+        return new CopyActionExecuter(instantiator, fileSystem, false, getDocumentationRegistry());
     }
 
     /**

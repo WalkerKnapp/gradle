@@ -24,8 +24,8 @@ import org.gradle.api.internal.tasks.properties.OutputFilePropertySpec
 import org.gradle.api.specs.Spec
 import org.gradle.internal.execution.caching.CachingDisabledReason
 import org.gradle.internal.execution.caching.CachingDisabledReasonCategory
+import org.gradle.internal.execution.history.OverlappingOutputs
 import org.gradle.internal.file.RelativeFilePathResolver
-import org.gradle.internal.fingerprint.overlap.OverlappingOutputs
 import spock.lang.Specification
 
 import javax.annotation.Nullable
@@ -144,9 +144,9 @@ class DefaultTaskCacheabilityResolverTest extends Specification {
 
         then:
         reason.category == CachingDisabledReasonCategory.OVERLAPPING_OUTPUTS
-        reason.message == "Gradle does not know how file 'relative/path' was created (output property 'someProperty'). Task output caching requires exclusive access to output paths to guarantee correctness."
+        reason.message == "Gradle does not know how file 'relative/path' was created (output property 'someProperty'). Task output caching requires exclusive access to output paths to guarantee correctness (i.e. multiple tasks are not allowed to produce output in the same location)."
 
-        1 * relativeFilePathResolver.resolveAsRelativePath(overlappingOutputs.overlappedFilePath) >> "relative/path"
+        1 * relativeFilePathResolver.resolveForDisplay(overlappingOutputs.overlappedFilePath) >> "relative/path"
     }
 
     static def spec(Spec<TaskInternal> spec, String description = "test cacheIf()") {

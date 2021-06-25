@@ -19,16 +19,20 @@ package org.gradle.internal.fingerprint.classpath.impl;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Interner;
 import com.google.common.collect.Iterables;
-import org.gradle.api.internal.changedetection.state.ManifestFileZipEntryHasher;
-import org.gradle.api.internal.changedetection.state.PropertiesFileZipEntryHasher;
+import org.gradle.api.internal.changedetection.state.DefaultRegularFileSnapshotContext;
+import org.gradle.api.internal.changedetection.state.IgnoringResourceHasher;
+import org.gradle.api.internal.changedetection.state.MetaInfAwareClasspathResourceHasher;
+import org.gradle.api.internal.changedetection.state.PropertiesFileAwareClasspathResourceHasher;
+import org.gradle.api.internal.changedetection.state.RegularFileSnapshotContext;
 import org.gradle.api.internal.changedetection.state.ResourceEntryFilter;
 import org.gradle.api.internal.changedetection.state.ResourceFilter;
 import org.gradle.api.internal.changedetection.state.ResourceHasher;
 import org.gradle.api.internal.changedetection.state.ResourceSnapshotterCacheService;
 import org.gradle.api.internal.changedetection.state.RuntimeClasspathResourceHasher;
-import org.gradle.api.internal.changedetection.state.MetaInfAwareClasspathResourceHasher;
 import org.gradle.api.internal.changedetection.state.ZipHasher;
+import org.gradle.internal.RelativePathSupplier;
 import org.gradle.internal.file.FileType;
+import org.gradle.internal.fingerprint.DirectorySensitivity;
 import org.gradle.internal.fingerprint.FileSystemLocationFingerprint;
 import org.gradle.internal.fingerprint.FingerprintHashingStrategy;
 import org.gradle.internal.fingerprint.impl.AbstractFingerprintingStrategy;
@@ -37,18 +41,18 @@ import org.gradle.internal.fingerprint.impl.IgnoredPathFileSystemLocationFingerp
 import org.gradle.internal.hash.HashCode;
 import org.gradle.internal.hash.Hasher;
 import org.gradle.internal.hash.Hashing;
-import org.gradle.internal.snapshot.CompleteDirectorySnapshot;
-import org.gradle.internal.snapshot.CompleteFileSystemLocationSnapshot;
+import org.gradle.internal.snapshot.FileSystemLocationSnapshot;
+import org.gradle.internal.snapshot.FileSystemLocationSnapshot.FileSystemLocationSnapshotVisitor;
 import org.gradle.internal.snapshot.FileSystemSnapshot;
-import org.gradle.internal.snapshot.FileSystemSnapshotVisitor;
+import org.gradle.internal.snapshot.MissingFileSnapshot;
 import org.gradle.internal.snapshot.RegularFileSnapshot;
-import org.gradle.internal.snapshot.RelativePathSegmentsTracker;
-import org.gradle.internal.snapshot.RelativePathStringTracker;
+import org.gradle.internal.snapshot.RelativePathTracker;
+import org.gradle.internal.snapshot.RelativePathTrackingFileSystemSnapshotHierarchyVisitor;
+import org.gradle.internal.snapshot.SnapshotVisitResult;
 
 import javax.annotation.Nullable;
 import java.util.HashSet;
 import java.util.Map;
-import java.util.function.Supplier;
 
 import static org.gradle.internal.fingerprint.classpath.impl.ClasspathFingerprintingStrategy.NonJarFingerprintingStrategy.IGNORE;
 import static org.gradle.internal.fingerprint.classpath.impl.ClasspathFingerprintingStrategy.NonJarFingerprintingStrategy.USE_FILE_HASH;
@@ -66,58 +70,71 @@ import static org.gradle.internal.fingerprint.classpath.impl.ClasspathFingerprin
  * </p>
  */
 public class ClasspathFingerprintingStrategy extends AbstractFingerprintingStrategy {
-
     private final NonJarFingerprintingStrategy nonZipFingerprintingStrategy;
-    private final ResourceFilter classpathResourceFilter;
     private final ResourceSnapshotterCacheService cacheService;
     private final ResourceHasher classpathResourceHasher;
     private final ZipHasher zipHasher;
     private final Interner<String> stringInterner;
     private final HashCode zipHasherConfigurationHash;
 
-    private ClasspathFingerprintingStrategy(String identifier, NonJarFingerprintingStrategy nonZipFingerprintingStrategy, ResourceHasher classpathResourceHasher, ResourceFilter classpathResourceFilter, ResourceSnapshotterCacheService cacheService, Interner<String> stringInterner) {
+    private ClasspathFingerprintingStrategy(String identifier,
+                                           NonJarFingerprintingStrategy nonZipFingerprintingStrategy,
+                                           ResourceHasher classpathResourceHasher,
+                                           ZipHasher zipHasher,
+                                           ResourceSnapshotterCacheService cacheService,
+                                           Interner<String> stringInterner) {
         super(identifier);
         this.nonZipFingerprintingStrategy = nonZipFingerprintingStrategy;
-        this.classpathResourceFilter = classpathResourceFilter;
         this.classpathResourceHasher = classpathResourceHasher;
         this.cacheService = cacheService;
         this.stringInterner = stringInterner;
-        this.zipHasher = new ZipHasher(classpathResourceHasher, classpathResourceFilter);
+        this.zipHasher = zipHasher;
 
         Hasher hasher = Hashing.newHasher();
         zipHasher.appendConfigurationToHasher(hasher);
         this.zipHasherConfigurationHash = hasher.hash();
     }
 
-    public static ClasspathFingerprintingStrategy runtimeClasspath(ResourceFilter classpathResourceFilter, ResourceEntryFilter manifestAttributeResourceEntryFilter, ResourceEntryFilter manifestPropertyResourceEntryFilter, RuntimeClasspathResourceHasher runtimeClasspathResourceHasher, ResourceSnapshotterCacheService cacheService, Interner<String> stringInterner) {
-        return new ClasspathFingerprintingStrategy("CLASSPATH", USE_FILE_HASH, metaInfAwareClasspathResourceHasher(runtimeClasspathResourceHasher, manifestAttributeResourceEntryFilter, manifestPropertyResourceEntryFilter), classpathResourceFilter, cacheService, stringInterner);
+    public static ClasspathFingerprintingStrategy runtimeClasspath(ResourceFilter classpathResourceFilter, ResourceEntryFilter manifestAttributeResourceEntryFilter, Map<String, ResourceEntryFilter> propertiesFileFilters, RuntimeClasspathResourceHasher runtimeClasspathResourceHasher, ResourceSnapshotterCacheService cacheService, Interner<String> stringInterner) {
+        ResourceHasher resourceHasher = propertiesFileHasher(runtimeClasspathResourceHasher, propertiesFileFilters);
+        resourceHasher = metaInfAwareClasspathResourceHasher(resourceHasher, manifestAttributeResourceEntryFilter);
+        resourceHasher = ignoringResourceHasher(resourceHasher, classpathResourceFilter);
+        ZipHasher zipHasher = new ZipHasher(resourceHasher);
+        return new ClasspathFingerprintingStrategy(CLASSPATH_IDENTIFIER, USE_FILE_HASH, resourceHasher, zipHasher, cacheService, stringInterner);
     }
 
     public static ClasspathFingerprintingStrategy compileClasspath(ResourceHasher classpathResourceHasher, ResourceSnapshotterCacheService cacheService, Interner<String> stringInterner) {
-        return new ClasspathFingerprintingStrategy("COMPILE_CLASSPATH", IGNORE, classpathResourceHasher, ResourceFilter.FILTER_NOTHING, cacheService, stringInterner);
+        ZipHasher zipHasher = new ZipHasher(classpathResourceHasher);
+        return new ClasspathFingerprintingStrategy(COMPILE_CLASSPATH_IDENTIFIER, IGNORE, classpathResourceHasher, zipHasher, cacheService, stringInterner);
     }
 
-    private static ResourceHasher metaInfAwareClasspathResourceHasher(ResourceHasher resourceHasher, ResourceEntryFilter manifestAttributeResourceEntryFilter, ResourceEntryFilter manifestPropertyResourceEntryFilter) {
-        return new MetaInfAwareClasspathResourceHasher(
-            resourceHasher,
-            new ManifestFileZipEntryHasher(manifestAttributeResourceEntryFilter),
-            new PropertiesFileZipEntryHasher(manifestPropertyResourceEntryFilter)
-        );
+    public static ClasspathFingerprintingStrategy compileClasspath(ResourceHasher classpathResourceHasher, ResourceSnapshotterCacheService cacheService, Interner<String> stringInterner, ZipHasher.HashingExceptionReporter hashingExceptionReporter) {
+        ZipHasher zipHasher = new ZipHasher(classpathResourceHasher, hashingExceptionReporter);
+        return new ClasspathFingerprintingStrategy(COMPILE_CLASSPATH_IDENTIFIER, IGNORE, classpathResourceHasher, zipHasher, cacheService, stringInterner);
+    }
+
+    private static ResourceHasher ignoringResourceHasher(ResourceHasher delegate, ResourceFilter resourceFilter) {
+        return new IgnoringResourceHasher(delegate, resourceFilter);
+    }
+
+    private static ResourceHasher propertiesFileHasher(ResourceHasher delegate, Map<String, ResourceEntryFilter> propertiesFileFilters) {
+        return new PropertiesFileAwareClasspathResourceHasher(delegate, propertiesFileFilters);
+    }
+
+    private static ResourceHasher metaInfAwareClasspathResourceHasher(ResourceHasher delegate, ResourceEntryFilter manifestAttributeResourceEntryFilter) {
+        return new MetaInfAwareClasspathResourceHasher(delegate, manifestAttributeResourceEntryFilter);
     }
 
     @Override
-    public String normalizePath(CompleteFileSystemLocationSnapshot snapshot) {
+    public String normalizePath(FileSystemLocationSnapshot snapshot) {
         return "";
     }
 
     @Override
-    public Map<String, FileSystemLocationFingerprint> collectFingerprints(Iterable<? extends FileSystemSnapshot> roots) {
+    public Map<String, FileSystemLocationFingerprint> collectFingerprints(FileSystemSnapshot roots) {
         ImmutableMap.Builder<String, FileSystemLocationFingerprint> builder = ImmutableMap.builder();
-        HashSet<String> processedEntries = new HashSet<String>();
-        for (FileSystemSnapshot root : roots) {
-            ClasspathFingerprintVisitor fingerprintVisitor = new ClasspathFingerprintVisitor(processedEntries, builder);
-            root.accept(new ClasspathContentFingerprintingVisitor(fingerprintVisitor));
-        }
+        HashSet<String> processedEntries = new HashSet<>();
+        roots.accept(new RelativePathTracker(), new ClasspathFingerprintingVisitor(processedEntries, builder));
         return builder.build();
     }
 
@@ -140,115 +157,75 @@ public class ClasspathFingerprintingStrategy extends AbstractFingerprintingStrat
         public abstract HashCode determineNonJarFingerprint(HashCode original);
     }
 
-    private class ClasspathContentFingerprintingVisitor implements FileSystemSnapshotVisitor {
-        private final ClasspathFingerprintVisitor delegate;
-        private final RelativePathSegmentsTracker relativePathSegmentsTracker = new RelativePathSegmentsTracker();
-        private final Supplier<String[]> relativePathFactory = () ->
-            Iterables.toArray(relativePathSegmentsTracker.getRelativePath(), String.class);
-
-        public ClasspathContentFingerprintingVisitor(ClasspathFingerprintVisitor delegate) {
-            this.delegate = delegate;
-        }
-
-        @Override
-        public boolean preVisitDirectory(CompleteDirectorySnapshot directorySnapshot) {
-            relativePathSegmentsTracker.enter(directorySnapshot);
-            return delegate.preVisitDirectory(directorySnapshot);
-        }
-
-        @Override
-        public void visitFile(CompleteFileSystemLocationSnapshot fileSnapshot) {
-            if (fileSnapshot instanceof RegularFileSnapshot) {
-                HashCode normalizedContent = fingerprintFile((RegularFileSnapshot) fileSnapshot);
-                if (normalizedContent != null) {
-                    delegate.visit(fileSnapshot, normalizedContent);
-                }
-            } else if (!relativePathSegmentsTracker.isRoot()) {
-                throw new RuntimeException(String.format("Couldn't read file content: '%s'.", fileSnapshot.getAbsolutePath()));
-            }
-        }
-
-        @Nullable
-        private HashCode fingerprintFile(RegularFileSnapshot fileSnapshot) {
-            return relativePathSegmentsTracker.isRoot() ? fingerprintRootFile(fileSnapshot) : fingerprintTreeFile(fileSnapshot);
-        }
-
-        @Nullable
-        private HashCode fingerprintTreeFile(RegularFileSnapshot fileSnapshot) {
-            relativePathSegmentsTracker.enter(fileSnapshot);
-            boolean shouldBeIgnored = classpathResourceFilter.shouldBeIgnored(relativePathFactory);
-            relativePathSegmentsTracker.leave();
-            if (shouldBeIgnored) {
-                return null;
-            }
-            if (ZipHasher.isZipFile(fileSnapshot.getName())) {
-                return fingerprintZipContents(fileSnapshot);
-            } else {
-                return classpathResourceHasher.hash(fileSnapshot);
-            }
-        }
-
-        @Override
-        public void postVisitDirectory(CompleteDirectorySnapshot directorySnapshot) {
-            relativePathSegmentsTracker.leave();
-            delegate.postVisitDirectory();
-        }
-    }
-
-    @Nullable
-    private HashCode fingerprintRootFile(RegularFileSnapshot fileSnapshot) {
-        if (ZipHasher.isZipFile(fileSnapshot.getName())) {
-            return fingerprintZipContents(fileSnapshot);
-        }
-        return nonZipFingerprintingStrategy.determineNonJarFingerprint(fileSnapshot.getHash());
-    }
-
-    @Nullable
-    private HashCode fingerprintZipContents(RegularFileSnapshot fileSnapshot) {
-        return cacheService.hashFile(fileSnapshot, zipHasher, zipHasherConfigurationHash);
-    }
-
-    private class ClasspathFingerprintVisitor {
-        private final RelativePathStringTracker relativePathStringTracker;
+    private class ClasspathFingerprintingVisitor implements RelativePathTrackingFileSystemSnapshotHierarchyVisitor {
         private final HashSet<String> processedEntries;
         private final ImmutableMap.Builder<String, FileSystemLocationFingerprint> builder;
 
-        public ClasspathFingerprintVisitor(HashSet<String> processedEntries, ImmutableMap.Builder<String, FileSystemLocationFingerprint> builder) {
+
+        public ClasspathFingerprintingVisitor(HashSet<String> processedEntries, ImmutableMap.Builder<String, FileSystemLocationFingerprint> builder) {
             this.processedEntries = processedEntries;
             this.builder = builder;
-            this.relativePathStringTracker = new RelativePathStringTracker();
         }
 
-        public boolean preVisitDirectory(CompleteFileSystemLocationSnapshot directorySnapshot) {
-            relativePathStringTracker.enter(directorySnapshot);
-            return true;
+        @Override
+        public SnapshotVisitResult visitEntry(FileSystemLocationSnapshot snapshot, RelativePathSupplier relativePath) {
+            snapshot.accept(new FileSystemLocationSnapshotVisitor() {
+                @Override
+                public void visitRegularFile(RegularFileSnapshot fileSnapshot) {
+                    HashCode normalizedContentHash = hashContent(fileSnapshot, relativePath);
+                    if (normalizedContentHash == null) {
+                        return;
+                    }
+
+                    String absolutePath = snapshot.getAbsolutePath();
+                    if (!processedEntries.add(absolutePath)) {
+                        return;
+                    }
+
+                    FileSystemLocationFingerprint fingerprint;
+                    if (relativePath.isRoot()) {
+                        fingerprint = IgnoredPathFileSystemLocationFingerprint.create(snapshot.getType(), normalizedContentHash);
+                    } else {
+                        String internedRelativePath = stringInterner.intern(relativePath.toRelativePath());
+                        fingerprint = new DefaultFileSystemLocationFingerprint(internedRelativePath, FileType.RegularFile, normalizedContentHash);
+                    }
+                    builder.put(absolutePath, fingerprint);
+                }
+
+                @Override
+                public void visitMissing(MissingFileSnapshot missingSnapshot) {
+                    if (!relativePath.isRoot()) {
+                        throw new RuntimeException(String.format("Couldn't read file content: '%s'.", missingSnapshot.getAbsolutePath()));
+                    }
+                }
+            });
+            return SnapshotVisitResult.CONTINUE;
         }
 
-        public void visit(CompleteFileSystemLocationSnapshot fileSnapshot, HashCode normalizedContentHash) {
-            String absolutePath = fileSnapshot.getAbsolutePath();
-            if (processedEntries.add(absolutePath)) {
-                FileSystemLocationFingerprint fingerprint = relativePathStringTracker.isRoot() ? IgnoredPathFileSystemLocationFingerprint.create(fileSnapshot.getType(), normalizedContentHash) : createFileFingerprint(fileSnapshot, normalizedContentHash);
-                builder.put(
-                    absolutePath,
-                    fingerprint
-                );
+        /**
+         * Returns either the normalized content hash of the given regular file,
+         * or {@code null} if a resource filter has filtered the file out.
+         */
+        @Nullable
+        private HashCode hashContent(RegularFileSnapshot fileSnapshot, RelativePathSupplier relativePath) {
+            RegularFileSnapshotContext fileSnapshotContext = new DefaultRegularFileSnapshotContext(() -> Iterables.toArray(relativePath.getSegments(), String.class), fileSnapshot);
+            if (ZipHasher.isZipFile(fileSnapshotContext.getSnapshot().getName())) {
+                return cacheService.hashFile(fileSnapshotContext, zipHasher, zipHasherConfigurationHash);
+            } else if (relativePath.isRoot()) {
+                return nonZipFingerprintingStrategy.determineNonJarFingerprint(fileSnapshot.getHash());
+            } else {
+                return classpathResourceHasher.hash(fileSnapshotContext);
             }
-        }
-
-        private FileSystemLocationFingerprint createFileFingerprint(CompleteFileSystemLocationSnapshot snapshot, HashCode content) {
-            relativePathStringTracker.enter(snapshot);
-            FileSystemLocationFingerprint fingerprint = new DefaultFileSystemLocationFingerprint(stringInterner.intern(relativePathStringTracker.getRelativePathString()), FileType.RegularFile, content);
-            relativePathStringTracker.leave();
-            return fingerprint;
-        }
-
-        public void postVisitDirectory() {
-            relativePathStringTracker.leave();
         }
     }
 
     @Override
     public FingerprintHashingStrategy getHashingStrategy() {
         return FingerprintHashingStrategy.KEEP_ORDER;
+    }
+
+    @Override
+    public DirectorySensitivity getDirectorySensitivity() {
+        return DirectorySensitivity.DEFAULT;
     }
 }

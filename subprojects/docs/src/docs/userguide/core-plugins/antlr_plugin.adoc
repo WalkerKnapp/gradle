@@ -88,18 +88,26 @@ include::sample[dir="snippets/antlr/useAntlrPlugin/kotlin",files="build.gradle.k
 
 If no dependency is declared, `antlr:antlr:2.7.7` will be used as the default. To use a different ANTLR version add the appropriate dependency to the `antlr` dependency configuration as above.
 
-[[sec:antlr_convention_properties]]
-== Convention properties
+[[sec:antlr_extensions]]
+== Contributed extension
 
-The ANTLR plugin does not add any convention properties.
+`antlr` — link:{groovyDslPath}/org.gradle.api.plugins.antlr.AntlrSourceDirectorySet.html[AntlrSourceDirectorySet]::
+The ANTLR grammar files of this source set. Contains all `.g` or `.g4` files found in the ANTLR source directories, and excludes all other types of files. _Default value is non-null._
+
+[[sec:antlr_convention_properties]]
+== Convention properties (deprecated)
+
+The ANTLR plugin adds one convention property.
+
+`antlr` — link:{groovyDslPath}/org.gradle.api.file.SourceDirectorySet.html[SourceDirectorySet]::
+The ANTLR grammar files of this source set. Contains all `.g` or `.g4` files found in the ANTLR source directories, and excludes all other types of files. _Default value is non-null._
+
+This convention property is *deprecated* and superseded by the extension described above.
 
 [[sec:antlr_source_set_properties]]
 == Source set properties
 
 The ANTLR plugin adds the following properties to each source set in the project.
-
-`antlr` — link:{groovyDslPath}/org.gradle.api.file.SourceDirectorySet.html[SourceDirectorySet]::
-The ANTLR grammar files of this source set. Contains all `.g` or `.g4` files found in the ANTLR source directories, and excludes all other types of files. _Default value is non-null._
 
 `antlr.srcDirs` — `Set&lt;File&gt;`::
 The source directories containing the ANTLR grammar files of this source set.

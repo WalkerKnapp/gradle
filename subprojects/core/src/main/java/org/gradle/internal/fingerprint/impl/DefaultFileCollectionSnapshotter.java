@@ -22,10 +22,11 @@ import org.gradle.api.internal.file.FileCollectionStructureVisitor;
 import org.gradle.api.internal.file.FileTreeInternal;
 import org.gradle.api.internal.file.collections.FileSystemMirroringFileTree;
 import org.gradle.api.tasks.util.PatternSet;
+import org.gradle.internal.execution.fingerprint.FileCollectionSnapshotter;
 import org.gradle.internal.file.FileType;
 import org.gradle.internal.file.Stat;
-import org.gradle.internal.fingerprint.FileCollectionSnapshotter;
 import org.gradle.internal.fingerprint.GenericFileTreeSnapshotter;
+import org.gradle.internal.snapshot.CompositeFileSystemSnapshot;
 import org.gradle.internal.snapshot.FileSystemSnapshot;
 import org.gradle.internal.vfs.FileSystemAccess;
 
@@ -45,12 +46,11 @@ public class DefaultFileCollectionSnapshotter implements FileCollectionSnapshott
     }
 
     @Override
-    public List<FileSystemSnapshot> snapshot(FileCollection fileCollection) {
+    public FileSystemSnapshot snapshot(FileCollection fileCollection) {
         SnapshottingVisitor visitor = new SnapshottingVisitor();
         ((FileCollectionInternal) fileCollection).visitStructure(visitor);
-        return visitor.getRoots();
+        return CompositeFileSystemSnapshot.of(visitor.getRoots());
     }
-
 
     private class SnapshottingVisitor implements FileCollectionStructureVisitor {
         private final List<FileSystemSnapshot> roots = new ArrayList<>();

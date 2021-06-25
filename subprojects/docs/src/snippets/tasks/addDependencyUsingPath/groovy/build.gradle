@@ -1,14 +1,14 @@
-project('projectA') {
-    task taskX {
-        dependsOn ':projectB:taskY'
+project('project-a') {
+    tasks.register('taskX')  {
+        dependsOn ':project-b:taskY'
         doLast {
             println 'taskX'
         }
     }
 }
 
-project('projectB') {
-    task taskY {
+project('project-b') {
+    tasks.register('taskY') {
         doLast {
             println 'taskY'
         }

@@ -22,7 +22,7 @@ import org.gradle.integtests.fixtures.DirectoryBuildCacheFixture
 import org.gradle.integtests.fixtures.executer.GradleContextualExecuter
 import org.gradle.internal.jvm.Jvm
 import org.gradle.test.fixtures.file.TestFile
-import org.gradle.util.TextUtil
+import org.gradle.util.internal.TextUtil
 import spock.lang.IgnoreIf
 import spock.lang.Unroll
 
@@ -429,7 +429,6 @@ class CachedTaskExecutionIntegrationTest extends AbstractIntegrationSpec impleme
 
         def stableInputsFingerprintLog = result.getOutputLineThatContains(sourcesDebugLogging)
         stableInputsFingerprintLog.contains("RELATIVE_PATH{${testDirectory.absolutePath}")
-        stableInputsFingerprintLog.contains("java=IGNORED / DIR")
         stableInputsFingerprintLog.contains("Hello.java='Hello.java' / ")
     }
 

@@ -16,20 +16,20 @@
 
 package org.gradle.smoketests
 
+import org.gradle.api.JavaVersion
 import org.gradle.integtests.fixtures.daemon.DaemonLogsAnalyzer
 import org.gradle.internal.scan.config.fixtures.ApplyGradleEnterprisePluginFixture
 import org.gradle.test.fixtures.file.TestFile
 import org.gradle.test.fixtures.file.TestNameTestDirectoryProvider
 import org.gradle.testkit.runner.BuildResult
-import org.gradle.testkit.runner.GradleRunner
 import org.gradle.testkit.runner.TaskOutcome
 import org.gradle.testkit.runner.internal.ToolingApiGradleExecutor
+import org.gradle.util.GradleVersion
 import org.junit.Rule
-
 
 class AbstractAndroidSantaTrackerSmokeTest extends AbstractSmokeTest {
 
-    protected static final List<String> TESTED_AGP_VERSIONS = AGP_VERSIONS.getLatestsFromMinorPlusNightly("3.6")
+    protected static final Iterable<String> TESTED_AGP_VERSIONS = TestedVersions.androidGradle.versions
 
     @Rule
     TestNameTestDirectoryProvider temporaryFolder = new TestNameTestDirectoryProvider(getClass())
@@ -44,8 +44,8 @@ class AbstractAndroidSantaTrackerSmokeTest extends AbstractSmokeTest {
         DaemonLogsAnalyzer.newAnalyzer(homeDir.file(ToolingApiGradleExecutor.TEST_KIT_DAEMON_DIR_NAME)).killAll()
     }
 
-    protected void setupCopyOfSantaTracker(TestFile targetDir, String flavour, String agpVersion = null) {
-        copyRemoteProject("santaTracker${flavour.capitalize()}", targetDir)
+    protected void setupCopyOfSantaTracker(TestFile targetDir) {
+        copyRemoteProject("santaTracker", targetDir)
         ApplyGradleEnterprisePluginFixture.applyEnterprisePlugin(targetDir.file("settings.gradle"))
     }
 
@@ -53,15 +53,43 @@ class AbstractAndroidSantaTrackerSmokeTest extends AbstractSmokeTest {
         return runnerForLocation(projectDir, agpVersion, "assembleDebug").build()
     }
 
+    protected BuildResult buildLocationMaybeExpectingWorkerExecutorDeprecation(File location, String agpVersion) {
+        return runnerForLocationMaybeExpectingWorkerExecutorDeprecation(location, agpVersion, "assembleDebug")
+            .build()
+    }
+
+    protected SmokeTestGradleRunner runnerForLocationMaybeExpectingWorkerExecutorDeprecation(File location, String agpVersion, String... tasks) {
+        return runnerForLocation(location, agpVersion, tasks)
+            .expectLegacyDeprecationWarningIf(agpVersion.startsWith("4.1"),
+                "The WorkerExecutor.submit() method has been deprecated. " +
+                    "This is scheduled to be removed in Gradle 8.0. " +
+                    "Please use the noIsolation(), classLoaderIsolation() or processIsolation() method instead. " +
+                    "See https://docs.gradle.org/${GradleVersion.current().version}/userguide/upgrading_version_5.html#method_workerexecutor_submit_is_deprecated for more details."
+            )
+    }
+
     protected BuildResult cleanLocation(File projectDir, String agpVersion) {
         return runnerForLocation(projectDir, agpVersion, "clean").build()
     }
 
-    private GradleRunner runnerForLocation(File projectDir, String agpVersion, String... tasks) {
-        def runner = runner(*[["-DagpVersion=$agpVersion"], tasks].flatten())
+    protected SmokeTestGradleRunner runnerForLocation(File projectDir, String agpVersion, String... tasks) {
+        def runner = runner(*[["-DagpVersion=$agpVersion", "-DkotlinVersion=${TestedVersions.kotlin.latest()}", "--stacktrace"], tasks].flatten())
             .withProjectDir(projectDir)
             .withTestKitDir(homeDir)
             .forwardOutput()
+        if (JavaVersion.current().isJava9Compatible()) {
+            runner.withJvmArguments(
+                "-Xmx8g", "-XX:MaxMetaspaceSize=1024m", "-XX:+HeapDumpOnOutOfMemoryError",
+                "--add-opens", "jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED",
+                "--add-opens", "jdk.compiler/com.sun.tools.javac.file=ALL-UNNAMED",
+                "--add-opens", "jdk.compiler/com.sun.tools.javac.main=ALL-UNNAMED",
+                "--add-opens", "jdk.compiler/com.sun.tools.javac.jvm=ALL-UNNAMED",
+                "--add-opens", "jdk.compiler/com.sun.tools.javac.processing=ALL-UNNAMED",
+                "--add-opens", "jdk.compiler/com.sun.tools.javac.comp=ALL-UNNAMED",
+                "--add-opens", "jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED",
+                "--add-opens", "jdk.compiler/com.sun.tools.javac.tree=ALL-UNNAMED"
+            )
+        }
         if (AGP_VERSIONS.isAgpNightly(agpVersion)) {
             def init = AGP_VERSIONS.createAgpNightlyRepositoryInitScript()
             runner.withArguments([runner.arguments, ['-I', init.canonicalPath]].flatten())

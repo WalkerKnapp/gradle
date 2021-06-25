@@ -16,31 +16,30 @@
 
 package org.gradle.internal.execution.steps
 
-import org.gradle.internal.execution.CurrentSnapshotResult
 import org.gradle.internal.execution.history.OutputFilesRepository
 
-class RecordOutputsStepTest extends ContextInsensitiveStepSpec implements FingerprinterFixture {
+class RecordOutputsStepTest extends ContextInsensitiveStepSpec implements SnasphotterFixture {
     def outputFilesRepository = Mock(OutputFilesRepository)
     def step = new RecordOutputsStep<>(outputFilesRepository, delegate)
 
     def outputFile = file("output.txt").text = "output"
-    def finalOutputs = fingerprintsOf(output: outputFile)
+    def outputFilesProduceByWork = snapshotsOf(output: outputFile)
 
     def delegateResult = Mock(CurrentSnapshotResult)
 
     def "outputs are recorded after execution"() {
         when:
-        def result = step.execute(context)
+        def result = step.execute(work, context)
 
         then:
         result == delegateResult
-        1 * delegate.execute(context) >> delegateResult
+        1 * delegate.execute(work, context) >> delegateResult
 
         then:
-        1 * delegateResult.finalOutputs >> finalOutputs
+        1 * delegateResult.outputFilesProduceByWork >> outputFilesProduceByWork
 
         then:
-        1 * outputFilesRepository.recordOutputs(finalOutputs.values())
+        1 * outputFilesRepository.recordOutputs(outputFilesProduceByWork.values())
         0 * _
     }
 }

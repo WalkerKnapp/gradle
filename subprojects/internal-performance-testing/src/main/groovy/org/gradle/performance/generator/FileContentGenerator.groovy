@@ -16,19 +16,22 @@
 
 package org.gradle.performance.generator
 
+import groovy.transform.CompileStatic
 import org.gradle.test.fixtures.dsl.GradleDsl
 import org.gradle.test.fixtures.language.Language
 
 import static org.gradle.test.fixtures.dsl.GradleDsl.KOTLIN
 
+@CompileStatic
 abstract class FileContentGenerator {
-
     static FileContentGenerator forConfig(TestProjectGeneratorConfiguration config) {
         switch (config.dsl) {
             case KOTLIN:
                 return new KotlinDslFileContentGenerator(config)
             case GradleDsl.GROOVY:
                 return new GroovyDslFileContentGenerator(config)
+            default:
+                throw new IllegalStateException("Should not be here!")
         }
     }
 
@@ -38,7 +41,7 @@ abstract class FileContentGenerator {
         this.config = config
     }
 
-    def generateBuildGradle(Language language, Integer subProjectNumber, DependencyTree dependencyTree) {
+    String generateBuildGradle(Language language, Integer subProjectNumber, DependencyTree dependencyTree) {
         def isRoot = subProjectNumber == null
         if (isRoot && config.subProjects > 0) {
             if (config.compositeBuild) {
@@ -52,7 +55,6 @@ abstract class FileContentGenerator {
         return """
         import org.gradle.util.GradleVersion
 
-        ${missingJavaLibrarySupportFlag()}
         ${noJavaLibraryPluginFlag()}
 
         ${config.plugins.collect { decideOnJavaPlugin(it, dependencyTree.hasParentProject(subProjectNumber)) }.join("\n        ")}
@@ -78,7 +80,7 @@ abstract class FileContentGenerator {
         """
     }
 
-    def generateSettingsGradle(boolean isRoot) {
+    String generateSettingsGradle(boolean isRoot) {
         if (config.compositeBuild) {
             if (!isRoot) {
                 return ""
@@ -114,12 +116,12 @@ abstract class FileContentGenerator {
 
     abstract protected String generateEnableFeaturePreviewCode()
 
-    def generateGradleProperties(boolean isRoot) {
+    String generateGradleProperties(boolean isRoot) {
         if (!isRoot && !config.compositeBuild) {
             return null
         }
         """
-        org.gradle.jvmargs=-Xmxs${config.daemonMemory} -Xmx${config.daemonMemory}
+        org.gradle.jvmargs=-Xms${config.daemonMemory} -Xmx${config.daemonMemory} -Dfile.encoding=UTF-8
         org.gradle.parallel=${config.parallel}
         org.gradle.workers.max=${config.maxWorkers}
         compilerMemory=${config.compilerMemory}
@@ -131,7 +133,7 @@ abstract class FileContentGenerator {
         """
     }
 
-    def generatePomXML(Integer subProjectNumber, DependencyTree dependencyTree) {
+    String generatePomXML(Integer subProjectNumber, DependencyTree dependencyTree) {
         def body = ""
         def isParent = subProjectNumber == null || config.subProjects == 0
         def hasSources = subProjectNumber != null || config.subProjects == 0
@@ -198,12 +200,12 @@ abstract class FileContentGenerator {
             def subProjectNumbers = dependencyTree.getChildProjectIds(subProjectNumber)
             def subProjectDependencies = ''
             if (subProjectNumbers?.size() > 0) {
-                subProjectDependencies = subProjectNumbers.collect { convertToPomDependency("org.gradle.test.performance:project$it:1.0") }.join()
+                subProjectDependencies = subProjectNumbers.collect { convertToPomDependency("org.gradle.test.performance:project$it:1.0") }.join("")
             }
             body += """
             <dependencies>
-                ${config.externalApiDependencies.collect { convertToPomDependency(it) }.join()}
-                ${config.externalImplementationDependencies.collect { convertToPomDependency(it) }.join()}
+                ${config.externalApiDependencies.collect { convertToPomDependency(it) }.join("")}
+                ${config.externalImplementationDependencies.collect { convertToPomDependency(it) }.join("")}
                 ${convertToPomDependency('junit:junit:4.13', 'test')}
                 ${subProjectDependencies}
             </dependencies>
@@ -222,7 +224,7 @@ abstract class FileContentGenerator {
         """
     }
 
-    def generatePerformanceScenarios(boolean isRoot) {
+    String generatePerformanceScenarios(boolean isRoot) {
         if (isRoot) {
             def fileToChange = config.fileToChangeByScenario['assemble']
             """
@@ -307,7 +309,7 @@ abstract class FileContentGenerator {
         }
     }
 
-    def generateProductionClassFile(Integer subProjectNumber, int classNumber, DependencyTree dependencyTree) {
+    String generateProductionClassFile(Integer subProjectNumber, int classNumber, DependencyTree dependencyTree) {
         def properties = ''
         def ownPackageName = packageName(classNumber, subProjectNumber)
         def imports = ''
@@ -347,7 +349,7 @@ abstract class FileContentGenerator {
         """
     }
 
-    def generateTestClassFile(Integer subProjectNumber, int classNumber, DependencyTree dependencyTree) {
+    String generateTestClassFile(Integer subProjectNumber, int classNumber, DependencyTree dependencyTree) {
         def testMethods = ""
         def ownPackageName = packageName(classNumber, subProjectNumber)
         def imports = ''
@@ -397,15 +399,15 @@ abstract class FileContentGenerator {
         "org${separator}gradle${separator}test${separator}performance${separator}${config.projectName.toLowerCase()}${projectPackage}$subPackage"
     }
 
-    protected final getPropertyCount() {
-        Math.ceil(config.minLinesOfCodePerSourceFile / 10)
+    protected final int getPropertyCount() {
+        Math.ceil((double) config.minLinesOfCodePerSourceFile / 10)
     }
 
     protected final String decideOnJavaPlugin(String plugin, Boolean projectHasParents) {
         if (plugin.contains('java')) {
             if (projectHasParents) {
                 return """
-                    if (missingJavaLibrarySupport || noJavaLibraryPlugin) {
+                    if (noJavaLibraryPlugin) {
                         ${imperativelyApplyPlugin("java")}
                     } else {
                         ${imperativelyApplyPlugin("java-library")}
@@ -436,15 +438,9 @@ abstract class FileContentGenerator {
                     $subProjectDependencies
         """
         return """
-            ${configurationsIfMissingJavaLibrarySupport(hasParent)}
-            if (hasProperty("compileConfiguration")) {
-                dependencies {
-                    ${block.replace(api, 'compile').replace(implementation, 'compile').replace(testImplementation, 'testCompile')}
-                }
-            } else {
-                dependencies {
-                    $block
-                }
+            ${addJavaLibraryConfigurationsIfNecessary(hasParent)}
+            dependencies {
+                $block
             }
         """
     }
@@ -463,8 +459,6 @@ abstract class FileContentGenerator {
                 </dependency>"""
     }
 
-    protected abstract String missingJavaLibrarySupportFlag()
-
     protected abstract String noJavaLibraryPluginFlag()
 
     protected abstract String tasksConfiguration()
@@ -473,7 +467,7 @@ abstract class FileContentGenerator {
 
     protected abstract String createTaskThatDependsOnAllIncludedBuildsTaskWithSameName(String taskName)
 
-    protected abstract String configurationsIfMissingJavaLibrarySupport(boolean hasParent)
+    protected abstract String addJavaLibraryConfigurationsIfNecessary(boolean hasParent)
 
     protected abstract String directDependencyDeclaration(String configuration, String notation)
 

@@ -18,11 +18,9 @@ package org.gradle.configurationcache.serialization.codecs
 
 import org.gradle.api.file.FileCollection
 import org.gradle.api.file.FileTree
+import org.gradle.api.internal.artifacts.ivyservice.resolveengine.artifact.ArtifactSetToFileCollectionFactory
 import org.gradle.api.internal.artifacts.ivyservice.resolveengine.artifact.LocalFileDependencyBackedArtifactSet
-import org.gradle.api.internal.artifacts.transform.DefaultArtifactTransformDependencies
-import org.gradle.api.internal.artifacts.transform.Transformation
-import org.gradle.api.internal.artifacts.transform.TransformationNode
-import org.gradle.api.internal.artifacts.transform.TransformationSubject
+import org.gradle.api.internal.artifacts.ivyservice.resolveengine.artifact.ResolvedArtifactSet
 import org.gradle.api.internal.artifacts.transform.TransformedExternalArtifactSet
 import org.gradle.api.internal.artifacts.transform.TransformedProjectArtifactSet
 import org.gradle.api.internal.file.FileCollectionFactory
@@ -31,6 +29,7 @@ import org.gradle.api.internal.file.FileCollectionStructureVisitor
 import org.gradle.api.internal.file.FileTreeInternal
 import org.gradle.api.internal.file.FilteredFileCollection
 import org.gradle.api.internal.file.SubtractingFileCollection
+import org.gradle.api.internal.file.collections.FailingFileCollection
 import org.gradle.api.internal.file.collections.FileSystemMirroringFileTree
 import org.gradle.api.internal.file.collections.MinimalFileSet
 import org.gradle.api.internal.file.collections.ProviderBackedFileCollection
@@ -41,21 +40,17 @@ import org.gradle.api.tasks.util.PatternSet
 import org.gradle.configurationcache.serialization.Codec
 import org.gradle.configurationcache.serialization.ReadContext
 import org.gradle.configurationcache.serialization.WriteContext
-import org.gradle.configurationcache.serialization.codecs.transform.FixedDependenciesResolver
 import org.gradle.configurationcache.serialization.decodePreservingIdentity
 import org.gradle.configurationcache.serialization.encodePreservingIdentityOf
 import org.gradle.configurationcache.serialization.logPropertyProblem
 import java.io.File
-import java.util.concurrent.Callable
 
 
 internal
 class FileCollectionCodec(
-    private val fileCollectionFactory: FileCollectionFactory
+    private val fileCollectionFactory: FileCollectionFactory,
+    private val artifactSetConverter: ArtifactSetToFileCollectionFactory
 ) : Codec<FileCollectionInternal> {
-
-    private
-    val noDependencies = FixedDependenciesResolver(DefaultArtifactTransformDependencies(fileCollectionFactory.empty()))
 
     override suspend fun WriteContext.encode(value: FileCollectionInternal) {
         encodePreservingIdentityOf(value) {
@@ -83,24 +78,20 @@ class FileCollectionCodec(
         return decodePreservingIdentity { id ->
             val contents = read()
             val collection = if (contents is Collection<*>) {
-                fileCollectionFactory.resolving(contents.map { element ->
-                    when (element) {
-                        is File -> element
-                        is TransformationNode -> Callable { element.transformedSubject.get().files }
-                        is SubtractingFileCollectionSpec -> element.left.minus(element.right)
-                        is FilteredFileCollectionSpec -> element.collection.filter(element.filter)
-                        is ProviderBackedFileCollectionSpec -> element.provider
-                        is FileTree -> element
-                        is TransformedExternalArtifactSet -> Callable {
-                            element.calculateResult()
+                fileCollectionFactory.resolving(
+                    contents.map { element ->
+                        when (element) {
+                            is File -> element
+                            is SubtractingFileCollectionSpec -> element.left.minus(element.right)
+                            is FilteredFileCollectionSpec -> element.collection.filter(element.filter)
+                            is ProviderBackedFileCollectionSpec -> element.provider
+                            is FileTree -> element
+                            is ResolvedArtifactSet -> artifactSetConverter.asFileCollection(element)
+                            is BeanSpec -> element.bean
+                            else -> throw IllegalArgumentException("Unexpected item $element in file collection contents")
                         }
-                        is TransformedLocalFileSpec -> Callable {
-                            element.transformation.isolateParameters()
-                            element.transformation.createInvocation(TransformationSubject.initial(element.origin), noDependencies, null).invoke().get().files
-                        }
-                        else -> throw IllegalArgumentException("Unexpected item $element in file collection contents")
                     }
-                })
+                )
             } else {
                 fileCollectionFactory.create(ErrorFileSet(contents as BrokenValue))
             }
@@ -117,10 +108,6 @@ class SubtractingFileCollectionSpec(val left: FileCollection, val right: FileCol
 
 private
 class FilteredFileCollectionSpec(val collection: FileCollection, val filter: Spec<in File>)
-
-
-private
-class TransformedLocalFileSpec(val origin: File, val transformation: Transformation)
 
 
 private
@@ -143,6 +130,8 @@ class CollectingVisitor : FileCollectionStructureVisitor {
                 false
             }
             is ProviderBackedFileCollection -> {
+                // Guard against file collection created from a task provider such as `layout.files(compileJava)`
+                // being referenced from a different task.
                 val provider = fileCollection.provider
                 if (provider !is TaskProvider<*>) {
                     elements.add(ProviderBackedFileCollectionSpec(provider))
@@ -151,13 +140,21 @@ class CollectingVisitor : FileCollectionStructureVisitor {
                     true
                 }
             }
+            is FileTreeInternal -> {
+                elements.add(fileCollection)
+                false
+            }
+            is FailingFileCollection -> {
+                elements.add(BeanSpec(fileCollection))
+                false
+            }
             else -> {
                 true
             }
         }
 
     override fun prepareForVisit(source: FileCollectionInternal.Source): FileCollectionStructureVisitor.VisitType =
-        if (source is TransformedProjectArtifactSet || source is LocalFileDependencyBackedArtifactSet.TransformedLocalFileArtifactSet || source is TransformedExternalArtifactSet) {
+        if (source is TransformedProjectArtifactSet || source is LocalFileDependencyBackedArtifactSet || source is TransformedExternalArtifactSet) {
             // Represents artifact transform outputs. Visit the source rather than the files
             // Transforms may have inputs or parameters that are task outputs or other changing files
             // When this is not the case, we should run the transform now and write the result.
@@ -171,10 +168,10 @@ class CollectingVisitor : FileCollectionStructureVisitor {
     override fun visitCollection(source: FileCollectionInternal.Source, contents: Iterable<File>) {
         when (source) {
             is TransformedProjectArtifactSet -> {
-                elements.addAll(source.scheduledNodes)
+                elements.add(source)
             }
-            is LocalFileDependencyBackedArtifactSet.TransformedLocalFileArtifactSet -> {
-                elements.add(TransformedLocalFileSpec(source.file, source.transformation))
+            is LocalFileDependencyBackedArtifactSet -> {
+                elements.add(source)
             }
             is TransformedExternalArtifactSet -> {
                 elements.add(source)
@@ -185,17 +182,20 @@ class CollectingVisitor : FileCollectionStructureVisitor {
         }
     }
 
-    override fun visitGenericFileTree(fileTree: FileTreeInternal, sourceTree: FileSystemMirroringFileTree) {
-        elements.add(fileTree)
-    }
+    override fun visitGenericFileTree(fileTree: FileTreeInternal, sourceTree: FileSystemMirroringFileTree) =
+        unsupportedFileTree(fileTree)
 
-    override fun visitFileTree(root: File, patterns: PatternSet, fileTree: FileTreeInternal) {
-        elements.add(fileTree)
-    }
+    override fun visitFileTree(root: File, patterns: PatternSet, fileTree: FileTreeInternal) =
+        unsupportedFileTree(fileTree)
 
-    override fun visitFileTreeBackedByFile(file: File, fileTree: FileTreeInternal, sourceTree: FileSystemMirroringFileTree) {
-        elements.add(fileTree)
-    }
+    override fun visitFileTreeBackedByFile(file: File, fileTree: FileTreeInternal, sourceTree: FileSystemMirroringFileTree) =
+        unsupportedFileTree(fileTree)
+
+    private
+    fun unsupportedFileTree(fileTree: FileTreeInternal): Nothing =
+        throw UnsupportedOperationException(
+            "Unexpected file tree '$fileTree' of type '${fileTree.javaClass}' found while serializing a file collection."
+        )
 }
 
 

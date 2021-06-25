@@ -77,18 +77,16 @@ class IvyPublishJavaIntegTest extends AbstractIvyPublishIntegTest {
     @Unroll("'#gradleConfiguration' dependencies end up in '#ivyConfiguration' configuration with '#plugin' plugin")
     @ToBeFixedForConfigurationCache
     void "maps dependencies in the correct Ivy configuration"() {
-        if (deprecatedConfiguration) {
-            executer.expectDeprecationWarning()
-        }
-
         given:
         file("settings.gradle") << '''
             rootProject.name = 'publishTest'
             include "b"
         '''
         buildFile << """
-            apply plugin: "$plugin"
-            apply plugin: "ivy-publish"
+            plugins {
+                id("$plugin")
+                id("ivy-publish")
+            }
 
             group = 'org.gradle.test'
             version = '1.9'
@@ -126,20 +124,19 @@ class IvyPublishJavaIntegTest extends AbstractIvyPublishIntegTest {
         if (ivyConfiguration == 'compile') {
             javaLibrary.assertApiDependencies('org.gradle.test:b:1.2')
         }
-        javaLibrary.assertRuntimeDependencies('org.gradle.test:b:1.2')
+        if (gradleConfiguration != 'compileOnlyApi') {
+            javaLibrary.assertRuntimeDependencies('org.gradle.test:b:1.2')
+        }
 
         where:
-        plugin         | gradleConfiguration | ivyConfiguration | deprecatedConfiguration
-        'java'         | 'compile'           | 'compile'        | true
-        'java'         | 'runtime'           | 'compile'        | true
-        'java'         | 'implementation'    | 'runtime'        | false
-        'java'         | 'runtimeOnly'       | 'runtime'        | false
+        plugin         | gradleConfiguration | ivyConfiguration
+        'java'         | 'implementation'    | 'runtime'
+        'java'         | 'runtimeOnly'       | 'runtime'
 
-        'java-library' | 'api'               | 'compile'        | false
-        'java-library' | 'compile'           | 'compile'        | true
-        'java-library' | 'runtime'           | 'compile'        | true
-        'java-library' | 'runtimeOnly'       | 'runtime'        | false
-        'java-library' | 'implementation'    | 'runtime'        | false
+        'java-library' | 'api'               | 'compile'
+        'java-library' | 'compileOnlyApi'    | 'compile'
+        'java-library' | 'runtimeOnly'       | 'runtime'
+        'java-library' | 'implementation'    | 'runtime'
 
     }
 
@@ -353,14 +350,13 @@ class IvyPublishJavaIntegTest extends AbstractIvyPublishIntegTest {
 
         then:
         javaLibrary.assertPublishedAsJavaModule()
-        exclusions('compile') == [exclusion("apiElements"), exclusion("runtime"), exclusion("api")]
-        exclusions('runtime') == [exclusion("runtimeElements"), exclusion("implementation"), exclusion("api"), exclusion("runtimeOnly"), exclusion("runtime")]
+        exclusions('compile') == [exclusion("apiElements"), exclusion("api")]
+        exclusions('runtime') == [exclusion("runtimeElements"), exclusion("implementation"), exclusion("api"), exclusion("runtimeOnly")]
 
         and:
         javaLibrary.parsedModuleMetadata.variant('apiElements') {
             dependency('commons-collections:commons-collections:3.2.2') {
                 hasExclude('apiElements-group', 'apiElements-module')
-                hasExclude('runtime-group', 'runtime-module')
                 hasExclude('api-group', 'api-module')
                 noMoreExcludes()
             }
@@ -371,7 +367,6 @@ class IvyPublishJavaIntegTest extends AbstractIvyPublishIntegTest {
                 hasExclude('implementation-group', 'implementation-module')
                 hasExclude('api-group', 'api-module')
                 hasExclude('runtimeOnly-group', 'runtimeOnly-module')
-                hasExclude('runtime-group', 'runtime-module')
                 noMoreExcludes()
             }
         }
@@ -621,7 +616,7 @@ class IvyPublishJavaIntegTest extends AbstractIvyPublishIntegTest {
         given:
         createBuildScripts("""
 
-            ${jcenterRepository()}
+            ${mavenCentralRepository()}
 
             dependencies {
                 implementation "commons-collections:commons-collections"
@@ -687,7 +682,7 @@ class IvyPublishJavaIntegTest extends AbstractIvyPublishIntegTest {
         given:
         createBuildScripts("""
 
-            ${jcenterRepository()}
+            ${mavenCentralRepository()}
 
             dependencies {
                 implementation "commons-collections:commons-collections:3.2.+"
@@ -750,7 +745,7 @@ class IvyPublishJavaIntegTest extends AbstractIvyPublishIntegTest {
         given:
         createBuildScripts("""
 
-            ${jcenterRepository()}
+            ${mavenCentralRepository()}
 
             dependencies {
                 implementation "commons-collections:commons-collections:${requestedVersion}"
@@ -819,7 +814,7 @@ class IvyPublishJavaIntegTest extends AbstractIvyPublishIntegTest {
         given:
         createBuildScripts("""
 
-            ${jcenterRepository()}
+            ${mavenCentralRepository()}
 
             dependencies {
                 implementation "commons-collections:commons-collections:3.2.2"

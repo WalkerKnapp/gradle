@@ -16,6 +16,7 @@
 
 package org.gradle.internal.deprecation
 
+import org.gradle.api.internal.DocumentationRegistry
 import org.gradle.api.logging.configuration.WarningMode
 import org.gradle.internal.Factory
 import org.gradle.internal.featurelifecycle.UsageLocationReporter
@@ -23,7 +24,7 @@ import org.gradle.internal.logging.CollectingTestOutputEventListener
 import org.gradle.internal.logging.ConfigureLogging
 import org.gradle.internal.operations.BuildOperationProgressEventEmitter
 import org.gradle.test.fixtures.concurrent.ConcurrentSpec
-import org.gradle.util.GradleVersion
+import org.gradle.util.internal.DefaultGradleVersion
 import org.junit.Rule
 import spock.lang.Subject
 
@@ -43,8 +44,8 @@ class DeprecationLoggerTest extends ConcurrentSpec {
 
     def "logs deprecation warning once until reset"() {
         when:
-        DeprecationLogger.deprecate("nag").willBeRemovedInGradle7().undocumented().nagUser()
-        DeprecationLogger.deprecate("nag").willBeRemovedInGradle7().undocumented().nagUser()
+        DeprecationLogger.deprecate("nag").willBeRemovedInGradle8().undocumented().nagUser()
+        DeprecationLogger.deprecate("nag").willBeRemovedInGradle8().undocumented().nagUser()
 
         then:
         def events = outputEventListener.events
@@ -53,7 +54,7 @@ class DeprecationLoggerTest extends ConcurrentSpec {
 
         when:
         DeprecationLogger.reset()
-        DeprecationLogger.deprecate("nag").willBeRemovedInGradle7().undocumented().nagUser()
+        DeprecationLogger.deprecate("nag").willBeRemovedInGradle8().undocumented().nagUser()
 
         then:
         events.size() == 2
@@ -73,7 +74,7 @@ class DeprecationLoggerTest extends ConcurrentSpec {
 
         and:
         1 * factory.create() >> {
-            DeprecationLogger.deprecate("nag").willBeRemovedInGradle7().undocumented().nagUser()
+            DeprecationLogger.deprecate("nag").willBeRemovedInGradle8().undocumented().nagUser()
             return "result"
         }
         0 * _
@@ -102,13 +103,13 @@ class DeprecationLoggerTest extends ConcurrentSpec {
         async {
             start {
                 thread.blockUntil.disabled
-                DeprecationLogger.deprecate("nag").willBeRemovedInGradle7().undocumented().nagUser()
+                DeprecationLogger.deprecate("nag").willBeRemovedInGradle8().undocumented().nagUser()
                 instant.logged
             }
             start {
                 DeprecationLogger.whileDisabled {
                     instant.disabled
-                    DeprecationLogger.deprecate("ignored").willBeRemovedInGradle7().undocumented().nagUser()
+                    DeprecationLogger.deprecate("ignored").willBeRemovedInGradle8().undocumented().nagUser()
                     thread.blockUntil.logged
                 }
             }
@@ -121,19 +122,38 @@ class DeprecationLoggerTest extends ConcurrentSpec {
     }
 
     def "deprecation message has next major version"() {
-        given:
-        def major = GradleVersion.current().nextMajor
-
         when:
         DeprecationLogger.deprecate("foo")
             .withAdvice("bar.")
-            .willBeRemovedInGradle7()
+            .willBeRemovedInGradle8()
             .undocumented()
             .nagUser();
 
         then:
         def events = outputEventListener.events
         events.size() == 1
-        events[0].message.startsWith("foo has been deprecated. This is scheduled to be removed in Gradle ${major.version}. bar.")
+        events[0].message.startsWith("foo has been deprecated. This is scheduled to be removed in Gradle 8.0. bar.")
     }
+
+    def "reports suppressed deprecation messages with --warning-mode summary"() {
+        given:
+        def documentation = new DocumentationRegistry()
+        def documentationReference = documentation.getDocumentationFor("command_line_interface", "sec:command_line_warnings")
+        DeprecationLogger.init(Mock(UsageLocationReporter), WarningMode.Summary, Mock(BuildOperationProgressEventEmitter))
+        DeprecationLogger.deprecate("nag").willBeRemovedInGradle8().undocumented().nagUser()
+
+        when:
+        DeprecationLogger.reportSuppressedDeprecations()
+
+        then:
+        def events = outputEventListener.events
+        events.size() == 1
+        events[0].message == """
+Deprecated Gradle features were used in this build, making it incompatible with ${DefaultGradleVersion.current().nextMajorVersion}.
+
+You can use '--warning-mode all' to show the individual deprecation warnings and determine if they come from your own scripts or plugins.
+
+See ${documentationReference}"""
+    }
+
 }

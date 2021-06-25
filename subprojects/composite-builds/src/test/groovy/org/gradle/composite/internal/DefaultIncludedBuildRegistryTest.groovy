@@ -23,17 +23,27 @@ import org.gradle.api.internal.GradleInternal
 import org.gradle.api.internal.SettingsInternal
 import org.gradle.api.internal.StartParameterInternal
 import org.gradle.api.internal.artifacts.DefaultBuildIdentifier
-import org.gradle.initialization.GradleLauncher
-import org.gradle.initialization.GradleLauncherFactory
-import org.gradle.initialization.NestedBuildFactory
+import org.gradle.api.internal.project.ProjectStateRegistry
+import org.gradle.initialization.BuildCancellationToken
+import org.gradle.initialization.exception.ExceptionAnalyser
 import org.gradle.internal.Actions
 import org.gradle.internal.build.BuildAddedListener
+import org.gradle.internal.build.BuildLifecycleController
+import org.gradle.internal.build.BuildLifecycleControllerFactory
 import org.gradle.internal.build.BuildState
+import org.gradle.internal.build.BuildStateRegistry
+import org.gradle.internal.build.IncludedBuildFactory
 import org.gradle.internal.build.IncludedBuildState
 import org.gradle.internal.build.RootBuildState
+import org.gradle.internal.buildtree.BuildModelParameters
+import org.gradle.internal.buildtree.BuildTreeLifecycleControllerFactory
+import org.gradle.internal.buildtree.BuildTreeState
 import org.gradle.internal.event.ListenerManager
-import org.gradle.internal.service.ServiceRegistry
-import org.gradle.internal.service.scopes.BuildTreeScopeServices
+import org.gradle.internal.operations.BuildOperationExecutor
+import org.gradle.internal.service.DefaultServiceRegistry
+import org.gradle.internal.service.scopes.GradleUserHomeScopeServiceRegistry
+import org.gradle.internal.session.CrossBuildSessionState
+import org.gradle.internal.work.WorkerLeaseService
 import org.gradle.plugin.management.internal.PluginRequests
 import org.gradle.test.fixtures.file.TestNameTestDirectoryProvider
 import org.gradle.util.Path
@@ -48,29 +58,50 @@ class DefaultIncludedBuildRegistryTest extends Specification {
     def listenerManager = Stub(ListenerManager) {
         getBroadcaster(BuildAddedListener) >> buildAddedListener
     }
+    def gradleLauncherFactory = Mock(BuildLifecycleControllerFactory)
+    def buildTree = Mock(BuildTreeState)
+    def factory = new BuildStateFactory(buildTree, gradleLauncherFactory, listenerManager, Stub(GradleUserHomeScopeServiceRegistry), Stub(CrossBuildSessionState), Stub(BuildCancellationToken), Stub(ProjectStateRegistry))
     def registry = new DefaultIncludedBuildRegistry(
         includedBuildFactory,
         Stub(IncludedBuildDependencySubstitutionsBuilder),
-        Stub(GradleLauncherFactory),
         listenerManager,
-        Stub(BuildTreeScopeServices)
+        factory
     )
+
+    def setup() {
+        def services = new DefaultServiceRegistry()
+
+        services.add(Stub(WorkerLeaseService))
+        services.add(Stub(IncludedBuildControllers))
+        services.add(Stub(ExceptionAnalyser))
+        services.add(Stub(BuildOperationExecutor))
+        services.add(Stub(BuildStateRegistry))
+        services.add(Stub(BuildTreeLifecycleControllerFactory))
+        services.add(Stub(BuildModelParameters))
+
+        _ * buildTree.services >> services
+    }
 
     def "is empty by default"() {
         expect:
-        !registry.hasIncludedBuilds()
         registry.includedBuilds.empty
     }
 
     def "can add a root build"() {
         def notifiedBuild
+        def buildDefinition = Stub(BuildDefinition)
+        def gradleLauncher = Stub(BuildLifecycleController)
+        def gradle = Stub(GradleInternal)
+
         when:
-        def rootBuild = registry.createRootBuild(Stub(BuildDefinition))
+        def rootBuild = registry.createRootBuild(buildDefinition)
+
         then:
+        _ * gradleLauncher.gradle >> gradle
+        1 * gradleLauncherFactory.newInstance(buildDefinition, _, null, _) >> gradleLauncher
         1 * buildAddedListener.buildAdded(_) >> { BuildState addedBuild ->
             notifiedBuild = addedBuild
         }
-        0 * _
 
         !rootBuild.implicitBuild
         rootBuild.buildIdentifier == DefaultBuildIdentifier.ROOT
@@ -100,7 +131,6 @@ class DefaultIncludedBuildRegistryTest extends Specification {
 
         result.is includedBuild
 
-        registry.hasIncludedBuilds()
         registry.includedBuilds as List == [includedBuild]
 
         registry.getBuild(buildIdentifier).is(includedBuild)
@@ -124,7 +154,6 @@ class DefaultIncludedBuildRegistryTest extends Specification {
         registry.addIncludedBuild(buildDefinition1)
         registry.addIncludedBuild(buildDefinition2)
 
-        registry.hasIncludedBuilds()
         registry.includedBuilds as List == [includedBuild1, includedBuild2]
     }
 
@@ -159,7 +188,6 @@ class DefaultIncludedBuildRegistryTest extends Specification {
         registry.addIncludedBuild(buildDefinition2)
         registry.addIncludedBuild(buildDefinition3)
 
-        registry.hasIncludedBuilds()
         registry.includedBuilds as List == [includedBuild1, includedBuild2, includedBuild3]
 
         registry.getBuild(id1).is(includedBuild1)
@@ -195,7 +223,6 @@ class DefaultIncludedBuildRegistryTest extends Specification {
 
         result.is(includedBuild)
 
-        registry.hasIncludedBuilds()
         registry.includedBuilds as List == [includedBuild]
     }
 
@@ -213,7 +240,6 @@ class DefaultIncludedBuildRegistryTest extends Specification {
         1 * buildAddedListener.buildAdded(_) >> { BuildState addedBuild ->
             notifiedBuild = addedBuild
         }
-        0 * _
 
         nestedBuild.implicitBuild
         nestedBuild.buildIdentifier == new DefaultBuildIdentifier("buildSrc")
@@ -273,20 +299,20 @@ class DefaultIncludedBuildRegistryTest extends Specification {
             rootDir,
             PluginRequests.EMPTY,
             Actions.doNothing(),
-            null
+            null,
+            false
         )
     }
 
     RootBuildState rootBuild(String... projects) {
-        def nestedBuildFactory = Stub(NestedBuildFactory)
-        def gradleLauncher = Stub(GradleLauncher)
+        def gradleLauncher = Stub(BuildLifecycleController)
+        def parentGradle = Stub(GradleInternal)
         def gradle = Stub(GradleInternal)
         def settings = Stub(SettingsInternal)
-        def services = Stub(ServiceRegistry)
+        def build = Stub(RootBuildState)
 
-        nestedBuildFactory.nestedInstance(_, _) >> gradleLauncher
+        gradleLauncherFactory.newInstance(_, _, _, _) >> gradleLauncher
         gradleLauncher.gradle >> gradle
-        gradle.services >> services
         gradle.settings >> settings
         settings.rootProject >> Stub(ProjectDescriptor) {
             getName() >> "root"
@@ -295,13 +321,10 @@ class DefaultIncludedBuildRegistryTest extends Specification {
             it[0] in projects ? Stub(ProjectDescriptor) : null
         }
 
-        services.get(NestedBuildFactory) >> nestedBuildFactory
-
-        def build = Stub(RootBuildState)
         build.buildIdentifier >> DefaultBuildIdentifier.ROOT
         build.identityPath >> Path.ROOT
-        build.nestedBuildFactory >> nestedBuildFactory
         build.loadedSettings >> settings
+        build.mutableModel >> parentGradle
         return build
     }
 }

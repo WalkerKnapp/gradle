@@ -19,7 +19,7 @@ package org.gradle.api.publish.maven.tasks;
 import org.gradle.api.DefaultTask;
 import org.gradle.api.internal.attributes.ImmutableAttributes;
 import org.gradle.api.internal.file.FileResolver;
-import org.gradle.api.publication.maven.internal.VersionRangeMapper;
+import org.gradle.api.publish.maven.internal.dependencies.VersionRangeMapper;
 import org.gradle.api.publish.maven.MavenDependency;
 import org.gradle.api.publish.maven.MavenPom;
 import org.gradle.api.publish.maven.internal.dependencies.MavenDependencyInternal;
@@ -48,7 +48,7 @@ public class GenerateMavenPom extends DefaultTask {
     private final Transient.Var<ImmutableAttributes> compileScopeAttributes = varOf(ImmutableAttributes.EMPTY);
     private final Transient.Var<ImmutableAttributes> runtimeScopeAttributes = varOf(ImmutableAttributes.EMPTY);
     private Object destination;
-    private Cached<MavenPomFileGenerator.MavenPomSpec> mavenPomSpec = Cached.of(this::computeMavenPomSpec);
+    private final Cached<MavenPomFileGenerator.MavenPomSpec> mavenPomSpec = Cached.of(this::computeMavenPomSpec);
 
     public GenerateMavenPom() {
         // Never up to date; we don't understand the data structures.

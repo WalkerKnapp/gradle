@@ -16,39 +16,46 @@
 
 package org.gradle.performance.results;
 
+import com.zaxxer.hikari.HikariConfig;
+import com.zaxxer.hikari.HikariDataSource;
+
+import javax.sql.DataSource;
 import java.sql.Connection;
-import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.List;
 
 public class PerformanceDatabase {
-    private static final int LOGIN_TIMEOUT_SECONDS = 60;
+    // This value specifies that a DB connection will stay at pool for at most 30 seconds
+    private static final int MAX_LIFETIME_MS = 30 * 1000;
+    private static final String PERFORMANCE_DB_URL_PROPERTY_NAME = "org.gradle.performance.db.url";
     private final String databaseName;
     private final List<ConnectionAction<Void>> databaseInitializers;
-    private Connection connection;
+    private HikariDataSource dataSource;
 
+    @SafeVarargs
     public PerformanceDatabase(String databaseName, ConnectionAction<Void>... schemaInitializers) {
         this.databaseName = databaseName;
         this.databaseInitializers = Arrays.asList(schemaInitializers);
     }
 
-    public void close() {
-        if (connection != null) {
-            try {
-                connection.close();
-            } catch (SQLException e) {
-                throw new RuntimeException(String.format("Could not close datastore '%s'.", getUrl()), e);
-            } finally {
-                connection = null;
-            }
+    private Connection getConnection() throws SQLException {
+        if (dataSource == null) {
+            HikariConfig config = new HikariConfig();
+            config.setJdbcUrl(getUrl());
+            config.setUsername(getUserName());
+            config.setPassword(getPassword());
+            config.setMaximumPoolSize(1);
+            config.setMaxLifetime(MAX_LIFETIME_MS);
+            dataSource = new HikariDataSource(config);
+
+            executeInitializers(dataSource);
         }
+        return dataSource.getConnection();
     }
 
-    public <T> T withConnection(ConnectionAction<T> action) throws SQLException {
-        if (connection == null) {
-            DriverManager.setLoginTimeout(LOGIN_TIMEOUT_SECONDS);
-            connection = DriverManager.getConnection(getUrl(), getUserName(), getPassword());
+    private void executeInitializers(DataSource dataSource) throws SQLException {
+        try (Connection connection = dataSource.getConnection()) {
             for (ConnectionAction<Void> initializer : databaseInitializers) {
                 try {
                     initializer.execute(connection);
@@ -56,19 +63,46 @@ public class PerformanceDatabase {
                     if (e.getErrorCode() == 90096) {
                         System.out.println("Not enough permissions to migrate the performance database. This is okay if you are only trying to read.");
                     } else {
-                        connection.close();
-                        connection = null;
                         throw e;
                     }
                 }
             }
         }
-        return action.execute(connection);
+    }
+
+    public static boolean isAvailable() {
+        return System.getProperty(PERFORMANCE_DB_URL_PROPERTY_NAME) != null;
+    }
+
+    public void close() {
+        if (dataSource != null) {
+            try {
+                dataSource.close();
+            } finally {
+                dataSource = null;
+            }
+        }
+    }
+
+    public <T> T withConnection(ConnectionAction<T> action) throws SQLException {
+        try (Connection connection = getConnection()) {
+            return action.execute(connection);
+        }
+    }
+
+    public <T> T withConnection(String actionName, ConnectionAction<T> action) {
+        try {
+            return withConnection(action);
+        } catch (SQLException e) {
+            throw new RuntimeException(String.format("Could not %s from datastore '%s'.", actionName, getUrl()), e);
+        }
     }
 
     public String getUrl() {
-        String defaultUrl = "jdbc:h2:" + System.getProperty("user.home") + "/.gradle-performance-test-data";
-        String baseUrl = System.getProperty("org.gradle.performance.db.url", defaultUrl);
+        String baseUrl = System.getProperty(PERFORMANCE_DB_URL_PROPERTY_NAME);
+        if (baseUrl == null) {
+            throw new RuntimeException("You need to specify a URL for the performance database");
+        }
         StringBuilder url = new StringBuilder(baseUrl);
         if (!baseUrl.endsWith("/")) {
             url.append('/');

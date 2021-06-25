@@ -23,7 +23,7 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import org.gradle.api.internal.file.TestFiles;
 import org.gradle.api.specs.Spec;
-import org.gradle.integtests.fixtures.AbstractContextualMultiVersionSpecRunner;
+import org.gradle.integtests.fixtures.VersionedTool;
 import org.gradle.integtests.fixtures.executer.GradleExecuter;
 import org.gradle.internal.nativeintegration.ProcessEnvironment;
 import org.gradle.internal.os.OperatingSystem;
@@ -46,13 +46,12 @@ import org.gradle.nativeplatform.toolchain.plugins.SwiftCompilerPlugin;
 import org.gradle.platform.base.internal.toolchain.SearchResult;
 import org.gradle.test.fixtures.file.TestFile;
 import org.gradle.testfixtures.internal.NativeServicesTestFixture;
-import org.gradle.util.CollectionUtils;
-import org.gradle.util.GUtil;
-import org.gradle.util.VersionNumber;
+import org.gradle.util.internal.CollectionUtils;
+import org.gradle.util.internal.GUtil;
+import org.gradle.util.internal.VersionNumber;
 
 import javax.annotation.Nullable;
 import java.io.File;
-import java.io.FileFilter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -64,11 +63,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
-import static org.gradle.nativeplatform.fixtures.msvcpp.VisualStudioVersion.VISUALSTUDIO_2012;
-import static org.gradle.nativeplatform.fixtures.msvcpp.VisualStudioVersion.VISUALSTUDIO_2013;
-import static org.gradle.nativeplatform.fixtures.msvcpp.VisualStudioVersion.VISUALSTUDIO_2015;
-import static org.gradle.nativeplatform.fixtures.msvcpp.VisualStudioVersion.VISUALSTUDIO_2017;
-import static org.gradle.nativeplatform.fixtures.msvcpp.VisualStudioVersion.VISUALSTUDIO_2019;
+import static org.gradle.nativeplatform.fixtures.msvcpp.VisualStudioVersion.*;
 
 public class AvailableToolChains {
     private static final Comparator<ToolChainCandidate> LATEST_RELEASED_FIRST = Collections.reverseOrder(new Comparator<ToolChainCandidate>() {
@@ -268,12 +263,7 @@ public class AvailableToolChains {
 
         // On Linux, we assume swift is installed into /opt/swift
         File rootSwiftInstall = new File("/opt/swift");
-        File[] swiftCandidates = GUtil.elvis(rootSwiftInstall.listFiles(new FileFilter() {
-            @Override
-            public boolean accept(File swiftInstall) {
-                return swiftInstall.isDirectory() && !swiftInstall.getName().equals("latest");
-            }
-        }), new File[0]);
+        File[] swiftCandidates = GUtil.getOrDefault(rootSwiftInstall.listFiles(swiftInstall -> swiftInstall.isDirectory() && !swiftInstall.getName().equals("latest")), () -> new File[0]);
 
         for (File swiftInstall : swiftCandidates) {
             File swiftc = new File(swiftInstall, "/usr/bin/swiftc");
@@ -322,7 +312,7 @@ public class AvailableToolChains {
         }
     }
 
-    public static abstract class ToolChainCandidate implements AbstractContextualMultiVersionSpecRunner.VersionedTool {
+    public static abstract class ToolChainCandidate implements VersionedTool {
         @Override
         public String toString() {
             return getDisplayName();
@@ -743,7 +733,7 @@ public class AvailableToolChains {
 
         // On macOS, we assume co-located Xcode is installed into /opt/xcode
         File rootXcodeInstall = new File("/opt/xcode");
-        List<File> xcodeCandidates = Lists.newArrayList(Arrays.asList(GUtil.elvis(rootXcodeInstall.listFiles(xcodeInstall -> xcodeInstall.isDirectory()), new File[0])));
+        List<File> xcodeCandidates = Lists.newArrayList(Arrays.asList(GUtil.getOrDefault(rootXcodeInstall.listFiles(File::isDirectory), () -> new File[0])));
         xcodeCandidates.add(new File("/Applications/Xcode.app")); // Default Xcode installation
         xcodeCandidates.stream().filter(File::exists).forEach(xcodeInstall -> {
             TestFile xcodebuild = new TestFile("/usr/bin/xcodebuild");

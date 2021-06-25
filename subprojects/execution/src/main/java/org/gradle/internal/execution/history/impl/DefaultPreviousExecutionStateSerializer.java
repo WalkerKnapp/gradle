@@ -26,20 +26,27 @@ import org.gradle.internal.serialize.AbstractSerializer;
 import org.gradle.internal.serialize.Decoder;
 import org.gradle.internal.serialize.Encoder;
 import org.gradle.internal.serialize.Serializer;
+import org.gradle.internal.snapshot.FileSystemSnapshot;
 import org.gradle.internal.snapshot.ValueSnapshot;
 import org.gradle.internal.snapshot.impl.ImplementationSnapshot;
 import org.gradle.internal.snapshot.impl.ImplementationSnapshotSerializer;
 import org.gradle.internal.snapshot.impl.SnapshotSerializer;
 
+import java.time.Duration;
 import java.util.Map;
 
 public class DefaultPreviousExecutionStateSerializer extends AbstractSerializer<AfterPreviousExecutionState> {
     private final Serializer<FileCollectionFingerprint> fileCollectionFingerprintSerializer;
+    private final Serializer<FileSystemSnapshot> fileSystemSnapshotSerializer;
     private final Serializer<ImplementationSnapshot> implementationSnapshotSerializer;
     private final Serializer<ValueSnapshot> valueSnapshotSerializer = new SnapshotSerializer();
 
-    public DefaultPreviousExecutionStateSerializer(Serializer<FileCollectionFingerprint> fileCollectionFingerprintSerializer) {
+    public DefaultPreviousExecutionStateSerializer(
+        Serializer<FileCollectionFingerprint> fileCollectionFingerprintSerializer,
+        Serializer<FileSystemSnapshot> fileSystemSnapshotSerializer
+    ) {
         this.fileCollectionFingerprintSerializer = fileCollectionFingerprintSerializer;
+        this.fileSystemSnapshotSerializer = fileSystemSnapshotSerializer;
         this.implementationSnapshotSerializer = new ImplementationSnapshotSerializer();
     }
 
@@ -47,7 +54,7 @@ public class DefaultPreviousExecutionStateSerializer extends AbstractSerializer<
     public AfterPreviousExecutionState read(Decoder decoder) throws Exception {
         OriginMetadata originMetadata = new OriginMetadata(
             decoder.readString(),
-            decoder.readLong()
+            Duration.ofMillis(decoder.readLong())
         );
 
         ImplementationSnapshot taskImplementation = implementationSnapshotSerializer.read(decoder);
@@ -63,7 +70,7 @@ public class DefaultPreviousExecutionStateSerializer extends AbstractSerializer<
 
         ImmutableSortedMap<String, ValueSnapshot> inputProperties = readInputProperties(decoder);
         ImmutableSortedMap<String, FileCollectionFingerprint> inputFilesFingerprints = readFingerprints(decoder);
-        ImmutableSortedMap<String, FileCollectionFingerprint> outputFilesFingerprints = readFingerprints(decoder);
+        ImmutableSortedMap<String, FileSystemSnapshot> outputFilesSnapshots = readSnapshots(decoder);
 
         boolean successful = decoder.readBoolean();
 
@@ -73,7 +80,7 @@ public class DefaultPreviousExecutionStateSerializer extends AbstractSerializer<
             taskActionImplementations,
             inputProperties,
             inputFilesFingerprints,
-            outputFilesFingerprints,
+            outputFilesSnapshots,
             successful
         );
     }
@@ -82,7 +89,7 @@ public class DefaultPreviousExecutionStateSerializer extends AbstractSerializer<
     public void write(Encoder encoder, AfterPreviousExecutionState execution) throws Exception {
         OriginMetadata originMetadata = execution.getOriginMetadata();
         encoder.writeString(originMetadata.getBuildInvocationId());
-        encoder.writeLong(originMetadata.getExecutionTime());
+        encoder.writeLong(originMetadata.getExecutionTime().toMillis());
 
         implementationSnapshotSerializer.write(encoder, execution.getImplementation());
         ImmutableList<ImplementationSnapshot> additionalImplementations = execution.getAdditionalImplementations();
@@ -93,7 +100,7 @@ public class DefaultPreviousExecutionStateSerializer extends AbstractSerializer<
 
         writeInputProperties(encoder, execution.getInputProperties());
         writeFingerprints(encoder, execution.getInputFileProperties());
-        writeFingerprints(encoder, execution.getOutputFileProperties());
+        writeSnapshots(encoder, execution.getOutputFilesProducedByWork());
 
         encoder.writeBoolean(execution.isSuccessful());
     }
@@ -138,6 +145,25 @@ public class DefaultPreviousExecutionStateSerializer extends AbstractSerializer<
         for (Map.Entry<String, FileCollectionFingerprint> entry : fingerprints.entrySet()) {
             encoder.writeString(entry.getKey());
             fileCollectionFingerprintSerializer.write(encoder, entry.getValue());
+        }
+    }
+
+    private ImmutableSortedMap<String, FileSystemSnapshot> readSnapshots(Decoder decoder) throws Exception {
+        int count = decoder.readSmallInt();
+        ImmutableSortedMap.Builder<String, FileSystemSnapshot> builder = ImmutableSortedMap.naturalOrder();
+        for (int snapshotIdx = 0; snapshotIdx < count; snapshotIdx++) {
+            String property = decoder.readString();
+            FileSystemSnapshot snapshot = fileSystemSnapshotSerializer.read(decoder);
+            builder.put(property, snapshot);
+        }
+        return builder.build();
+    }
+
+    private void writeSnapshots(Encoder encoder, ImmutableSortedMap<String, FileSystemSnapshot> snapshots) throws Exception {
+        encoder.writeSmallInt(snapshots.size());
+        for (Map.Entry<String, FileSystemSnapshot> entry : snapshots.entrySet()) {
+            encoder.writeString(entry.getKey());
+            fileSystemSnapshotSerializer.write(encoder, entry.getValue());
         }
     }
 

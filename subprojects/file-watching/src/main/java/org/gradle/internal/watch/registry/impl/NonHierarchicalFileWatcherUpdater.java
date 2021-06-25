@@ -21,13 +21,18 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Multiset;
 import net.rubygrapefruit.platform.NativeException;
 import net.rubygrapefruit.platform.file.FileWatcher;
-import org.gradle.internal.snapshot.CompleteDirectorySnapshot;
-import org.gradle.internal.snapshot.CompleteFileSystemLocationSnapshot;
-import org.gradle.internal.snapshot.FileSystemSnapshotVisitor;
+import org.gradle.internal.snapshot.DirectorySnapshot;
+import org.gradle.internal.snapshot.FileSystemLocationSnapshot;
+import org.gradle.internal.snapshot.FileSystemLocationSnapshot.FileSystemLocationSnapshotTransformer;
+import org.gradle.internal.snapshot.MissingFileSnapshot;
+import org.gradle.internal.snapshot.RegularFileSnapshot;
+import org.gradle.internal.snapshot.RootTrackingFileSystemSnapshotHierarchyVisitor;
 import org.gradle.internal.snapshot.SnapshotHierarchy;
+import org.gradle.internal.snapshot.SnapshotVisitResult;
 import org.gradle.internal.watch.WatchingNotSupportedException;
 import org.gradle.internal.watch.registry.FileWatcherUpdater;
 import org.gradle.internal.watch.registry.SnapshotCollectingDiffListener;
+import org.gradle.internal.watch.vfs.WatchMode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -39,7 +44,6 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Consumer;
-import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 public class NonHierarchicalFileWatcherUpdater implements FileWatcherUpdater {
@@ -51,13 +55,13 @@ public class NonHierarchicalFileWatcherUpdater implements FileWatcherUpdater {
 
     private final WatchableHierarchies watchableHierarchies;
 
-    public NonHierarchicalFileWatcherUpdater(FileWatcher fileWatcher, Predicate<String> watchFilter) {
+    public NonHierarchicalFileWatcherUpdater(FileWatcher fileWatcher, WatchableHierarchies watchableHierarchies) {
         this.fileWatcher = fileWatcher;
-        this.watchableHierarchies = new WatchableHierarchies(watchFilter);
+        this.watchableHierarchies = watchableHierarchies;
     }
 
     @Override
-    public void virtualFileSystemContentsChanged(Collection<CompleteFileSystemLocationSnapshot> removedSnapshots, Collection<CompleteFileSystemLocationSnapshot> addedSnapshots, SnapshotHierarchy root) {
+    public void virtualFileSystemContentsChanged(Collection<FileSystemLocationSnapshot> removedSnapshots, Collection<FileSystemLocationSnapshot> addedSnapshots, SnapshotHierarchy root) {
         Map<String, Integer> changedWatchedDirectories = new HashMap<>();
 
         removedSnapshots.stream()
@@ -85,21 +89,18 @@ public class NonHierarchicalFileWatcherUpdater implements FileWatcherUpdater {
     }
 
     @Override
-    public SnapshotHierarchy buildFinished(SnapshotHierarchy root, int maximumNumberOfWatchedHierarchies) {
+    public SnapshotHierarchy buildFinished(SnapshotHierarchy root, WatchMode watchMode, int maximumNumberOfWatchedHierarchies) {
         WatchableHierarchies.Invalidator invalidator = (location, currentRoot) -> {
             SnapshotCollectingDiffListener diffListener = new SnapshotCollectingDiffListener();
             SnapshotHierarchy invalidatedRoot = currentRoot.invalidate(location, diffListener);
             diffListener.publishSnapshotDiff((removedSnapshots, addedSnapshots) -> virtualFileSystemContentsChanged(removedSnapshots, addedSnapshots, invalidatedRoot));
             return invalidatedRoot;
         };
-        SnapshotHierarchy newRoot = watchableHierarchies.removeWatchedHierarchiesOverLimit(
+        SnapshotHierarchy newRoot = watchableHierarchies.removeUnwatchableContent(
             root,
+            watchMode,
             hierarchy -> containsSnapshots(hierarchy, root),
             maximumNumberOfWatchedHierarchies,
-            invalidator
-        );
-        newRoot = watchableHierarchies.removeUnwatchedSnapshots(
-            newRoot,
             invalidator
         );
         LOGGER.info("Watching {} directories to track changes", watchedDirectories.entrySet().size());
@@ -107,8 +108,8 @@ public class NonHierarchicalFileWatcherUpdater implements FileWatcherUpdater {
     }
 
     @Override
-    public int getNumberOfWatchedHierarchies() {
-        return watchableHierarchies.getWatchableHierarchies().size();
+    public Collection<Path> getWatchedHierarchies() {
+        return watchableHierarchies.getWatchableHierarchies();
     }
 
     private boolean containsSnapshots(Path location, SnapshotHierarchy root) {
@@ -165,35 +166,39 @@ public class NonHierarchicalFileWatcherUpdater implements FileWatcherUpdater {
         changedWatchedDirectories.compute(path, (key, value) -> value == null ? 1 : value + 1);
     }
 
-    private class SubdirectoriesToWatchVisitor implements FileSystemSnapshotVisitor {
+    private class SubdirectoriesToWatchVisitor extends RootTrackingFileSystemSnapshotHierarchyVisitor {
         private final Consumer<String> subDirectoryToWatchConsumer;
-        private boolean root;
 
         public SubdirectoriesToWatchVisitor(Consumer<String> subDirectoryToWatchConsumer) {
             this.subDirectoryToWatchConsumer = subDirectoryToWatchConsumer;
-            this.root = true;
         }
 
         @Override
-        public boolean preVisitDirectory(CompleteDirectorySnapshot directorySnapshot) {
-            if (root) {
-                root = false;
-                return true;
+        public SnapshotVisitResult visitEntry(FileSystemLocationSnapshot snapshot, boolean isRoot) {
+            if (isRoot) {
+                return SnapshotVisitResult.CONTINUE;
             }
-            if (watchableHierarchies.ignoredForWatching(directorySnapshot)) {
-                return false;
-            } else {
-                subDirectoryToWatchConsumer.accept(directorySnapshot.getAbsolutePath());
-                return true;
-            }
-        }
+            return snapshot.accept(new FileSystemLocationSnapshotTransformer<SnapshotVisitResult>() {
+                @Override
+                public SnapshotVisitResult visitDirectory(DirectorySnapshot directorySnapshot) {
+                    if (watchableHierarchies.ignoredForWatching(directorySnapshot)) {
+                        return SnapshotVisitResult.SKIP_SUBTREE;
+                    } else {
+                        subDirectoryToWatchConsumer.accept(directorySnapshot.getAbsolutePath());
+                        return SnapshotVisitResult.CONTINUE;
+                    }
+                }
 
-        @Override
-        public void visitFile(CompleteFileSystemLocationSnapshot fileSnapshot) {
-        }
+                @Override
+                public SnapshotVisitResult visitRegularFile(RegularFileSnapshot fileSnapshot) {
+                    return SnapshotVisitResult.CONTINUE;
+                }
 
-        @Override
-        public void postVisitDirectory(CompleteDirectorySnapshot directorySnapshot) {
+                @Override
+                public SnapshotVisitResult visitMissing(MissingFileSnapshot missingSnapshot) {
+                    return SnapshotVisitResult.CONTINUE;
+                }
+            });
         }
     }
 }

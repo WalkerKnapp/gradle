@@ -233,7 +233,10 @@ public class DefaultResolutionStrategy implements ResolutionStrategyInternal {
 
     @Override
     public boolean resolveGraphToDetermineTaskDependencies() {
-        return assumeFluidDependencies || dependencySubstitutions.hasRules() || globalDependencySubstitutionRules.hasRules() || vcsResolver.hasRules();
+        return assumeFluidDependencies
+                || dependencySubstitutions.rulesMayAddProjectDependency()
+                || globalDependencySubstitutionRules.rulesMayAddProjectDependency()
+                || vcsResolver.hasRules();
     }
 
     @Override
@@ -333,6 +336,11 @@ public class DefaultResolutionStrategy implements ResolutionStrategyInternal {
     @Override
     public boolean isDependencyLockingEnabled() {
         return dependencyLockingEnabled;
+    }
+
+    @Override
+    public void confirmUnlockedConfigurationResolved(String configurationName) {
+        dependencyLockingProvider.confirmConfigurationNotLocked(configurationName);
     }
 
     @Override

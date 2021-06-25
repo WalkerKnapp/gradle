@@ -71,6 +71,11 @@ In addition to the ecosystem independent attributes defined above, the JVM ecosy
 | Indicates the JVM version compatibility.
 | Integer using the version after the `1.` for Java 1.4 and before, the major version for Java 5 and beyond.
 | Defaults to the JVM version used by Gradle, lower is compatible with higher, prefers highest compatible.
+
+| link:{javadocPath}/org/gradle/api/attributes/java/TargetJvmEnvironment.html#TARGET_JVM_ENVIRONMENT_ATTRIBUTE[`org.gradle.jvm.environment`]
+| Indicates that a variant is optimized for a certain JVM environment.
+| Common values are `standard-jvm` and `android`. Other values are allowed.
+| The attribute is used to prefer one variant over another if multiple are available, but in general all values are compatible. The default is `standard-jvm`.
 |===
 
 The JVM ecosystem also contains a number of compatibility and disambiguation rules over the different attributes.
@@ -104,6 +109,23 @@ In addition to the ecosystem independent attributes defined above, the native ec
 | Indicates the target operating system of the binary
 | `OperatingSystemFamily` values built from constants defined in link:{javadocPath}/org/gradle/nativeplatform/OperatingSystemFamily.html[OperatingSystemFamily]
 | None
+|===
+
+[[sub:gradle_plugins_default_attributes]]
+=== Gradle plugin ecosystem specific attributes
+
+For Gradle plugin development, the following attribute is supported since Gradle 7.0.
+A Gradle plugin variant can specify compatibility with a Gradle API version through this attribute.
+
+.Gradle plugin ecosystem standard component attributes
+[%header%autowidth,compact]
+|===
+| Attribute name | Description | Values | compatibility and disambiguation rules
+
+| link:{javadocPath}/org/gradle/api/attributes/plugin/GradlePluginApiVersion.html#GRADLE_PLUGIN_API_VERSION_ATTRIBUTE[`org.gradle.plugin.api&#8209;version`]
+| Indicates the Gradle API version compatibility.
+| Valid Gradle version strings.
+| Defaults to the currently running Gradle, lower is compatible with higher, prefers highest compatible.
 |===
 
 [[sec:declaring_attributes]]

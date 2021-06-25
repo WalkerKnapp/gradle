@@ -15,6 +15,7 @@
  */
 package org.gradle.tooling.internal.consumer.loader;
 
+import org.gradle.api.JavaVersion;
 import org.gradle.initialization.BuildCancellationToken;
 import org.gradle.internal.Factory;
 import org.gradle.internal.classloader.FilteringClassLoader;
@@ -51,8 +52,6 @@ import org.gradle.tooling.internal.protocol.test.InternalTestExecutionConnection
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.File;
-
 /**
  * Loads the tooling API implementation of the Gradle version that will run the build (the "provider").
  * Adapts the rather clunky cross-version interface to the more readable interface of the TAPI client.
@@ -72,7 +71,7 @@ public class DefaultToolingImplementationLoader implements ToolingImplementation
     @Override
     public ConsumerConnection create(Distribution distribution, ProgressLoggerFactory progressLoggerFactory, InternalBuildProgressListener progressListener, ConnectionParameters connectionParameters, BuildCancellationToken cancellationToken) {
         LOGGER.debug("Using tooling provider from {}", distribution.getDisplayName());
-        ClassLoader serviceClassLoader = createImplementationClassLoader(distribution, progressLoggerFactory, progressListener, connectionParameters.getGradleUserHomeDir(), cancellationToken);
+        ClassLoader serviceClassLoader = createImplementationClassLoader(distribution, progressLoggerFactory, progressListener, connectionParameters, cancellationToken);
         ServiceLocator serviceLocator = new DefaultServiceLocator(serviceClassLoader);
         try {
             Factory<ConnectionVersion4> factory = serviceLocator.findFactory(ConnectionVersion4.class);
@@ -109,11 +108,12 @@ public class DefaultToolingImplementationLoader implements ToolingImplementation
         return new ParameterValidatingConsumerConnection(versionDetails, adaptedConnection);
     }
 
-    private ClassLoader createImplementationClassLoader(Distribution distribution, ProgressLoggerFactory progressLoggerFactory, InternalBuildProgressListener progressListener, File userHomeDir, BuildCancellationToken cancellationToken) {
-        ClassPath implementationClasspath = distribution.getToolingImplementationClasspath(progressLoggerFactory, progressListener, userHomeDir, cancellationToken);
+    private ClassLoader createImplementationClassLoader(Distribution distribution, ProgressLoggerFactory progressLoggerFactory, InternalBuildProgressListener progressListener, ConnectionParameters connectionParameters, BuildCancellationToken cancellationToken) {
+        ClassPath implementationClasspath = distribution.getToolingImplementationClasspath(progressLoggerFactory, progressListener, connectionParameters, cancellationToken);
         LOGGER.debug("Using tooling provider classpath: {}", implementationClasspath);
         FilteringClassLoader.Spec filterSpec = new FilteringClassLoader.Spec();
         filterSpec.allowPackage("org.gradle.tooling.internal.protocol");
+        filterSpec.allowClass(JavaVersion.class);
         FilteringClassLoader filteringClassLoader = new FilteringClassLoader(classLoader, filterSpec);
         return new VisitableURLClassLoader("tooling-implementation-loader", filteringClassLoader, implementationClasspath);
     }

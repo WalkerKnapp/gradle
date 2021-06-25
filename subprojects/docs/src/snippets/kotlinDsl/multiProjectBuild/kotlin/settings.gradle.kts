@@ -1,18 +1,11 @@
 // tag::repositories[]
 pluginManagement {
     repositories {
-        jcenter()
+        mavenCentral()
         gradlePluginPortal()
     }
 }
 // end::repositories[]
-
-gradle.allprojects {
-    buildscript {
-        repositories { jcenter() }
-    }
-    repositories { jcenter() }
-}
 
 // tag::base[]
 rootProject.name = "multi-project-build"

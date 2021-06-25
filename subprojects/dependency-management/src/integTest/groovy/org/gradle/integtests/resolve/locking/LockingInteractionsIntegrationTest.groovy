@@ -94,7 +94,7 @@ dependencies {
 
         then:
         outputContains('my-dep-1.0')
-        lockfileFixture.verifyLockfile('lockedConf', [], false)
+        lockfileFixture.verifyLockfile('lockedConf', [])
     }
 
     @Unroll
@@ -180,7 +180,7 @@ dependencies {
         outputContains("org:bar:$version -> $expectedVersion")
 
         and:
-        lockfileFixture.verifyLockfile('lockedConf', ["org:bar:$expectedVersion"], false)
+        lockfileFixture.verifyLockfile('lockedConf', ["org:bar:$expectedVersion"])
 
         where:
         version              | expectedVersion
@@ -222,7 +222,7 @@ dependencies {
         succeeds 'dependencies', '--write-locks'
 
         then:
-        lockfileFixture.verifyLockfile('lockedConf', ['org:bar:1.0-SNAPSHOT'], false)
+        lockfileFixture.verifyLockfile('lockedConf', ['org:bar:1.0-SNAPSHOT'])
         outputContains('Dependency lock state for configuration \':lockedConf\' contains changing modules: [org:bar:1.0-SNAPSHOT]. This means that dependencies content may still change over time.')
 
         when:
@@ -263,13 +263,13 @@ dependencies {
     lockedConf 'org:foo:$version'
 }
 """
-        lockfileFixture.createLockfile('lockedConf', ['org:bar:1.0', 'org:baz:1.0', 'org:foo:1.0'], false)
+        lockfileFixture.createLockfile('lockedConf', ['org:bar:1.0', 'org:baz:1.0', 'org:foo:1.0'])
 
         when:
         succeeds 'dependencies', '--update-locks', 'org:foo'
 
         then:
-        lockfileFixture.verifyLockfile('lockedConf', ['org:bar:1.0', 'org:baz:1.0', "org:foo:$expectedVersion"], false)
+        lockfileFixture.verifyLockfile('lockedConf', ['org:bar:1.0', 'org:baz:1.0', "org:foo:$expectedVersion"])
 
         where:
         version              | expectedVersion
@@ -313,7 +313,7 @@ task copyFiles(type: Copy) {
         succeeds 'copyFiles', '--write-locks'
 
         then:
-        lockfileFixture.verifyLockfile('lockedConf', ['org:foo:1.0'], false)
+        lockfileFixture.verifyLockfile('lockedConf', ['org:foo:1.0'])
 
         and:
         succeeds 'copyFiles'
@@ -385,7 +385,7 @@ repositories {
 configurations {
     lockedConf {
         resolutionStrategy.dependencySubstitution {
-            substitute module('org:test') with module('org:test:1.0')
+            substitute module('org:test') using module('org:test:1.0')
         }
     }
 }
@@ -454,7 +454,6 @@ task resolve {
         failureHasCause("Did not resolve 'org:test:1.1' which has been forced / substituted to a different version: '1.0'")
     }
 
-    @ToBeFixedForConfigurationCache(because = "composite builds")
     def "ignores the lock entry that matches a composite"() {
         given:
         lockfileFixture.createLockfile('lockedConf', ['org:composite:1.1'], false)

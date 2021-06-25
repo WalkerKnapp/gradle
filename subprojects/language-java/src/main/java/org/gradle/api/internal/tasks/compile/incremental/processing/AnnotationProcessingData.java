@@ -18,19 +18,22 @@ package org.gradle.api.internal.tasks.compile.incremental.processing;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
-import org.gradle.api.internal.cache.StringInterner;
+import com.google.common.collect.Sets;
+import org.gradle.api.internal.tasks.compile.incremental.compilerapi.deps.GeneratedResource;
+import org.gradle.api.internal.tasks.compile.incremental.serialization.HierarchicalNameSerializer;
 import org.gradle.internal.serialize.AbstractSerializer;
 import org.gradle.internal.serialize.Decoder;
 import org.gradle.internal.serialize.Encoder;
-import org.gradle.internal.serialize.InterningStringSerializer;
 import org.gradle.internal.serialize.MapSerializer;
 import org.gradle.internal.serialize.SetSerializer;
 
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Supplier;
 
 public class AnnotationProcessingData {
     private final Map<String, Set<String>> generatedTypesByOrigin;
+    private final Map<String, String> generatedTypesToOrigin;
     private final Set<String> aggregatedTypes;
     private final Set<String> generatedTypesDependingOnAllOthers;
     private final Map<String, Set<GeneratedResource>> generatedResourcesByOrigin;
@@ -38,18 +41,42 @@ public class AnnotationProcessingData {
     private final String fullRebuildCause;
 
     public AnnotationProcessingData() {
-        this(ImmutableMap.<String, Set<String>>of(), ImmutableSet.<String>of(), ImmutableSet.<String>of(), ImmutableMap.<String, Set<GeneratedResource>>of(), ImmutableSet.<GeneratedResource>of(), null);
+        this(ImmutableMap.of(), ImmutableSet.of(), ImmutableSet.of(), ImmutableMap.of(), ImmutableSet.of(), null);
     }
 
     public AnnotationProcessingData(Map<String, Set<String>> generatedTypesByOrigin, Set<String> aggregatedTypes, Set<String> generatedTypesDependingOnAllOthers, Map<String,
         Set<GeneratedResource>> generatedResourcesByOrigin, Set<GeneratedResource> generatedResourcesDependingOnAllOthers, String fullRebuildCause) {
 
         this.generatedTypesByOrigin = ImmutableMap.copyOf(generatedTypesByOrigin);
+        this.generatedTypesToOrigin = buildGeneratedTypesToOrigin(generatedTypesByOrigin);
         this.aggregatedTypes = ImmutableSet.copyOf(aggregatedTypes);
         this.generatedTypesDependingOnAllOthers = ImmutableSet.copyOf(generatedTypesDependingOnAllOthers);
         this.generatedResourcesByOrigin = ImmutableMap.copyOf(generatedResourcesByOrigin);
         this.generatedResourcesDependingOnAllOthers = ImmutableSet.copyOf(generatedResourcesDependingOnAllOthers);
         this.fullRebuildCause = fullRebuildCause;
+    }
+
+    private Map<String, String> buildGeneratedTypesToOrigin(Map<String, Set<String>> generatedTypesByOrigin) {
+        ImmutableMap.Builder<String, String> builder = ImmutableMap.builder();
+        Set<String> seen = Sets.newHashSet();
+        for (Map.Entry<String, Set<String>> entry : generatedTypesByOrigin.entrySet()) {
+            String origin = entry.getKey();
+            for (String generatedType : entry.getValue()) {
+                // Guava's builder doesn't support duplicates but we handle them separately
+                if (seen.add(generatedType)) {
+                    builder.put(generatedType, origin);
+                }
+            }
+        }
+        return builder.build();
+    }
+
+    public boolean participatesInClassGeneration(String clazzName) {
+        return aggregatedTypes.contains(clazzName) || generatedTypesByOrigin.containsKey(clazzName);
+    }
+
+    public boolean participatesInResourceGeneration(String clazzName) {
+        return participatesInClassGeneration(clazzName) || generatedResourcesByOrigin.containsKey(clazzName);
     }
 
     public Map<String, Set<String>> getGeneratedTypesByOrigin() {
@@ -76,24 +103,29 @@ public class AnnotationProcessingData {
         return fullRebuildCause;
     }
 
+    public String getOriginOf(String type) {
+        // if we can't find a source, then the type to reprocess is the type itself
+        return generatedTypesToOrigin.getOrDefault(type, type);
+    }
+
     public static final class Serializer extends AbstractSerializer<AnnotationProcessingData> {
-        private final SetSerializer<String> typesSerializer;
-        private final MapSerializer<String, Set<String>> generatedTypesSerializer;
-        private final SetSerializer<GeneratedResource> resourcesSerializer;
-        private final MapSerializer<String, Set<GeneratedResource>> generatedResourcesSerializer;
 
-        public Serializer(StringInterner interner) {
-            InterningStringSerializer stringSerializer = new InterningStringSerializer(interner);
-            typesSerializer = new SetSerializer<String>(stringSerializer);
-            generatedTypesSerializer = new MapSerializer<String, Set<String>>(stringSerializer, typesSerializer);
+        private final Supplier<HierarchicalNameSerializer> classNameSerializerSupplier;
 
-            GeneratedResourceSerializer resourceSerializer = new GeneratedResourceSerializer(stringSerializer);
-            this.resourcesSerializer = new SetSerializer<GeneratedResource>(resourceSerializer);
-            this.generatedResourcesSerializer = new MapSerializer<String, Set<GeneratedResource>>(stringSerializer, resourcesSerializer);
+        public Serializer(Supplier<HierarchicalNameSerializer> classNameSerializerSupplier) {
+            this.classNameSerializerSupplier = classNameSerializerSupplier;
         }
 
         @Override
         public AnnotationProcessingData read(Decoder decoder) throws Exception {
+            HierarchicalNameSerializer hierarchicalNameSerializer = classNameSerializerSupplier.get();
+            SetSerializer<String> typesSerializer = new SetSerializer<>(hierarchicalNameSerializer);
+            MapSerializer<String, Set<String>> generatedTypesSerializer = new MapSerializer<>(hierarchicalNameSerializer, typesSerializer);
+            GeneratedResourceSerializer resourceSerializer = new GeneratedResourceSerializer(hierarchicalNameSerializer);
+            SetSerializer<GeneratedResource> resourcesSerializer = new SetSerializer<>(resourceSerializer);
+            MapSerializer<String, Set<GeneratedResource>> generatedResourcesSerializer = new MapSerializer<>(hierarchicalNameSerializer, resourcesSerializer);
+
+
             Map<String, Set<String>> generatedTypes = generatedTypesSerializer.read(decoder);
             Set<String> aggregatedTypes = typesSerializer.read(decoder);
             Set<String> generatedTypesDependingOnAllOthers = typesSerializer.read(decoder);
@@ -106,6 +138,13 @@ public class AnnotationProcessingData {
 
         @Override
         public void write(Encoder encoder, AnnotationProcessingData value) throws Exception {
+            HierarchicalNameSerializer hierarchicalNameSerializer = classNameSerializerSupplier.get();
+            SetSerializer<String> typesSerializer = new SetSerializer<>(hierarchicalNameSerializer);
+            MapSerializer<String, Set<String>> generatedTypesSerializer = new MapSerializer<>(hierarchicalNameSerializer, typesSerializer);
+            GeneratedResourceSerializer resourceSerializer = new GeneratedResourceSerializer(hierarchicalNameSerializer);
+            SetSerializer<GeneratedResource> resourcesSerializer = new SetSerializer<>(resourceSerializer);
+            MapSerializer<String, Set<GeneratedResource>> generatedResourcesSerializer = new MapSerializer<>(hierarchicalNameSerializer, resourcesSerializer);
+
             generatedTypesSerializer.write(encoder, value.generatedTypesByOrigin);
             typesSerializer.write(encoder, value.aggregatedTypes);
             typesSerializer.write(encoder, value.generatedTypesDependingOnAllOthers);

@@ -40,10 +40,11 @@ import static org.gradle.cache.internal.LeastRecentlyUsedCacheCleanup.DEFAULT_MA
 import static org.gradle.cache.internal.filelock.LockOptionsBuilder.mode;
 
 public class DefaultClasspathTransformerCacheFactory implements ClasspathTransformerCacheFactory {
-    private static final CacheVersionMapping CACHE_VERSION_MAPPING = introducedIn("3.1-rc-1")
+    private static final CacheVersionMapping CACHE_VERSION_MAPPING = introducedIn("2.2")
         .incrementedIn("3.2-rc-1")
         .incrementedIn("3.5-rc-1")
         .changedTo(8, "6.5-rc-1")
+        .incrementedIn("7.1")
         .build();
     @VisibleForTesting
     static final String CACHE_NAME = "jars";
@@ -66,11 +67,17 @@ public class DefaultClasspathTransformerCacheFactory implements ClasspathTransfo
             .withDisplayName(CACHE_NAME)
             .withCrossVersionCache(CacheBuilder.LockTarget.DefaultTarget)
             .withLockOptions(mode(FileLockManager.LockMode.OnDemand))
-            .withCleanup(CompositeCleanupAction.builder()
-                .add(UnusedVersionsCacheCleanup.create(CACHE_NAME, CACHE_VERSION_MAPPING, usedGradleVersions))
-                .add(new LeastRecentlyUsedCacheCleanup(new SingleDepthFilesFinder(FILE_TREE_DEPTH_TO_TRACK_AND_CLEANUP), fileAccessTimeJournal, DEFAULT_MAX_AGE_IN_DAYS_FOR_RECREATABLE_CACHE_ENTRIES))
-                .build())
-            .open();
+            .withCleanup(
+                CompositeCleanupAction.builder()
+                    .add(UnusedVersionsCacheCleanup.create(CACHE_NAME, CACHE_VERSION_MAPPING, usedGradleVersions))
+                    .add(
+                        new LeastRecentlyUsedCacheCleanup(
+                            new SingleDepthFilesFinder(FILE_TREE_DEPTH_TO_TRACK_AND_CLEANUP),
+                            fileAccessTimeJournal,
+                            DEFAULT_MAX_AGE_IN_DAYS_FOR_RECREATABLE_CACHE_ENTRIES
+                        )
+                    ).build()
+            ).open();
     }
 
     @Override

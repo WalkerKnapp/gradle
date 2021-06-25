@@ -111,7 +111,7 @@ import java.util.Set;
  * <li>A {@code Callable}. The {@code call()} method may return any of the types listed here. Its return value is
  * recursively converted to tasks. A {@code null} return value is treated as an empty collection.</li>
  *
- * <li>A Groovy {@code Closure} or Kotlin function. The closure may take a {@code Task} as parameter. 
+ * <li>A Groovy {@code Closure} or Kotlin function. The closure may take a {@code Task} as parameter.
  * The closure or function may return any of the types listed here. Its return value is
  * recursively converted to tasks. A {@code null} return value is treated as an empty collection.</li>
  *
@@ -508,8 +508,11 @@ public interface Task extends Comparable<Task>, ExtensionAware {
      * contribute properties and methods to this task.</p>
      *
      * @return The convention object. Never returns null.
+     * @deprecated The concept of conventions is deprecated. Use extensions if possible.
+     * @see ExtensionAware#getExtensions()
      */
     @Internal
+    @Deprecated
     Convention getConvention();
 
     /**
@@ -747,7 +750,6 @@ public interface Task extends Comparable<Task>, ExtensionAware {
      */
     @Internal
     @Optional
-    @Incubating
     Property<Duration> getTimeout();
 
     /**

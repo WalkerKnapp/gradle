@@ -22,7 +22,7 @@ import org.gradle.integtests.resolve.AbstractModuleDependencyResolveTest
 import org.gradle.test.fixtures.maven.MavenFileRepository
 import spock.lang.Unroll
 
-import static org.gradle.util.GUtil.toCamelCase
+import static org.gradle.util.internal.GUtil.toCamelCase
 
 class DependencyMetadataRulesIntegrationTest extends AbstractModuleDependencyResolveTest {
     @Override
@@ -857,7 +857,7 @@ class DependencyMetadataRulesIntegrationTest extends AbstractModuleDependencyRes
         fails 'checkDep'
         failure.assertHasCause """Cannot find a version of 'org.test:moduleB' that satisfies the version constraints:
    Dependency path ':test:unspecified' --> 'org.test:moduleB:1.1'
-   ${defineAsConstraint? 'Constraint' : 'Dependency'} path ':test:unspecified' --> 'org.test:moduleA:1.0' --> 'org.test:moduleB:{strictly 1.0}'"""
+   ${defineAsConstraint? 'Constraint' : 'Dependency'} path ':test:unspecified' --> 'org.test:moduleA:1.0' ($variantToTest) --> 'org.test:moduleB:{strictly 1.0}'"""
 
         where:
         thing                    | defineAsConstraint
@@ -930,7 +930,7 @@ class DependencyMetadataRulesIntegrationTest extends AbstractModuleDependencyRes
         fails 'checkDep'
         failure.assertHasCause """Cannot find a version of 'org.test:moduleB' that satisfies the version constraints:
    Dependency path ':test:unspecified' --> 'org.test:moduleB:1.1'
-   ${defineAsConstraint? 'Constraint' : 'Dependency'} path ':test:unspecified' --> 'org.test:moduleA:1.0' --> 'org.test:moduleB:{require 1.+; reject 1.1 & 1.2}'"""
+   ${defineAsConstraint? 'Constraint' : 'Dependency'} path ':test:unspecified' --> 'org.test:moduleA:1.0' ($variantToTest) --> 'org.test:moduleB:{require 1.+; reject 1.1 & 1.2}'"""
 
         where:
         thing                    | defineAsConstraint

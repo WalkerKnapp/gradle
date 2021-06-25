@@ -16,63 +16,124 @@
 
 package org.gradle.internal.classpath;
 
+import org.gradle.api.UncheckedIOException;
 import org.gradle.api.file.RelativePath;
+import org.gradle.api.internal.file.archive.ZipEntry;
+import org.gradle.api.internal.file.archive.ZipInput;
+import org.gradle.api.internal.file.archive.impl.FileZipInput;
+import org.gradle.cache.FileLock;
+import org.gradle.cache.FileLockManager;
 import org.gradle.internal.Pair;
 import org.gradle.internal.file.FileException;
 import org.gradle.internal.file.FileType;
 import org.gradle.internal.hash.HashCode;
 import org.gradle.internal.hash.Hasher;
 import org.gradle.internal.hash.Hashing;
-import org.gradle.internal.snapshot.CompleteFileSystemLocationSnapshot;
+import org.gradle.internal.snapshot.FileSystemLocationSnapshot;
+import org.gradle.util.internal.GFileUtils;
 import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.ClassVisitor;
 import org.objectweb.asm.ClassWriter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
-import java.util.Iterator;
-import java.util.Map;
-import java.util.jar.Attributes;
-import java.util.jar.Manifest;
+
+import static java.lang.String.format;
+import static org.gradle.cache.internal.filelock.LockOptionsBuilder.mode;
 
 class InstrumentingClasspathFileTransformer implements ClasspathFileTransformer {
     private static final Logger LOGGER = LoggerFactory.getLogger(InstrumentingClasspathFileTransformer.class);
-    private static final Attributes.Name DIGEST_ATTRIBUTE = new Attributes.Name("SHA1-Digest");
+    private static final int CACHE_FORMAT = 4;
 
+    private final FileLockManager fileLockManager;
     private final ClasspathWalker classpathWalker;
     private final ClasspathBuilder classpathBuilder;
     private final CachedClasspathTransformer.Transform transform;
     private final HashCode configHash;
 
-    public InstrumentingClasspathFileTransformer(ClasspathWalker classpathWalker, ClasspathBuilder classpathBuilder, CachedClasspathTransformer.Transform transform) {
+    public InstrumentingClasspathFileTransformer(
+        FileLockManager fileLockManager,
+        ClasspathWalker classpathWalker,
+        ClasspathBuilder classpathBuilder,
+        CachedClasspathTransformer.Transform transform
+    ) {
+        this.fileLockManager = fileLockManager;
         this.classpathWalker = classpathWalker;
         this.classpathBuilder = classpathBuilder;
         this.transform = transform;
+        this.configHash = configHashFor(transform);
+    }
+
+    private HashCode configHashFor(CachedClasspathTransformer.Transform transform) {
         Hasher hasher = Hashing.defaultFunction().newHasher();
+        hasher.putInt(CACHE_FORMAT);
         transform.applyConfigurationTo(hasher);
-        configHash = hasher.hash();
+        return hasher.hash();
     }
 
     @Override
-    public File transform(File source, CompleteFileSystemLocationSnapshot sourceSnapshot, File cacheDir) {
-        String name = sourceSnapshot.getType() == FileType.Directory ? source.getName() + ".jar" : source.getName();
+    public File transform(File source, FileSystemLocationSnapshot sourceSnapshot, File cacheDir) {
+        String destDirName = hashOf(sourceSnapshot);
+        File destDir = new File(cacheDir, destDirName);
+        String destFileName = sourceSnapshot.getType() == FileType.Directory ? source.getName() + ".jar" : source.getName();
+        File receipt = new File(destDir, destFileName + ".receipt");
+        File transformed = new File(destDir, destFileName);
+
+        // Avoid file locking overhead by checking for the receipt first.
+        if (receipt.isFile()) {
+            return transformed;
+        }
+
+        final File lockFile = new File(destDir, destFileName + ".lock");
+        final FileLock fileLock = exclusiveLockFor(lockFile);
+        try {
+            if (receipt.isFile()) {
+                // Lock was acquired after a concurrent writer had already finished.
+                return transformed;
+            }
+            transform(source, transformed);
+            try {
+                receipt.createNewFile();
+            } catch (IOException e) {
+                throw new UncheckedIOException(
+                    format("Failed to create receipt for instrumented classpath file '%s/%s'.", destDirName, destFileName),
+                    e
+                );
+            }
+            return transformed;
+        } finally {
+            fileLock.close();
+        }
+    }
+
+    private FileLock exclusiveLockFor(File file) {
+        return fileLockManager.lock(
+            file,
+            mode(FileLockManager.LockMode.Exclusive).useCrossVersionImplementation(),
+            "instrumented jar cache"
+        );
+    }
+
+    private String hashOf(FileSystemLocationSnapshot sourceSnapshot) {
         Hasher hasher = Hashing.defaultFunction().newHasher();
         hasher.putHash(configHash);
         // TODO - apply runtime classpath normalization?
         hasher.putHash(sourceSnapshot.getHash());
-        HashCode fileHash = hasher.hash();
-        File transformed = new File(cacheDir, fileHash.toString() + '/' + name);
-        if (!transformed.isFile()) {
-            transform(source, transformed);
-        }
-        return transformed;
+        return hasher.hash().toString();
     }
 
     private void transform(File source, File dest) {
+        if (isSignedJar(source)) {
+            LOGGER.debug("Signed archive '{}'. Skipping instrumentation.", source.getName());
+            GFileUtils.copyFile(source, dest);
+        } else {
+            instrument(source, dest);
+        }
+    }
+
+    private void instrument(File source, File dest) {
         classpathBuilder.jar(dest, builder -> {
             try {
                 visitEntries(source, builder);
@@ -92,27 +153,28 @@ class InstrumentingClasspathFileTransformer implements ClasspathFileTransformer 
                 reader.accept(chain.right, 0);
                 byte[] bytes = classWriter.toByteArray();
                 builder.put(chain.left.getPathString(), bytes);
-            } else if (entry.getName().equals("META-INF/MANIFEST.MF")) {
-                // Remove the signature from the manifest, as the classes may have been instrumented
-                Manifest manifest = new Manifest(new ByteArrayInputStream(entry.getContent()));
-                manifest.getMainAttributes().remove(Attributes.Name.SIGNATURE_VERSION);
-                Iterator<Map.Entry<String, Attributes>> entries = manifest.getEntries().entrySet().iterator();
-                while (entries.hasNext()) {
-                    Map.Entry<String, Attributes> manifestEntry = entries.next();
-                    Attributes attributes = manifestEntry.getValue();
-                    attributes.remove(DIGEST_ATTRIBUTE);
-                    if (attributes.isEmpty()) {
-                        entries.remove();
-                    }
-                }
-                ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-                manifest.write(outputStream);
-                builder.put(entry.getName(), outputStream.toByteArray());
-            } else if (!entry.getName().startsWith("META-INF/") || !entry.getName().endsWith(".SF")) {
-                // Discard signature files, as the classes may have been instrumented
-                // Else, copy resource
+            } else {
                 builder.put(entry.getName(), entry.getContent());
             }
         });
+    }
+
+    private boolean isSignedJar(File source) {
+        if (!source.isFile()) {
+            return false;
+        }
+        try (ZipInput entries = FileZipInput.create(source)) {
+            for (ZipEntry entry : entries) {
+                String entryName = entry.getName();
+                if (entryName.startsWith("META-INF/") && entryName.endsWith(".SF")) {
+                    return true;
+                }
+            }
+        } catch (FileException e) {
+            // Ignore malformed archive
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+        return false;
     }
 }

@@ -19,7 +19,7 @@ package org.gradle.ide.visualstudio.internal;
 import org.gradle.api.file.FileCollection;
 import org.gradle.api.tasks.Input;
 import org.gradle.api.tasks.Internal;
-import org.gradle.util.VersionNumber;
+import org.gradle.util.internal.VersionNumber;
 
 import java.io.File;
 import java.util.List;
@@ -174,12 +174,12 @@ public interface VisualStudioTargetBinary {
         }
 
         public static LanguageStandard from(List<String> arguments) {
-            return arguments.stream().filter(it -> it.matches("^[-/]std:cpp.+")).findFirst().map(it -> {
-                if (it.endsWith("cpp14")) {
+            return arguments.stream().filter(it -> it.matches("^[-/]std:c\\+\\+.+")).findFirst().map(it -> {
+                if (it.endsWith("++14")) {
                     return LanguageStandard.STD_CPP_14;
-                } else if (it.endsWith("cpp17")) {
+                } else if (it.endsWith("++17")) {
                     return LanguageStandard.STD_CPP_17;
-                } else if (it.endsWith("cpplatest")) {
+                } else if (it.endsWith("++latest")) {
                     return LanguageStandard.STD_CPP_LATEST;
                 }
                 return LanguageStandard.NONE;

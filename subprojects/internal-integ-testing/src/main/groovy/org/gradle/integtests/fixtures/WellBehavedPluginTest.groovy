@@ -18,7 +18,7 @@ package org.gradle.integtests.fixtures
 
 import org.gradle.api.internal.plugins.DefaultPluginManager
 import org.gradle.integtests.fixtures.executer.GradleContextualExecuter
-import org.gradle.util.GUtil
+import org.gradle.util.internal.GUtil
 import org.junit.Assume
 
 import java.util.regex.Pattern
@@ -42,14 +42,11 @@ abstract class WellBehavedPluginTest extends AbstractPluginIntegrationTest {
     }
 
     @ToBeFixedForConfigurationCache(bottomSpecs = [
-        "HelpTasksPluginIntegrationTest",
         "BuildDashboardPluginIntegrationTest",
-        "GroovyPluginGoodBehaviourTest",
         "ScalaPluginGoodBehaviourTest",
         "AntlrPluginIntegrationTest",
         "PlayApplicationPluginGoodBehaviourIntegrationTest",
         "CheckstylePluginIntegrationTest",
-        "CodeNarcPluginIntegrationTest",
         "PmdPluginIntegrationTest",
         "CppLibraryPluginIntegrationTest",
         "CppApplicationPluginIntegrationTest",
@@ -64,7 +61,6 @@ abstract class WellBehavedPluginTest extends AbstractPluginIntegrationTest {
         succeeds mainTask
     }
 
-    @ToBeFixedForConfigurationCache
     def "plugin does not force creation of build dir during configuration"() {
         given:
         applyPlugin()
@@ -77,14 +73,11 @@ abstract class WellBehavedPluginTest extends AbstractPluginIntegrationTest {
     }
 
     @ToBeFixedForConfigurationCache(bottomSpecs = [
-        "HelpTasksPluginIntegrationTest",
         "BuildDashboardPluginIntegrationTest",
-        "GroovyPluginGoodBehaviourTest",
         "ScalaPluginGoodBehaviourTest",
         "AntlrPluginIntegrationTest",
         "PlayApplicationPluginGoodBehaviourIntegrationTest",
         "CheckstylePluginIntegrationTest",
-        "CodeNarcPluginIntegrationTest",
         "PmdPluginIntegrationTest",
         "CppLibraryPluginIntegrationTest",
         "CppApplicationPluginIntegrationTest",
@@ -122,7 +115,7 @@ abstract class WellBehavedPluginTest extends AbstractPluginIntegrationTest {
 
         applyPlugin()
 
-        buildFile << """
+        buildFile """
             tasks.configureEach {
                 println("configuring \${it.path}")
             }
@@ -135,7 +128,7 @@ abstract class WellBehavedPluginTest extends AbstractPluginIntegrationTest {
         def appliesBasePlugin = !(pluginName in [
             'build-dashboard', 'build-init', 'help-tasks', 'wrapper',
             'ivy-publish', 'maven-publish', 'publishing',
-            'eclipse', 'idea',
+            'eclipse', 'idea', 'version-catalog'
         ])
         if (GradleContextualExecuter.isConfigCache() && appliesBasePlugin) {
             assert output.count("configuring :") == 2
@@ -146,5 +139,73 @@ abstract class WellBehavedPluginTest extends AbstractPluginIntegrationTest {
             assert output.count("configuring :") == 1
             outputContains("configuring :help")
         }
+    }
+
+    @ToBeFixedForConfigurationCache(bottomSpecs = [
+        "AntlrPluginIntegrationTest",
+        "ApplicationPluginIntegrationTest",
+        "AssemblerLangPluginIntegrationTest",
+        "AssemblerPluginIntegrationTest",
+        "BasePluginGoodBehaviourTest",
+        "CLangPluginIntegrationTest",
+        "CPluginIntegrationTest",
+        "CUnitPluginIntegrationTest",
+        "CoffeeScriptBasePluginIntegrationTest",
+        "CppApplicationPluginIntegrationTest",
+        "CppLangPluginIntegrationTest",
+        "CppLibraryPluginIntegrationTest",
+        "CppPluginIntegrationTest",
+        "CppUnitTestPluginIntegrationTest",
+        "DistributionPluginIntegrationTest",
+        "EarPluginGoodBehaviourTest",
+        "EnvJsPluginIntegrationTest",
+        "GoogleTestPluginIntegrationTest",
+        "GroovyPluginGoodBehaviourTest",
+        "JUnitTestSuitePluginGoodBehaviourTest",
+        "JavaBasePluginGoodBehaviourTest",
+        "JavaGradlePluginPluginIntegrationTest",
+        "JavaLanguagePluginGoodBehaviourTest",
+        "JavaLibraryDistributionIntegrationTest",
+        "JavaPluginGoodBehaviourTest",
+        "JavaScriptBasePluginIntegrationTest",
+        "JsHintPluginIntegrationTest",
+        "MavenPluginGoodBehaviourTest",
+        "NativeComponentPluginIntegrationTest",
+        "ObjectiveCLangPluginIntegrationTest",
+        "ObjectiveCPluginIntegrationTest",
+        "ObjectiveCppLangPluginIntegrationTest",
+        "ObjectiveCppPluginIntegrationTest",
+        "PlayCoffeeScriptPluginGoodBehaviourIntegrationTest",
+        "PlayJavaScriptPluginGoodBehaviourIntegrationTest",
+        "RhinoPluginIntegrationTest",
+        "ScalaLanguagePluginGoodBehaviourTest",
+        "ScalaPluginGoodBehaviourTest",
+        "SwiftApplicationPluginIntegrationTest",
+        "SwiftLibraryPluginIntegrationTest",
+        "WarPluginGoodBehaviourTest",
+        "WindowsResourceScriptPluginIntegrationTest",
+        "WindowsResourcesPluginIntegrationTest",
+    ])
+    def "does not realize all possible tasks if the build is included"() {
+        Assume.assumeFalse(pluginName in ['xctest', 'visual-studio', 'xcode', 'play-application'])
+
+        def includedBuildFile = file("included/build.gradle")
+
+        settingsFile << """
+            includeBuild 'included'
+        """
+
+        applyPlugin(includedBuildFile)
+        includedBuildFile << """
+            tasks.configureEach {
+                println("configuring \${it.path}")
+            }
+        """
+
+        when:
+        succeeds("help")
+
+        then:
+        assert output.count("configuring :") == 0
     }
 }

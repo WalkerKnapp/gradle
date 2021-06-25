@@ -17,13 +17,13 @@
 package org.gradle.integtests
 
 import org.gradle.integtests.fixtures.AbstractIntegrationSpec
+import org.gradle.internal.hash.HashCode
+import org.gradle.internal.hash.Hashing
 import org.gradle.test.fixtures.ConcurrentTestUtil
-import org.gradle.util.TextUtil
+import org.gradle.util.internal.TextUtil
 
 import java.util.jar.Attributes
 import java.util.jar.Manifest
-
-import static org.gradle.internal.hash.HashUtil.sha256
 
 class WrapperGenerationIntegrationTest extends AbstractIntegrationSpec {
     def "generated wrapper scripts use correct line separators"() {
@@ -54,7 +54,7 @@ class WrapperGenerationIntegrationTest extends AbstractIntegrationSpec {
 
         then:
         // wrapper needs to be small. Let's check it's smaller than some arbitrary 'small' limit
-        file("gradle/wrapper/gradle-wrapper.jar").length() < 58 * 1024
+        file("gradle/wrapper/gradle-wrapper.jar").length() < 59 * 1024
     }
 
     def "generated wrapper scripts for given version from command-line"() {
@@ -71,8 +71,7 @@ class WrapperGenerationIntegrationTest extends AbstractIntegrationSpec {
         executer.inDirectory(file("second")).withTasks("wrapper").run()
 
         then: "the checksum should be constant (unless there are code changes)"
-        // TODO If you need to update this because of necessary code change in the wrapper, also address the TODO in 'wrapper.gradle.kts'
-        sha256(file("first/gradle/wrapper/gradle-wrapper.jar")).asHexString() == "e996d452d2645e70c01c11143ca2d3742734a28da2bf61f25c82bdc288c9e637"
+        Hashing.sha256().hashFile(file("first/gradle/wrapper/gradle-wrapper.jar")) == HashCode.fromString("33ad4583fd7ee156f533778736fa1b4940bd83b433934d1cc4e9f608e99a6a89")
 
         and:
         file("first/gradle/wrapper/gradle-wrapper.jar").md5Hash == file("second/gradle/wrapper/gradle-wrapper.jar").md5Hash

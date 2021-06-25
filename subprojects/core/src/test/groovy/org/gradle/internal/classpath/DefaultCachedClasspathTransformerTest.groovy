@@ -20,6 +20,7 @@ import org.gradle.api.Action
 import org.gradle.api.internal.file.TestFiles
 import org.gradle.cache.CacheBuilder
 import org.gradle.cache.CacheRepository
+import org.gradle.cache.FileLockManager
 import org.gradle.cache.GlobalCacheLocations
 import org.gradle.cache.internal.CacheScopeMapping
 import org.gradle.cache.internal.UsedGradleVersions
@@ -31,7 +32,7 @@ import org.gradle.internal.io.ClassLoaderObjectInputStream
 import org.gradle.test.fixtures.concurrent.ConcurrentSpec
 import org.gradle.test.fixtures.file.TestFile
 import org.gradle.test.fixtures.file.TestNameTestDirectoryProvider
-import org.gradle.testfixtures.internal.InMemoryCacheFactory
+import org.gradle.testfixtures.internal.TestInMemoryCacheFactory
 import org.junit.Rule
 import spock.lang.Subject
 
@@ -44,7 +45,7 @@ class DefaultCachedClasspathTransformerTest extends ConcurrentSpec {
     def testDir = testDirectoryProvider.testDirectory
 
     def cachedDir = testDir.file("cached")
-    def cache = new InMemoryCacheFactory().open(cachedDir, "jars")
+    def cache = new TestInMemoryCacheFactory().open(cachedDir, "jars")
     def cacheBuilder = Stub(CacheBuilder) {
         open() >> cache
         withDisplayName(_) >> { cacheBuilder }
@@ -63,13 +64,24 @@ class DefaultCachedClasspathTransformerTest extends ConcurrentSpec {
 
     def cacheFactory = new DefaultClasspathTransformerCacheFactory(cacheScopeMapping, usedGradleVersions)
     def classpathWalker = new ClasspathWalker(TestFiles.fileSystem())
-    def classpathBuilder = new ClasspathBuilder()
+    def classpathBuilder = new ClasspathBuilder(TestFiles.tmpDirTemporaryFileProvider(testDirectoryProvider.root))
     def fileSystemAccess = TestFiles.fileSystemAccess()
     def globalCacheLocations = Stub(GlobalCacheLocations)
+    def fileLockManager = Stub(FileLockManager)
     URLClassLoader testClassLoader = null
 
     @Subject
-    DefaultCachedClasspathTransformer transformer = new DefaultCachedClasspathTransformer(cacheRepository, cacheFactory, fileAccessTimeJournal, classpathWalker, classpathBuilder, fileSystemAccess, executorFactory, globalCacheLocations)
+    DefaultCachedClasspathTransformer transformer = new DefaultCachedClasspathTransformer(
+        cacheRepository,
+        cacheFactory,
+        fileAccessTimeJournal,
+        classpathWalker,
+        classpathBuilder,
+        fileSystemAccess,
+        executorFactory,
+        globalCacheLocations,
+        fileLockManager
+    )
 
     def cleanup() {
         testClassLoader?.close()
@@ -117,7 +129,7 @@ class DefaultCachedClasspathTransformerTest extends ConcurrentSpec {
         0 * fileAccessTimeJournal._
     }
 
-    def "discards missing file when tranform is build logic"() {
+    def "discards missing file when transform is build logic"() {
         given:
         def classpath = DefaultClassPath.of(testDir.file("missing"))
 
@@ -227,7 +239,7 @@ class DefaultCachedClasspathTransformerTest extends ConcurrentSpec {
         def file = testDir.file("thing.jar")
         jar(file)
         def classpath = DefaultClassPath.of(file)
-        def cachedFile = testDir.file("cached/6d94d31a97b094a3437af7d42531ba74/thing.jar")
+        def cachedFile = testDir.file("cached/f02b0eac651800f92b2e9c560f23d471/thing.jar")
 
         when:
         def cachedClasspath = transformer.transform(classpath, BuildLogic)
@@ -255,7 +267,7 @@ class DefaultCachedClasspathTransformerTest extends ConcurrentSpec {
         def dir = testDir.file("thing.dir")
         classesDir(dir)
         def classpath = DefaultClassPath.of(dir)
-        def cachedFile = testDir.file("cached/63fec267897dc064c59ca4ada0c0ba28/thing.dir.jar")
+        def cachedFile = testDir.file("cached/677c3a760aaaf0734d6b389e5a5fa9c4/thing.dir.jar")
 
         when:
         def cachedClasspath = transformer.transform(classpath, BuildLogic)
@@ -285,8 +297,8 @@ class DefaultCachedClasspathTransformerTest extends ConcurrentSpec {
         def file = testDir.file("thing.jar")
         jar(file)
         def classpath = DefaultClassPath.of(dir, file)
-        def cachedDir = testDir.file("cached/63fec267897dc064c59ca4ada0c0ba28/thing.dir.jar")
-        def cachedFile = testDir.file("cached/6d94d31a97b094a3437af7d42531ba74/thing.jar")
+        def cachedDir = testDir.file("cached/677c3a760aaaf0734d6b389e5a5fa9c4/thing.dir.jar")
+        def cachedFile = testDir.file("cached/f02b0eac651800f92b2e9c560f23d471/thing.jar")
 
         when:
         def cachedClasspath = transformer.transform(classpath, BuildLogic)
@@ -343,8 +355,8 @@ class DefaultCachedClasspathTransformerTest extends ConcurrentSpec {
         def file3 = testDir.file("thing3.jar")
         jar(file3)
         def classpath = DefaultClassPath.of(dir, file, dir2, file2, dir3, file3)
-        def cachedDir = testDir.file("cached/63fec267897dc064c59ca4ada0c0ba28/thing.dir.jar")
-        def cachedFile = testDir.file("cached/6d94d31a97b094a3437af7d42531ba74/thing.jar")
+        def cachedDir = testDir.file("cached/677c3a760aaaf0734d6b389e5a5fa9c4/thing.dir.jar")
+        def cachedFile = testDir.file("cached/f02b0eac651800f92b2e9c560f23d471/thing.jar")
 
         when:
         def cachedClasspath = transformer.transform(classpath, BuildLogic)
@@ -364,7 +376,7 @@ class DefaultCachedClasspathTransformerTest extends ConcurrentSpec {
         def file = testDir.file("thing.jar")
         jar(file)
         def classpath = DefaultClassPath.of(file)
-        def cachedFile = testDir.file("cached/effd4edb4a3dca958d3bfae32bd50a2c/thing.jar")
+        def cachedFile = testDir.file("cached/b502f303d1af1b59579b407ae0dd0284/thing.jar")
 
         when:
         def cachedClasspath = transformer.transform(classpath, BuildLogic, transform)

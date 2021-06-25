@@ -17,10 +17,10 @@ package org.gradle.api.internal.tasks.testing.detection;
 
 import org.apache.commons.lang.text.StrBuilder;
 import org.gradle.api.GradleException;
-import org.gradle.api.internal.file.DefaultTemporaryFileProvider;
-import org.gradle.api.internal.file.TemporaryFileProvider;
+import org.gradle.api.internal.file.temp.DefaultTemporaryFileProvider;
+import org.gradle.api.internal.file.temp.TemporaryFileProvider;
 import org.gradle.internal.Factory;
-import org.gradle.util.JarUtil;
+import org.gradle.util.internal.JarUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

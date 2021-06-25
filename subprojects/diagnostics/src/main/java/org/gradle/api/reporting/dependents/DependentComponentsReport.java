@@ -20,14 +20,13 @@ import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import org.gradle.api.DefaultTask;
-import org.gradle.api.Incubating;
 import org.gradle.api.InvalidUserDataException;
-import org.gradle.api.Project;
 import org.gradle.api.internal.project.ProjectInternal;
-import org.gradle.api.tasks.options.Option;
 import org.gradle.api.reporting.dependents.internal.TextDependentComponentsReportRenderer;
 import org.gradle.api.tasks.Console;
 import org.gradle.api.tasks.TaskAction;
+import org.gradle.api.tasks.diagnostics.internal.ProjectDetails;
+import org.gradle.api.tasks.options.Option;
 import org.gradle.internal.logging.text.StyledTextOutput;
 import org.gradle.internal.logging.text.StyledTextOutputFactory;
 import org.gradle.internal.work.WorkerLeaseService;
@@ -45,7 +44,7 @@ import static org.gradle.api.reporting.dependents.internal.DependentComponentsUt
 /**
  * Displays dependent components.
  */
-@Incubating
+@Deprecated
 public class DependentComponentsReport extends DefaultTask {
 
     private boolean showNonBuildable;
@@ -138,8 +137,7 @@ public class DependentComponentsReport extends DefaultTask {
             // Output reports per execution, not mixed.
             // Cross-project ModelRegistry operations do not happen concurrently.
             synchronized (DependentComponentsReport.class) {
-                ((ProjectInternal) getProject()).getMutationState().withMutableState(() -> {
-                    Project project = getProject();
+                ((ProjectInternal) getProject()).getOwner().applyToMutableState(project -> {
                     ModelRegistry modelRegistry = getModelRegistry();
 
                     DependentBinariesResolver dependentBinariesResolver = modelRegistry.find("dependentBinariesResolver", DependentBinariesResolver.class);
@@ -148,7 +146,8 @@ public class DependentComponentsReport extends DefaultTask {
                     TextDependentComponentsReportRenderer reportRenderer = new TextDependentComponentsReportRenderer(dependentBinariesResolver, showNonBuildable, showTestSuites);
 
                     reportRenderer.setOutput(textOutput);
-                    reportRenderer.startProject(project);
+                    ProjectDetails projectDetails = ProjectDetails.of(project);
+                    reportRenderer.startProject(projectDetails);
 
                     Set<ComponentSpec> allComponents = getAllComponents(modelRegistry);
                     if (showTestSuites) {
@@ -157,7 +156,7 @@ public class DependentComponentsReport extends DefaultTask {
                     reportRenderer.renderComponents(getReportedComponents(allComponents));
                     reportRenderer.renderLegend();
 
-                    reportRenderer.completeProject(project);
+                    reportRenderer.completeProject(projectDetails);
 
                     reportRenderer.complete();
                 });

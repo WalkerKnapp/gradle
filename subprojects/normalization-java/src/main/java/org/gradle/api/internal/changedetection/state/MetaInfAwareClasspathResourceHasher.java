@@ -19,37 +19,52 @@ package org.gradle.api.internal.changedetection.state;
 import org.gradle.api.internal.file.archive.ZipEntry;
 import org.gradle.internal.hash.HashCode;
 import org.gradle.internal.hash.Hasher;
-import org.gradle.internal.snapshot.RegularFileSnapshot;
+import org.gradle.internal.hash.Hashing;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.annotation.Nullable;
+import java.io.FileInputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
+import java.util.TreeSet;
+import java.util.jar.Attributes;
+import java.util.jar.Manifest;
+import java.util.stream.Collectors;
+
+import static java.lang.String.join;
 
 public class MetaInfAwareClasspathResourceHasher implements ResourceHasher {
     private static final Logger LOGGER = LoggerFactory.getLogger(MetaInfAwareClasspathResourceHasher.class);
 
     private final ResourceHasher delegate;
-    private final ManifestFileZipEntryHasher manifestFileZipEntryHasher;
-    private final PropertiesFileZipEntryHasher propertiesFileZipEntryHasher;
+    private final ResourceEntryFilter attributeResourceFilter;
 
-    public MetaInfAwareClasspathResourceHasher(ResourceHasher delegate, ManifestFileZipEntryHasher manifestFileZipEntryHasher, PropertiesFileZipEntryHasher propertiesFileZipEntryHasher) {
+    public MetaInfAwareClasspathResourceHasher(ResourceHasher delegate, ResourceEntryFilter attributeResourceFilter) {
         this.delegate = delegate;
-        this.manifestFileZipEntryHasher = manifestFileZipEntryHasher;
-        this.propertiesFileZipEntryHasher = propertiesFileZipEntryHasher;
+        this.attributeResourceFilter = attributeResourceFilter;
     }
 
     @Override
     public void appendConfigurationToHasher(Hasher hasher) {
         delegate.appendConfigurationToHasher(hasher);
-        manifestFileZipEntryHasher.appendConfigurationToHasher(hasher);
-        propertiesFileZipEntryHasher.appendConfigurationToHasher(hasher);
+        hasher.putString(getClass().getName());
+        attributeResourceFilter.appendConfigurationToHasher(hasher);
     }
 
     @Nullable
     @Override
-    public HashCode hash(RegularFileSnapshot snapshot) {
-        return delegate.hash(snapshot);
+    public HashCode hash(RegularFileSnapshotContext snapshotContext) {
+        String relativePath = join("/", snapshotContext.getRelativePathSegments().get());
+        if (isManifestFile(relativePath)) {
+            return tryHashWithFallback(snapshotContext);
+        } else {
+            return delegate.hash(snapshotContext);
+        }
     }
 
     @Nullable
@@ -57,18 +72,26 @@ public class MetaInfAwareClasspathResourceHasher implements ResourceHasher {
     public HashCode hash(ZipEntryContext zipEntryContext) throws IOException {
         ZipEntry zipEntry = zipEntryContext.getEntry();
         if (isManifestFile(zipEntry.getName())) {
-            return tryHashWithFallback(zipEntryContext, manifestFileZipEntryHasher);
-        } else if (isManifestPropertyFile(zipEntry.getName())) {
-            return tryHashWithFallback(zipEntryContext, propertiesFileZipEntryHasher);
+            return tryHashWithFallback(zipEntryContext);
         } else {
             return delegate.hash(zipEntryContext);
         }
     }
 
     @Nullable
-    private HashCode tryHashWithFallback(ZipEntryContext zipEntryContext, ZipEntryHasher hasher) throws IOException {
+    private HashCode tryHashWithFallback(RegularFileSnapshotContext snapshotContext) {
+        try (FileInputStream manifestFileInputStream = new FileInputStream(snapshotContext.getSnapshot().getAbsolutePath())) {
+            return hashManifest(manifestFileInputStream);
+        } catch (IOException e) {
+            LOGGER.debug("Could not load fingerprint for " + snapshotContext.getSnapshot().getAbsolutePath() + ". Falling back to full entry fingerprinting", e);
+            return delegate.hash(snapshotContext);
+        }
+    }
+
+    @Nullable
+    private HashCode tryHashWithFallback(ZipEntryContext zipEntryContext) throws IOException {
         try {
-            return hasher.hash(zipEntryContext);
+            return zipEntryContext.getEntry().withInputStream(this::hashManifest);
         } catch (IOException e) {
             LOGGER.debug("Could not load fingerprint for " + zipEntryContext.getRootParentName() + "!" + zipEntryContext.getFullName() + ". Falling back to full entry fingerprinting", e);
             return delegate.hash(zipEntryContext);
@@ -79,7 +102,42 @@ public class MetaInfAwareClasspathResourceHasher implements ResourceHasher {
         return name.equals("META-INF/MANIFEST.MF");
     }
 
-    private static boolean isManifestPropertyFile(final String name) {
-        return name.startsWith("META-INF/") && name.endsWith(".properties");
+    private HashCode hashManifest(InputStream inputStream) throws IOException {
+        Manifest manifest = new Manifest(inputStream);
+        Hasher hasher = Hashing.newHasher();
+        Attributes mainAttributes = manifest.getMainAttributes();
+        hashManifestAttributes(mainAttributes, "main", hasher);
+        Map<String, Attributes> entries = manifest.getEntries();
+        Set<String> names = new TreeSet<>(manifest.getEntries().keySet());
+        for (String name : names) {
+            hashManifestAttributes(entries.get(name), name, hasher);
+        }
+        return hasher.hash();
+    }
+
+    private void hashManifestAttributes(Attributes attributes, String name, Hasher hasher) {
+        Map<String, String> entries = attributes
+            .entrySet()
+            .stream()
+            .collect(Collectors.toMap(
+                entry -> entry.getKey().toString().toLowerCase(Locale.ROOT),
+                entry -> (String) entry.getValue()
+            ));
+        List<Map.Entry<String, String>> normalizedEntries = entries.
+            entrySet()
+            .stream()
+            .filter(entry -> !attributeResourceFilter.shouldBeIgnored(entry.getKey()))
+            .sorted(Map.Entry.comparingByKey())
+            .collect(Collectors.toList());
+
+        // Short-circuiting when there's no matching entries allows empty manifest sections to be ignored
+        // that allows an manifest without those sections to hash identically to the one with effectively empty sections
+        if (!normalizedEntries.isEmpty()) {
+            hasher.putString(name);
+            for (Map.Entry<String, String> entry : normalizedEntries) {
+                hasher.putString(entry.getKey());
+                hasher.putString(entry.getValue());
+            }
+        }
     }
 }

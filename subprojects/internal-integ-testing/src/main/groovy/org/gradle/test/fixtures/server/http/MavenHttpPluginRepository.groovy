@@ -19,7 +19,7 @@ import org.gradle.api.Action
 import org.gradle.api.internal.artifacts.BaseRepositoryFactory
 import org.gradle.integtests.fixtures.executer.GradleExecuter
 import org.gradle.test.fixtures.maven.MavenFileRepository
-import org.gradle.util.ConfigureUtil
+import org.gradle.util.internal.ConfigureUtil
 import org.junit.rules.TestRule
 import org.junit.runner.Description
 import org.junit.runners.model.Statement
@@ -30,7 +30,7 @@ import javax.servlet.http.HttpServletResponse
 import static org.gradle.test.fixtures.plugin.PluginBuilder.PLUGIN_MARKER_SUFFIX
 
 class MavenHttpPluginRepository extends MavenHttpRepository implements HttpPluginRepository, TestRule {
-    static final String PLUGIN_PORTAL_OVERRIDE_URL_PROPERTY = BaseRepositoryFactory.PLUGIN_PORTAL_OVERRIDE_URL_PROPERTY
+    public static final String PLUGIN_PORTAL_OVERRIDE_URL_PROPERTY = BaseRepositoryFactory.PLUGIN_PORTAL_OVERRIDE_URL_PROPERTY
 
     static MavenHttpPluginRepository asGradlePluginPortal(GradleExecuter executer, MavenFileRepository backingRepository) {
         MavenHttpPluginRepository pluginRepo = new MavenHttpPluginRepository(backingRepository)

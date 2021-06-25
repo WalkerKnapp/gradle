@@ -1,6 +1,6 @@
 // tag::multiple-repositories[]
 repositories {
-    jcenter()
+    mavenCentral()
     maven {
         url = uri("https://maven.springframework.org/release")
     }
@@ -18,5 +18,5 @@ dependencies {
 
 tasks.register<Copy>("copyLibs") {
     from(libs)
-    into("$buildDir/libs")
+    into(layout.buildDirectory.dir("libs"))
 }

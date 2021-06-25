@@ -22,8 +22,11 @@ import java.util.regex.Pattern;
 import org.apache.commons.lang.StringUtils;
 
 /**
- * Selects a single item from a collection based on a camel case pattern.
+ * This class is only here to maintain binary compatibility with existing plugins.
+ *
+ * @deprecated Will be removed in Gradle 8.0.
  */
+@Deprecated
 public class NameMatcher {
     private final SortedSet<String> matches = new TreeSet<>();
     private final Set<String> candidates = new TreeSet<>();
@@ -82,26 +85,29 @@ public class NameMatcher {
         Set<String> kebabCasePrefixMatches = new TreeSet<>();
 
         for (String candidate : items) {
+            boolean found = false;
+
             if (candidate.equalsIgnoreCase(pattern)) {
                 caseInsensitiveMatches.add(candidate);
+                found = true;
             }
             if (camelCasePattern.matcher(candidate).matches()) {
                 caseSensitiveCamelCaseMatches.add(candidate);
-                continue;
+                found = true;
             }
             if (normalisedCamelCasePattern.matcher(candidate).lookingAt()) {
                 caseInsensitiveCamelCaseMatches.add(candidate);
-                continue;
+                found = true;
             }
             if (kebabCasePattern.matcher(candidate).matches()) {
                 kebabCaseMatches.add(candidate);
-                continue;
+                found = true;
             }
             if (kebabCasePrefixPattern.matcher(candidate).matches()) {
                 kebabCasePrefixMatches.add(candidate);
-                continue;
+                found = true;
             }
-            if (StringUtils.getLevenshteinDistance(normalisedPattern, candidate.toUpperCase()) <= Math.min(3, pattern.length() / 2)) {
+            if (!found && StringUtils.getLevenshteinDistance(normalisedPattern, candidate.toUpperCase()) <= Math.min(3, pattern.length() / 2)) {
                 candidates.add(candidate);
             }
         }
@@ -110,7 +116,7 @@ public class NameMatcher {
             matches.addAll(caseInsensitiveMatches);
         } else if (!caseSensitiveCamelCaseMatches.isEmpty()) {
             matches.addAll(caseSensitiveCamelCaseMatches);
-        } else {
+        } else if (kebabCaseMatches.isEmpty() && kebabCasePrefixMatches.isEmpty()) {
             matches.addAll(caseInsensitiveCamelCaseMatches);
         }
 

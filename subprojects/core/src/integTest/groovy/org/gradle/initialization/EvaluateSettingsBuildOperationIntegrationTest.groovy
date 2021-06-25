@@ -18,7 +18,6 @@ package org.gradle.initialization
 
 import org.gradle.integtests.fixtures.AbstractIntegrationSpec
 import org.gradle.integtests.fixtures.BuildOperationsFixture
-import org.gradle.integtests.fixtures.ToBeFixedForConfigurationCache
 import org.gradle.internal.operations.trace.BuildOperationRecord
 
 class EvaluateSettingsBuildOperationIntegrationTest extends AbstractIntegrationSpec {
@@ -36,24 +35,6 @@ class EvaluateSettingsBuildOperationIntegrationTest extends AbstractIntegrationS
         operation().details.buildPath == ":"
     }
 
-    def "settings with master folder are exposed"() {
-
-        def customSettingsFile = file("master/settings.gradle")
-        customSettingsFile << """
-        includeFlat "a"
-        """
-
-        def projectDirectory = testDirectory.createDir("a")
-
-        when:
-        projectDir(projectDirectory)
-        succeeds('help')
-
-        then:
-        verifySettings(operation(), customSettingsFile)
-        operation().details.buildPath == ":"
-    }
-
     def "settings set via cmdline flag are exposed"() {
         def customSettingsDir = file("custom")
         customSettingsDir.mkdirs()
@@ -64,6 +45,7 @@ class EvaluateSettingsBuildOperationIntegrationTest extends AbstractIntegrationS
         """
 
         when:
+        executer.expectDocumentedDeprecationWarning("Specifying custom settings file location has been deprecated. This is scheduled to be removed in Gradle 8.0. Consult the upgrading guide for further information: https://docs.gradle.org/current/userguide/upgrading_version_7.html#configuring_custom_build_layout")
         executer.withArguments("--settings-file", customSettingsFile.absolutePath)
         succeeds('help')
 
@@ -72,7 +54,6 @@ class EvaluateSettingsBuildOperationIntegrationTest extends AbstractIntegrationS
         operation().details.buildPath == ":"
     }
 
-    @ToBeFixedForConfigurationCache(because = "composite builds")
     def "composite participants expose their settings details"() {
         settingsFile << """
             include "a"

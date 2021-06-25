@@ -18,7 +18,6 @@ package org.gradle.api.internal.plugins
 
 import org.gradle.integtests.fixtures.AbstractIntegrationSpec
 import org.gradle.integtests.fixtures.BuildOperationsFixture
-import org.gradle.integtests.fixtures.ToBeFixedForConfigurationCache
 
 class ApplyPluginBuildOperationIntegrationTest extends AbstractIntegrationSpec {
 
@@ -110,7 +109,7 @@ class ApplyPluginBuildOperationIntegrationTest extends AbstractIntegrationSpec {
             include "a"
             include "b"
         """
-        buildFile << """
+        buildFile """
             class Plugin1 implements Plugin {
                 void apply(project) {
                     project.rootProject.project(":b").apply(plugin: Plugin2)
@@ -143,7 +142,6 @@ class ApplyPluginBuildOperationIntegrationTest extends AbstractIntegrationSpec {
         p2.details.pluginClass == "Plugin2"
     }
 
-    @ToBeFixedForConfigurationCache(because = "composite builds")
     def "associates target to correct build"() {
         when:
         settingsFile << """
@@ -168,7 +166,7 @@ class ApplyPluginBuildOperationIntegrationTest extends AbstractIntegrationSpec {
             }
             apply plugin: PluginB
         """
-        buildFile << """
+        buildFile """
             class PluginRoot implements Plugin {
                 void apply(project) {
 

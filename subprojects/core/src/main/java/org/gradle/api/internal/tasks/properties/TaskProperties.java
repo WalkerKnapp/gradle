@@ -20,10 +20,9 @@ import com.google.common.collect.ImmutableSortedSet;
 import org.gradle.api.NonNullApi;
 import org.gradle.api.file.FileCollection;
 import org.gradle.api.internal.TaskInternal;
+import org.gradle.api.internal.file.FileCollectionFactory;
 import org.gradle.api.internal.tasks.TaskValidationContext;
-
-import java.util.Map;
-import java.util.function.Supplier;
+import org.gradle.internal.reflect.validation.TypeValidationContext;
 
 /**
  * A view of the properties of a task.
@@ -32,7 +31,7 @@ import java.util.function.Supplier;
  *
  * Once created, the view is immutable and registering additional or changing existing task properties will not be detected.
  *
- * Created by {@link DefaultTaskProperties#resolve(PropertyWalker, org.gradle.internal.file.PathToFileResolver, TaskInternal)}.
+ * Created by {@link DefaultTaskProperties#resolve(PropertyWalker, FileCollectionFactory, TaskInternal)}.
  */
 @NonNullApi
 public interface TaskProperties {
@@ -42,11 +41,9 @@ public interface TaskProperties {
     Iterable<? extends LifecycleAwareValue> getLifecycleAwareValues();
 
     /**
-     * A factory for the input properties.
-     *
-     * Calling `create` on the factory results in evaluating the input properties and gathering them into a Map.
+     * Input properties.
      */
-    Supplier<Map<String, Object>> getInputPropertyValues();
+    ImmutableSortedSet<InputPropertySpec> getInputProperties();
 
     /**
      * Input file properties.
@@ -98,6 +95,11 @@ public interface TaskProperties {
      * The files that are destroyed.
      */
     FileCollection getDestroyableFiles();
+
+    /**
+     * Validate the task type.
+     */
+    void validateType(TypeValidationContext validationContext);
 
     /**
      * Validations for the properties.

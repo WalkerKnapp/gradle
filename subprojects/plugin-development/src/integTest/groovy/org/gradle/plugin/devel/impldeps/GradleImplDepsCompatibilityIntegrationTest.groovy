@@ -21,7 +21,7 @@ import org.gradle.api.Action
 import org.gradle.integtests.fixtures.executer.GradleContextualExecuter
 import org.gradle.internal.ErroringAction
 import org.gradle.internal.IoActions
-import org.gradle.util.TextUtil
+import org.gradle.util.internal.TextUtil
 import spock.lang.IgnoreIf
 import spock.lang.Unroll
 
@@ -107,8 +107,9 @@ class GradleImplDepsCompatibilityIntegrationTest extends BaseGradleImplDepsInteg
     def "Gradle API and TestKit are compatible regardless of order #dependencyPermutations"() {
         when:
         buildFile << applyGroovyPlugin()
-        buildFile << jcenterRepository()
+        buildFile << mavenCentralRepository()
         buildFile << spockDependency()
+        buildFile << junitDependency()
         buildFile << """
             repositories {
                 maven { url '${buildContext.localRepository.toURI().toURL()}' }

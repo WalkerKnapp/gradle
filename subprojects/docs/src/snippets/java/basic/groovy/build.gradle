@@ -5,8 +5,9 @@ plugins {
 
 // tag::java-extension[]
 java {
-    sourceCompatibility = JavaVersion.VERSION_1_8
-    targetCompatibility = JavaVersion.VERSION_1_8
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(11)
+    }
 }
 // end::java-extension[]
 
@@ -62,7 +63,7 @@ dependencies {
     asciidoclet 'org.asciidoctor:asciidoclet:1.+'
 }
 
-task configureJavadoc {
+tasks.register('configureJavadoc') {
     doLast {
         javadoc {
             options.doclet = 'org.asciidoctor.Asciidoclet'
@@ -96,7 +97,7 @@ compileJava {
 // end::java-release-flag[]
 
 // tag::integ-test-task[]
-task integrationTest(type: Test) {
+tasks.register('integrationTest', Test) {
     description = 'Runs integration tests.'
     group = 'verification'
 
@@ -109,7 +110,7 @@ check.dependsOn integrationTest
 // end::integ-test-task[]
 
 // tag::defining-custom-javadoc-task[]
-task testJavadoc(type: Javadoc) {
+tasks.register('testJavadoc', Javadoc) {
     source = sourceSets.test.allJava
 }
 // end::defining-custom-javadoc-task[]

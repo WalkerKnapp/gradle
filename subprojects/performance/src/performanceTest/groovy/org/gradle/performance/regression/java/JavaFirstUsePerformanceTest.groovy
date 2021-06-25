@@ -16,32 +16,30 @@
 
 package org.gradle.performance.regression.java
 
-import org.gradle.performance.AbstractCrossVersionGradleProfilerPerformanceTest
-import org.gradle.performance.categories.SlowPerformanceRegressionTest
+import org.gradle.performance.AbstractCrossVersionPerformanceTest
+import org.gradle.performance.annotations.RunFor
+import org.gradle.performance.annotations.Scenario
 import org.gradle.profiler.mutations.AbstractCleanupMutator
 import org.gradle.profiler.mutations.ClearGradleUserHomeMutator
 import org.gradle.profiler.mutations.ClearProjectCacheMutator
-import org.junit.experimental.categories.Category
-import spock.lang.Unroll
 
-import static org.gradle.performance.generator.JavaTestProject.LARGE_JAVA_MULTI_PROJECT
-import static org.gradle.performance.generator.JavaTestProject.LARGE_JAVA_MULTI_PROJECT_KOTLIN_DSL
-import static org.gradle.performance.generator.JavaTestProject.LARGE_MONOLITHIC_JAVA_PROJECT
+import static org.gradle.performance.annotations.ScenarioType.PER_DAY
+import static org.gradle.performance.generator.JavaTestProjectGenerator.LARGE_JAVA_MULTI_PROJECT_KOTLIN_DSL
+import static org.gradle.performance.results.OperatingSystem.LINUX
 
-@Category(SlowPerformanceRegressionTest)
-class JavaFirstUsePerformanceTest extends AbstractCrossVersionGradleProfilerPerformanceTest {
+@RunFor(
+    @Scenario(type = PER_DAY, operatingSystems = [LINUX], testProjects = ["largeMonolithicJavaProject", "largeJavaMultiProject", "largeJavaMultiProjectKotlinDsl"])
+)
+class JavaFirstUsePerformanceTest extends AbstractCrossVersionPerformanceTest {
 
     def setup() {
-        runner.targetVersions = ["6.7-20200809220033+0000"]
+        runner.targetVersions = ["7.2-20210615000925+0000"]
     }
 
-    @Unroll
-    def "first use of #testProject"() {
+    def "first use"() {
         given:
-        runner.testProject = testProject
-        runner.gradleOpts = ["-Xms${testProject.daemonMemory}", "-Xmx${testProject.daemonMemory}"]
         runner.tasksToRun = ['tasks']
-        runner.runs = runs
+        runner.runs = (runner.testProject == (LARGE_JAVA_MULTI_PROJECT_KOTLIN_DSL.projectName) ? 5 : 10)
         runner.useDaemon = false
         runner.addBuildMutator { invocationSettings ->
             new ClearGradleUserHomeMutator(invocationSettings.gradleUserHome, AbstractCleanupMutator.CleanupSchedule.BUILD)
@@ -55,19 +53,10 @@ class JavaFirstUsePerformanceTest extends AbstractCrossVersionGradleProfilerPerf
 
         then:
         result.assertCurrentVersionHasNotRegressed()
-
-        where:
-        testProject                         | runs
-        LARGE_MONOLITHIC_JAVA_PROJECT       | 10
-        LARGE_JAVA_MULTI_PROJECT            | 10
-        LARGE_JAVA_MULTI_PROJECT_KOTLIN_DSL | 5
     }
 
-    @Unroll
-    def "clean checkout of #testProject"() {
+    def "clean checkout"() {
         given:
-        runner.testProject = testProject
-        runner.gradleOpts = ["-Xms${testProject.daemonMemory}", "-Xmx${testProject.daemonMemory}"]
         runner.tasksToRun = ['tasks']
         runner.useDaemon = false
         runner.addBuildMutator { invocationSettings ->
@@ -79,19 +68,10 @@ class JavaFirstUsePerformanceTest extends AbstractCrossVersionGradleProfilerPerf
 
         then:
         result.assertCurrentVersionHasNotRegressed()
-
-        where:
-        testProject                              | _
-        LARGE_MONOLITHIC_JAVA_PROJECT            | _
-        LARGE_JAVA_MULTI_PROJECT                 | _
-        LARGE_JAVA_MULTI_PROJECT_KOTLIN_DSL      | _
     }
 
-    @Unroll
-    def "cold daemon on #testProject"() {
+    def "cold daemon"() {
         given:
-        runner.testProject = testProject
-        runner.gradleOpts = ["-Xms${testProject.daemonMemory}", "-Xmx${testProject.daemonMemory}"]
         runner.tasksToRun = ['tasks']
         runner.useDaemon = false
 
@@ -100,11 +80,5 @@ class JavaFirstUsePerformanceTest extends AbstractCrossVersionGradleProfilerPerf
 
         then:
         result.assertCurrentVersionHasNotRegressed()
-
-        where:
-        testProject                              | _
-        LARGE_MONOLITHIC_JAVA_PROJECT            | _
-        LARGE_JAVA_MULTI_PROJECT                 | _
-        LARGE_JAVA_MULTI_PROJECT_KOTLIN_DSL      | _
     }
 }

@@ -21,14 +21,15 @@ import com.nhaarman.mockito_kotlin.doAnswer
 import com.nhaarman.mockito_kotlin.doReturn
 import com.nhaarman.mockito_kotlin.eq
 import com.nhaarman.mockito_kotlin.inOrder
-import com.nhaarman.mockito_kotlin.isNull
 import com.nhaarman.mockito_kotlin.mock
 import com.nhaarman.mockito_kotlin.same
 
 import org.gradle.api.initialization.Settings
+import org.gradle.api.internal.file.temp.GradleUserHomeTemporaryFileProvider
 import org.gradle.api.internal.initialization.ClassLoaderScope
 
 import org.gradle.groovy.scripts.ScriptSource
+import org.gradle.internal.classpath.ClassPath
 
 import org.gradle.internal.hash.HashCode
 import org.gradle.internal.resource.TextResource
@@ -68,6 +69,7 @@ class InterpreterTest : TestWithTempFiles() {
         """.trimIndent()
 
         val sourceHash = HashCode.fromInt(42)
+        val compilationClassPathHash = HashCode.fromInt(11)
         val stage1TemplateId = "Settings/TopLevel/stage1"
         val stage2TemplateId = "Settings/TopLevel/stage2"
 
@@ -99,9 +101,17 @@ class InterpreterTest : TestWithTempFiles() {
         val stage1CacheDir = root.resolve("stage1").apply { mkdir() }
         val stage2CacheDir = root.resolve("stage2").apply { mkdir() }
 
+        val mockServiceRegistry = mock<ServiceRegistry> {
+            on { get(GradleUserHomeTemporaryFileProvider::class.java) } doReturn GradleUserHomeTemporaryFileProvider {
+                tempFolder.createDir("gradle-user-home")
+            }
+        }
+
         val host = mock<Interpreter.Host> {
 
-            on { serviceRegistryFor(any(), any()) } doReturn mock<ServiceRegistry>()
+            on { hashOf(eq(testRuntimeClassPath)) } doReturn compilationClassPathHash
+
+            on { serviceRegistryFor(any(), any()) } doReturn mockServiceRegistry
 
             on { startCompilerOperation(any()) } doReturn compilerOperation
 
@@ -112,9 +122,10 @@ class InterpreterTest : TestWithTempFiles() {
                     any(),
                     eq(stage1TemplateId),
                     eq(sourceHash),
-                    same(parentClassLoader),
-                    isNull(),
-                    any())
+                    same(testRuntimeClassPath),
+                    same(ClassPath.EMPTY),
+                    any()
+                )
             } doAnswer {
                 it.getArgument<(File) -> Unit>(5).invoke(stage1CacheDir)
                 stage1CacheDir
@@ -125,9 +136,10 @@ class InterpreterTest : TestWithTempFiles() {
                     any(),
                     eq(stage2TemplateId),
                     eq(sourceHash),
-                    same(targetScopeExportClassLoader),
-                    isNull(),
-                    any())
+                    same(testRuntimeClassPath),
+                    same(ClassPath.EMPTY),
+                    any()
+                )
             } doAnswer {
                 it.getArgument<(File) -> Unit>(5).invoke(stage2CacheDir)
                 stage2CacheDir
@@ -140,7 +152,7 @@ class InterpreterTest : TestWithTempFiles() {
             }
 
             on {
-                loadClassInChildScopeOf(any(), any(), any(), any(), isNull())
+                loadClassInChildScopeOf(any(), any(), any(), any(), same(ClassPath.EMPTY))
             } doAnswer {
 
                 val location = it.getArgument<File>(2)
@@ -148,9 +160,11 @@ class InterpreterTest : TestWithTempFiles() {
 
                 val newLocation = relocate(location)
 
-                DummyCompiledScript(classLoaderFor(newLocation)
-                    .also { classLoaders += it }
-                    .loadClass(className))
+                DummyCompiledScript(
+                    classLoaderFor(newLocation)
+                        .also { classLoaders += it }
+                        .loadClass(className)
+                )
             }
         }
 
@@ -166,7 +180,8 @@ class InterpreterTest : TestWithTempFiles() {
                     mock(),
                     targetScope,
                     baseScope,
-                    true)
+                    true
+                )
             }
 
             inOrder(host, compilerOperation) {
@@ -176,31 +191,33 @@ class InterpreterTest : TestWithTempFiles() {
 
                 verify(host).cachedClassFor(stage1ProgramId)
 
-                verify(host).startCompilerOperation(scriptSourceDisplayName)
-
                 verify(host).compilationClassPathOf(parentScope)
+
+                verify(host).startCompilerOperation(scriptSourceDisplayName)
 
                 verify(compilerOperation).close()
 
                 verify(host).loadClassInChildScopeOf(
                     baseScope,
                     "kotlin-dsl:$scriptPath:$stage1TemplateId",
-                    stage1CacheDir.resolve("stage-1"),
+                    stage1CacheDir,
                     "Program",
-                    null)
+                    ClassPath.EMPTY
+                )
 
                 verify(host).cache(
                     DummyCompiledScript(classLoaders[0].loadClass("Program")),
-                    stage1ProgramId)
+                    stage1ProgramId
+                )
 
                 val stage2ProgramId =
-                    ProgramId(stage2TemplateId, sourceHash, targetScopeExportClassLoader)
+                    ProgramId(stage2TemplateId, sourceHash, targetScopeExportClassLoader, null, compilationClassPathHash)
 
                 verify(host).cachedClassFor(stage2ProgramId)
 
-                verify(host).startCompilerOperation(scriptSourceDisplayName)
-
                 verify(host).compilationClassPathOf(targetScope)
+
+                verify(host).startCompilerOperation(scriptSourceDisplayName)
 
                 verify(compilerOperation).close()
 
@@ -209,7 +226,7 @@ class InterpreterTest : TestWithTempFiles() {
                     "kotlin-dsl:$scriptPath:$stage2TemplateId",
                     stage2CacheDir,
                     "Program",
-                    null
+                    ClassPath.EMPTY
                 )
 
                 val specializedProgram = classLoaders[1].loadClass("Program")

@@ -35,8 +35,8 @@ import javax.annotation.concurrent.ThreadSafe;
  * Context can be added in free text using {@link DeprecationMessageBuilder#withContext(String)}.
  * Advice is constructed contextually using {@link DeprecationMessageBuilder.WithReplacement#replaceWith(Object)} methods based on the thing being deprecated. Alternatively, it can be populated using {@link DeprecationMessageBuilder#withAdvice(String)}.
  * DeprecationTimeline is mandatory and is added using one of:
- * - ${@link DeprecationMessageBuilder#willBeRemovedInGradle7()}
- * - ${@link DeprecationMessageBuilder#willBecomeAnErrorInGradle7()}
+ * - ${@link DeprecationMessageBuilder#willBeRemovedInGradle8()}
+ * - ${@link DeprecationMessageBuilder#willBecomeAnErrorInGradle8()}
  * After DeprecationTimeline is set, Documentation reference must be added using one of:
  * - {@link DeprecationMessageBuilder.WithDeprecationTimeline#withUpgradeGuideSection(int, String)}
  * - {@link DeprecationMessageBuilder.WithDeprecationTimeline#withDslReference(Class, String)}
@@ -159,6 +159,14 @@ public class DeprecationLogger {
     }
 
     /**
+     * Output: The ${property} system property has been deprecated.
+     */
+    @CheckReturnValue
+    public static DeprecationMessageBuilder.DeprecateSystemProperty deprecateSystemProperty(String systemProperty) {
+        return new DeprecationMessageBuilder.DeprecateSystemProperty(systemProperty);
+    }
+
+    /**
      * Output: The ${parameter} named parameter has been deprecated.
      */
     @CheckReturnValue
@@ -188,6 +196,14 @@ public class DeprecationLogger {
     @CheckReturnValue
     public static DeprecationMessageBuilder.DeprecateTask deprecateTask(String task) {
         return new DeprecationMessageBuilder.DeprecateTask(task);
+    }
+
+    /**
+     * Output: The task type ${task.getCanonicalName()} (used by the ${task.getPath()} task) has been deprecated.
+     */
+    @CheckReturnValue
+    public static DeprecationMessageBuilder.DeprecateTaskType deprecateTaskType(Class<?> task, String path) {
+        return new DeprecationMessageBuilder.DeprecateTaskType(task.getCanonicalName(), path);
     }
 
     /**

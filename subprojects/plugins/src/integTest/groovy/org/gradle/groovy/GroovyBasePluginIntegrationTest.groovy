@@ -16,7 +16,6 @@
 package org.gradle.groovy
 
 import org.gradle.integtests.fixtures.AbstractIntegrationSpec
-import org.gradle.integtests.fixtures.ToBeFixedForConfigurationCache
 import spock.lang.Issue
 
 class GroovyBasePluginIntegrationTest extends AbstractIntegrationSpec {
@@ -76,8 +75,8 @@ task groovydoc(type: Groovydoc) {
 
 task verify {
     doLast {
-        assert configurations.customCompile.state.toString() == "UNRESOLVED"
-        assert configurations.customRuntime.state.toString() == "UNRESOLVED"
+        assert configurations.customCompileClasspath.state.toString() == "UNRESOLVED"
+        assert configurations.customRuntimeClasspath.state.toString() == "UNRESOLVED"
     }
 }
         """
@@ -86,7 +85,6 @@ task verify {
         succeeds("verify")
     }
 
-    @ToBeFixedForConfigurationCache(because = "gradle/configuration-cache#270")
     def "not specifying a groovy runtime produces decent error message"() {
         given:
         buildFile << """
@@ -116,21 +114,21 @@ task verify {
     }
 
     @Issue("https://github.com/gradle/gradle/issues/5722")
-    def "can override sourceSet language outputDir to override compile task destinationDir"() {
+    def "can override sourceSet language destinationDirectory to override compile task destinationDirectory"() {
         given:
         buildFile << '''
             apply plugin: 'groovy-base'
 
             sourceSets {
                 main {
-                    groovy.outputDir = file("$buildDir/bin")
+                    groovy.destinationDirectory.set(file("$buildDir/bin"))
                 }
             }
 
             task assertDirectoriesAreEquals {
                 doLast {
-                    assert sourceSets.main.groovy.outputDir == compileGroovy.destinationDir
-                    assert sourceSets.main.groovy.outputDir == file("$buildDir/bin")
+                    assert sourceSets.main.groovy.destinationDirectory.get().asFile == compileGroovy.destinationDirectory.get().asFile
+                    assert sourceSets.main.groovy.destinationDirectory.get().asFile == file("$buildDir/bin")
                 }
             }
         '''

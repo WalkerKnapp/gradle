@@ -21,17 +21,15 @@ import com.google.common.collect.ImmutableSortedMap;
 import org.apache.commons.lang.StringUtils;
 import org.gradle.caching.internal.origin.OriginMetadata;
 import org.gradle.internal.Try;
-import org.gradle.internal.execution.CurrentSnapshotResult;
 import org.gradle.internal.execution.ExecutionOutcome;
-import org.gradle.internal.execution.IncrementalChangesContext;
-import org.gradle.internal.execution.Step;
+import org.gradle.internal.execution.ExecutionResult;
 import org.gradle.internal.execution.UnitOfWork;
-import org.gradle.internal.execution.UpToDateResult;
 import org.gradle.internal.execution.history.AfterPreviousExecutionState;
-import org.gradle.internal.fingerprint.FileCollectionFingerprint;
+import org.gradle.internal.snapshot.FileSystemSnapshot;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.Duration;
 import java.util.Formatter;
 import java.util.List;
 import java.util.Optional;
@@ -48,15 +46,15 @@ public class SkipUpToDateStep<C extends IncrementalChangesContext> implements St
     }
 
     @Override
-    public UpToDateResult execute(C context) {
+    public UpToDateResult execute(UnitOfWork work, C context) {
         if (LOGGER.isDebugEnabled()) {
-            LOGGER.debug("Determining if {} is up-to-date", context.getWork().getDisplayName());
+            LOGGER.debug("Determining if {} is up-to-date", work.getDisplayName());
         }
         return context.getChanges().map(changes -> {
             ImmutableList<String> reasons = changes.getAllChangeMessages();
             if (reasons.isEmpty()) {
                 if (LOGGER.isInfoEnabled()) {
-                    LOGGER.info("Skipping {} as it is up-to-date.", context.getWork().getDisplayName());
+                    LOGGER.info("Skipping {} as it is up-to-date.", work.getDisplayName());
                 }
                 @SuppressWarnings("OptionalGetWithoutIsPresent")
                 AfterPreviousExecutionState afterPreviousExecutionState = context.getAfterPreviousExecutionState().get();
@@ -67,8 +65,8 @@ public class SkipUpToDateStep<C extends IncrementalChangesContext> implements St
                     }
 
                     @Override
-                    public ImmutableSortedMap<String, FileCollectionFingerprint> getFinalOutputs() {
-                        return afterPreviousExecutionState.getOutputFileProperties();
+                    public ImmutableSortedMap<String, FileSystemSnapshot> getOutputFilesProduceByWork() {
+                        return afterPreviousExecutionState.getOutputFilesProducedByWork();
                     }
 
                     @Override
@@ -77,19 +75,34 @@ public class SkipUpToDateStep<C extends IncrementalChangesContext> implements St
                     }
 
                     @Override
-                    public Try<ExecutionOutcome> getOutcome() {
-                        return Try.successful(ExecutionOutcome.UP_TO_DATE);
+                    public Try<ExecutionResult> getExecutionResult() {
+                        return Try.successful(new ExecutionResult() {
+                            @Override
+                            public ExecutionOutcome getOutcome() {
+                                return ExecutionOutcome.UP_TO_DATE;
+                            }
+
+                            @Override
+                            public Object getOutput() {
+                                return work.loadRestoredOutput(context.getWorkspace());
+                            }
+                        });
+                    }
+
+                    @Override
+                    public Duration getDuration() {
+                        return afterPreviousExecutionState.getOriginMetadata().getExecutionTime();
                     }
                 };
             } else {
-                return executeBecause(reasons, context);
+                return executeBecause(work, reasons, context);
             }
-        }).orElseGet(() -> executeBecause(CHANGE_TRACKING_DISABLED, context));
+        }).orElseGet(() -> executeBecause(work, CHANGE_TRACKING_DISABLED, context));
     }
 
-    private UpToDateResult executeBecause(ImmutableList<String> reasons, C context) {
-        logExecutionReasons(reasons, context.getWork());
-        CurrentSnapshotResult result = delegate.execute(context);
+    private UpToDateResult executeBecause(UnitOfWork work, ImmutableList<String> reasons, C context) {
+        logExecutionReasons(reasons, work);
+        CurrentSnapshotResult result = delegate.execute(work, context);
         return new UpToDateResult() {
             @Override
             public ImmutableList<String> getExecutionReasons() {
@@ -97,8 +110,8 @@ public class SkipUpToDateStep<C extends IncrementalChangesContext> implements St
             }
 
             @Override
-            public ImmutableSortedMap<String, ? extends FileCollectionFingerprint> getFinalOutputs() {
-                return result.getFinalOutputs();
+            public ImmutableSortedMap<String, FileSystemSnapshot> getOutputFilesProduceByWork() {
+                return result.getOutputFilesProduceByWork();
             }
 
             @Override
@@ -109,8 +122,13 @@ public class SkipUpToDateStep<C extends IncrementalChangesContext> implements St
             }
 
             @Override
-            public Try<ExecutionOutcome> getOutcome() {
-                return result.getOutcome();
+            public Duration getDuration() {
+                return result.getDuration();
+            }
+
+            @Override
+            public Try<ExecutionResult> getExecutionResult() {
+                return result.getExecutionResult();
             }
         };
     }

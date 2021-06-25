@@ -26,12 +26,27 @@ class GradleKotlinDslRegressionsTest : AbstractPluginIntegrationTest() {
     @Issue("https://github.com/gradle/gradle/issues/9919")
     fun `gradleKotlinDsl dependency declaration does not throw`() {
 
-        withBuildScript("""
+        withBuildScript(
+            """
             plugins { java }
             dependencies {
                 compileOnly(gradleKotlinDsl())
             }
-        """)
+            """
+        )
+
+        build("help")
+    }
+
+    @Test
+    fun `can configure ext extension`() {
+        withBuildScript(
+            """
+            ext {
+                set("foo", "bar")
+            }
+            """
+        )
 
         build("help")
     }

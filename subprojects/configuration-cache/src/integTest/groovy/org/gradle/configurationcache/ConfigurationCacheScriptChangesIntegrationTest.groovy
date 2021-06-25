@@ -17,13 +17,11 @@
 package org.gradle.configurationcache
 
 import org.gradle.configurationcache.fixtures.ScriptChangeFixture
-import org.junit.Test
 import spock.lang.Unroll
 
 class ConfigurationCacheScriptChangesIntegrationTest extends AbstractConfigurationCacheIntegrationTest {
 
     @Unroll
-    @Test
     def "invalidates cache upon change to #scriptChangeSpec"() {
         given:
         def configurationCache = newConfigurationCacheFixture()
@@ -36,12 +34,21 @@ class ConfigurationCacheScriptChangesIntegrationTest extends AbstractConfigurati
 
         then:
         outputContains fixture.expectedOutputBeforeChange
+        configurationCache.assertStateStored()
+
+        when:
+        build()
+
+        then: 'scripts are not executed when loading from cache'
+        outputDoesNotContain fixture.expectedOutputBeforeChange
+        configurationCache.assertStateLoaded()
 
         when:
         fixture.applyChange()
         build()
 
         then:
+        outputContains fixture.expectedCacheInvalidationMessage
         outputContains fixture.expectedOutputAfterChange
         configurationCache.assertStateStored()
 

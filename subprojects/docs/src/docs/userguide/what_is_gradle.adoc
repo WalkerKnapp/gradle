@@ -108,7 +108,7 @@ It would be great if you could build your project using only the build logic bun
 
 Gradle provides several mechanisms that allow you to extend it, such as:
 
- * <<custom_tasks#,Custom task types>>.
+ * <<custom_tasks#custom_tasks,Custom task types>>.
 +
 When you want the build to do some work that an existing task can't do, you can simply write your own task type. It's typically best to put the source file for a custom task type in the <<organizing_gradle_projects#sec:build_sources,_buildSrc_>> directory or in a packaged plugin. Then you can use the custom task type just like any of the Gradle-provided ones.
 
@@ -124,7 +124,7 @@ These allows you to add your own properties to a project or task that you can th
 +
 Conventions are a powerful way to simplify builds so that users can understand and use them more easily. This can be seen with builds that use standard project structures and naming conventions, such as <<building_java_projects#building_java_projects,Java builds>>. You can write your own plugins that provide conventions — they just need to configure default values for the relevant aspects of a build.
 
- * {guidesUrl}/implementing-gradle-plugins/#modeling_dsl_like_apis[A custom model].
+ * <<implementing_gradle_plugins.adoc#modeling_dsl_like_apis,A custom model>>.
 +
 Gradle allows you to introduce new concepts into a build beyond tasks, files and dependency configurations. You can see this with most language plugins, which add the concept of <<building_java_projects#sec:java_source_sets,_source sets_>> to a build. Appropriate modeling of a build process can greatly improve a build's ease of use and its efficiency.
 

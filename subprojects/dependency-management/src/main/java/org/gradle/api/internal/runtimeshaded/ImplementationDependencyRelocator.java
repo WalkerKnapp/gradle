@@ -44,8 +44,7 @@ class ImplementationDependencyRelocator extends Remapper {
                 String line;
                 while ((line = reader.readLine()) != null) {
                     line = line.trim();
-                    // TODO:configuration-cache - remove kotlin predicate after updating the wrapper
-                    if (line.length() > 0 && !line.startsWith("kotlin")) {
+                    if (line.length() > 0) {
                         builder.addWord(line);
                     }
                 }
@@ -94,6 +93,7 @@ class ImplementationDependencyRelocator extends Remapper {
     private final List<String> mustRelocateList = Arrays.asList(
         // In order to use a newer version of jna the resources must not be available in the old location
         "com/sun/jna",
+        "org/apache/groovy",
         // JGit properties work from their relocated locations and conflict if they are left in place.
         "org/eclipse/jgit");
 

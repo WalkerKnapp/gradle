@@ -18,27 +18,29 @@ package org.gradle.test.fixtures.server.http
 import com.google.common.net.UrlEscapers
 import com.google.gson.Gson
 import com.google.gson.JsonElement
+import groovy.transform.CompileStatic
 import groovy.xml.MarkupBuilder
 import org.gradle.api.credentials.PasswordCredentials
-import org.gradle.internal.BiAction
 import org.gradle.internal.credentials.DefaultPasswordCredentials
-import org.gradle.internal.hash.HashUtil
+import org.gradle.internal.hash.Hashing
 import org.gradle.test.fixtures.server.ExpectOne
+import org.gradle.test.fixtures.server.ForbidOne
+import org.gradle.test.fixtures.server.OneRequestServerExpectation
 import org.gradle.test.fixtures.server.ServerExpectation
 import org.gradle.test.fixtures.server.ServerWithExpectations
 import org.gradle.test.matchers.UserAgentMatcher
-import org.gradle.util.GFileUtils
+import org.gradle.util.internal.GFileUtils
 import org.hamcrest.Matcher
-import org.mortbay.io.EndPoint
-import org.mortbay.jetty.Handler
-import org.mortbay.jetty.HttpHeaders
-import org.mortbay.jetty.HttpStatus
-import org.mortbay.jetty.MimeTypes
-import org.mortbay.jetty.Request
-import org.mortbay.jetty.handler.AbstractHandler
+import org.eclipse.jetty.server.Handler
+import org.eclipse.jetty.http.HttpHeader
+import org.eclipse.jetty.http.HttpStatus
+import org.eclipse.jetty.http.MimeTypes
+import org.eclipse.jetty.server.Request
+import org.eclipse.jetty.server.handler.AbstractHandler
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 
+import javax.servlet.ServletException
 import javax.servlet.http.HttpServletRequest
 import javax.servlet.http.HttpServletResponse
 import java.util.concurrent.CountDownLatch
@@ -63,8 +65,8 @@ class HttpServer extends ServerWithExpectations implements HttpServerFixture {
 
     enum EtagStrategy {
         NONE({ null }),
-        RAW_SHA1_HEX({ HashUtil.sha1(it as byte[]).asHexString() }),
-        NEXUS_ENCODED_SHA1({ "{SHA1{" + HashUtil.sha1(it as byte[]).asHexString() + "}}" })
+        RAW_SHA1_HEX({ Hashing.sha1().hashBytes(it as byte[]).toString() }),
+        NEXUS_ENCODED_SHA1({ "{SHA1{" + Hashing.sha1().hashBytes(it as byte[]) + "}}" })
 
         private final Closure generator
 
@@ -94,9 +96,10 @@ class HttpServer extends ServerWithExpectations implements HttpServerFixture {
     @Override
     Handler getCustomHandler() {
         return new AbstractHandler() {
-            void handle(String target, HttpServletRequest request, HttpServletResponse response, int dispatch) {
+            @Override
+            void handle(String target, Request baseRequest, HttpServletRequest request, HttpServletResponse response) throws IOException, ServletException {
                 String d = request.getQueryString()
-                if (request.handled) {
+                if (baseRequest.handled) {
                     return
                 }
                 onFailure(new AssertionError("Received unexpected ${request.method} request to ${target}."))
@@ -291,6 +294,15 @@ class HttpServer extends ServerWithExpectations implements HttpServerFixture {
         expect(path, false, ['HEAD'], broken())
     }
 
+    private Action ok() {
+        new ActionSupport("return 200 ok") {
+            @Override
+            void handle(HttpServletRequest request, HttpServletResponse response) {
+                response.setStatus(200)
+            }
+        }
+    }
+
     private Action notFound() {
         new ActionSupport("return 404 not found") {
             void handle(HttpServletRequest request, HttpServletResponse response) {
@@ -302,7 +314,7 @@ class HttpServer extends ServerWithExpectations implements HttpServerFixture {
     private Action broken() {
         new ActionSupport("return 500 broken") {
             void handle(HttpServletRequest request, HttpServletResponse response) {
-                response.sendError(500, "broken")
+                response.setStatus(500, "broken")
             }
         }
     }
@@ -351,10 +363,31 @@ class HttpServer extends ServerWithExpectations implements HttpServerFixture {
     }
 
     /**
+     * Forbids one GET request for the given URL.
+     */
+    HttpResourceInteraction forbidGet(String path) {
+        return forbid(path, false, ['GET'], ok())
+    }
+
+    /**
      * Allows one GET request for the given URL. Reads the request content from the given file.
      */
     HttpResourceInteraction expectGet(String path, File srcFile) {
         return expect(path, false, ['GET'], fileHandler(path, srcFile))
+    }
+
+    /**
+     * Allows one GET request for the given URL. Returns an empty 200 OK response.
+     */
+    HttpResourceInteraction expectGetEmptyOk(String path) {
+        return expect(path, false, ['GET'], ok())
+    }
+
+    /**
+     * Forbids one GET request for the given URL. Reads the request content from the given file.
+     */
+    HttpResourceInteraction forbidGet(String path, File srcFile) {
+        return forbid(path, false, ['GET'], fileHandler(path, srcFile))
     }
 
     /**
@@ -387,7 +420,7 @@ class HttpServer extends ServerWithExpectations implements HttpServerFixture {
                 def file = srcFile
                 if (file.isFile()) {
                     response.setHeader("Content-Encoding", "gzip")
-                    response.setDateHeader(HttpHeaders.LAST_MODIFIED, srcFile.lastModified())
+                    response.setDateHeader(HttpHeader.LAST_MODIFIED.asString(), srcFile.lastModified())
                     def stream = new GZIPOutputStream(response.outputStream)
                     stream.write(file.bytes)
                     stream.close()
@@ -401,32 +434,63 @@ class HttpServer extends ServerWithExpectations implements HttpServerFixture {
     /**
      * Expects one GET request for the given URL, responding with a redirect.
      */
-    void expectGetRedirected(String path, String location, PasswordCredentials passwordCredentials = null) {
-        expectRedirected('GET', path, location, passwordCredentials)
+    void expectGetRedirected(String path, String location, PasswordCredentials passwordCredentials = null, RedirectType redirectType = RedirectType.FOUND_302) {
+        expectRedirected('GET', path, location, passwordCredentials, redirectType)
+    }
+
+    /**
+     * Expects one GET request for the given URL, responding with a redirect.
+     */
+    void forbidGetRedirected(String path, String location, PasswordCredentials passwordCredentials = null, RedirectType redirectType = RedirectType.FOUND_302) {
+        forbidRedirected('GET', path, location, redirectType)
     }
 
     /**
      * Expects one HEAD request for the given URL, responding with a redirect.
      */
-    void expectHeadRedirected(String path, String location, PasswordCredentials passwordCredentials = null) {
-        expectRedirected('HEAD', path, location, passwordCredentials)
+    void expectHeadRedirected(String path, String location, PasswordCredentials passwordCredentials = null, RedirectType redirectType = RedirectType.FOUND_302) {
+        expectRedirected('HEAD', path, location, passwordCredentials, redirectType)
     }
 
     /**
      * Expects one PUT request for the given URL, responding with a redirect.
      */
-    void expectPutRedirected(String path, String location, PasswordCredentials passwordCredentials = null) {
-        expectRedirected('PUT', path, location, passwordCredentials)
+    void expectPutRedirected(String path, String location, PasswordCredentials passwordCredentials = null, RedirectType redirectType = RedirectType.FOUND_302) {
+        expectRedirected('PUT', path, location, passwordCredentials, redirectType)
     }
 
-    private void expectRedirected(String method, String path, String location, PasswordCredentials credentials) {
-        expect(path, false, [method], redirectTo(location), credentials)
+    @CompileStatic
+    private void expectRedirected(String method, String path, String location, PasswordCredentials credentials, RedirectType redirectType) {
+        expect(path, false, [method], redirectTo(location, redirectType), credentials)
     }
 
-    private HttpServer.Action redirectTo(location) {
+    @CompileStatic
+    private void forbidRedirected(String method, String path, String location, RedirectType redirectType) {
+        forbid(path, false, [method], redirectTo(location, redirectType))
+    }
+
+    enum RedirectType {
+        PERMANENT_301(301),
+        FOUND_302(302),
+        SEE_OTHER(303),
+        TEMP_307(307),
+        PERMANENT(308)
+
+        @Override
+        String toString() {
+            return super.toString()
+        }
+        int code;
+
+        RedirectType(int code) {
+            this.code = code
+        }
+    }
+    private HttpServer.Action redirectTo(location, RedirectType redirectType = RedirectType.FOUND_302) {
         new ActionSupport("redirect to $location") {
             void handle(HttpServletRequest request, HttpServletResponse response) {
-                response.sendRedirect(location)
+                response.setHeader("location", location)
+                response.setStatus(redirectType.code)
             }
         }
     }
@@ -470,7 +534,7 @@ class HttpServer extends ServerWithExpectations implements HttpServerFixture {
 
     private sendFile(HttpServletResponse response, File file, Long lastModified, Long contentLength, String contentType) {
         if (sendLastModified) {
-            response.setDateHeader(HttpHeaders.LAST_MODIFIED, lastModified ?: file.lastModified())
+            response.setDateHeader(HttpHeader.LAST_MODIFIED.asString(), lastModified ?: file.lastModified())
         }
         def content = file.bytes
 
@@ -482,7 +546,7 @@ class HttpServer extends ServerWithExpectations implements HttpServerFixture {
 
         response.setContentType(contentType ?: new MimeTypes().getMimeByExtension(file.name).toString())
         if (sendSha1Header) {
-            response.addHeader("X-Checksum-Sha1", HashUtil.sha1(content).asHexString())
+            response.addHeader("X-Checksum-Sha1", Hashing.sha1().hashBytes(content).toZeroPaddedString(Hashing.sha1().hexDigits))
         }
 
         addEtag(response, content, etags)
@@ -501,7 +565,7 @@ class HttpServer extends ServerWithExpectations implements HttpServerFixture {
             }
 
             if (value != null) {
-                response.addHeader(HttpHeaders.ETAG, value)
+                response.addHeader(HttpHeader.ETAG.asString(), value)
             }
         }
     }
@@ -528,7 +592,7 @@ class HttpServer extends ServerWithExpectations implements HttpServerFixture {
     /**
      * Expects one PUT request for the given URL. Writes the request content to the given file.
      */
-    void expectPut(String path, File destFile, int statusCode = HttpStatus.ORDINAL_200_OK, PasswordCredentials credentials = null, long expectedContentLength = -1) {
+    void expectPut(String path, File destFile, int statusCode = HttpStatus.OK_200, PasswordCredentials credentials = null, long expectedContentLength = -1) {
         def action = new ActionSupport("write request to $destFile.name (content length: $expectedContentLength) and return status $statusCode") {
             void handle(HttpServletRequest request, HttpServletResponse response) {
                 if (HttpServer.this.expectedUserAgent != null) {
@@ -644,6 +708,7 @@ class HttpServer extends ServerWithExpectations implements HttpServerFixture {
         expect(path, false, methods, action, passwordCredentials)
     }
 
+    @CompileStatic
     HttpResourceInteraction expect(String path, boolean matchPrefix, Collection<String> methods, Action action, PasswordCredentials credentials = null) {
         if (credentials != null) {
             action = withAuthentication(path, credentials.username, credentials.password, action)
@@ -652,9 +717,20 @@ class HttpServer extends ServerWithExpectations implements HttpServerFixture {
         }
 
         HttpExpectOne expectation = new HttpExpectOne(action, methods, path)
+        return addOneRequestExpecation(path, matchPrefix, methods, action, expectation)
+    }
+
+    @CompileStatic
+    HttpResourceInteraction forbid(String path, boolean matchPrefix, Collection<String> methods, Action action) {
+        HttpForbidOne expectation = new HttpForbidOne(action, methods, path)
+        return addOneRequestExpecation(path, matchPrefix, methods, action, expectation)
+    }
+
+    private HttpResourceInteraction addOneRequestExpecation(String path, boolean matchPrefix, Collection<String> methods, Action action, OneRequestServerExpectation expectation) {
         expectations << expectation
         add(path, matchPrefix, methods, new AbstractHandler() {
-            void handle(String target, HttpServletRequest request, HttpServletResponse response, int dispatch) {
+            @Override
+            void handle(String target, Request baseRequest, HttpServletRequest request, HttpServletResponse response) throws IOException, ServletException {
                 if (expectation.atomicRun.getAndSet(true)) {
                     return
                 }
@@ -690,7 +766,8 @@ class HttpServer extends ServerWithExpectations implements HttpServerFixture {
 
     protected void allow(String path, boolean matchPrefix, Collection<String> methods, Action action) {
         add(path, matchPrefix, methods, new AbstractHandler() {
-            void handle(String target, HttpServletRequest request, HttpServletResponse response, int dispatch) {
+            @Override
+            void handle(String target, Request baseRequest, HttpServletRequest request, HttpServletResponse response) throws IOException, ServletException {
                 action.handle(request, response)
                 request.handled = true
             }
@@ -701,13 +778,14 @@ class HttpServer extends ServerWithExpectations implements HttpServerFixture {
         assert path.startsWith('/')
         def prefix = path == '/' ? '/' : path + '/'
         collection.addHandler(new AbstractHandler() {
-            void handle(String target, HttpServletRequest request, HttpServletResponse response, int dispatch) {
+            @Override
+            void handle(String target, Request baseRequest, HttpServletRequest request, HttpServletResponse response) throws IOException, ServletException {
                 if (methods != null && !methods.contains(request.method)) {
                     return
                 }
                 boolean match = request.pathInfo == path || (matchPrefix && request.pathInfo.startsWith(prefix))
                 if (match && !request.handled) {
-                    handler.handle(target, request, response, dispatch)
+                    handler.handle(target, baseRequest, request, response)
                 }
             }
         })
@@ -721,11 +799,8 @@ class HttpServer extends ServerWithExpectations implements HttpServerFixture {
      * Blocks on SSL handshake for 60 seconds.
      */
     void expectSslHandshakeBlocking() {
-        sslPreHandler = new BiAction<EndPoint, Request>() {
-            @Override
-            void execute(EndPoint endPoint, Request request) {
-                Thread.sleep(TimeUnit.SECONDS.toMillis(60))
-            }
+        sslPreHandler {
+            Thread.sleep(TimeUnit.SECONDS.toMillis(60))
         }
     }
 
@@ -742,6 +817,22 @@ class HttpServer extends ServerWithExpectations implements HttpServerFixture {
 
         String getNotMetMessage() {
             "Expected HTTP request not received: ${methods.size() == 1 ? methods[0] : methods} $path and $action.displayName"
+        }
+    }
+
+    static class HttpForbidOne extends ForbidOne {
+        final Action action
+        final Collection<String> methods
+        final String path
+
+        HttpForbidOne(Action action, Collection<String> methods, String path) {
+            this.action = action
+            this.methods = methods
+            this.path = path
+        }
+
+        String getNotMetMessage() {
+            "Unexpected HTTP request received: ${methods.size() == 1 ? methods[0] : methods} $path and $action.displayName"
         }
     }
 

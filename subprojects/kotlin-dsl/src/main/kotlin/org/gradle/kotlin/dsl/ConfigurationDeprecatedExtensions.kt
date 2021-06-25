@@ -278,6 +278,7 @@ val <T : Configuration> NamedDomainObjectProvider<T>.resolvedConfiguration
 /**
  * See [Configuration.getUploadTaskName].
  */
+@Suppress("DEPRECATION")
 @Deprecated(deprecationMessage, replaceWith = ReplaceWith("get().uploadTaskName"))
 val <T : Configuration> NamedDomainObjectProvider<T>.uploadTaskName
     get() = get().uploadTaskName
@@ -498,4 +499,4 @@ fun <T : Configuration> NamedDomainObjectProvider<T>.addToAntBuilder(builder: An
 
 
 private
-const val deprecationMessage = "Scheduled to be removed in Gradle 6.0"
+const val deprecationMessage = "Scheduled to be removed in Gradle 8.0"

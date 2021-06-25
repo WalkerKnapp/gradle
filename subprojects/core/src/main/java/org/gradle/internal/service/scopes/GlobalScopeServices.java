@@ -49,8 +49,8 @@ import org.gradle.cache.internal.CrossBuildInMemoryCacheFactory;
 import org.gradle.cache.internal.InMemoryCacheDecoratorFactory;
 import org.gradle.configuration.DefaultImportsReader;
 import org.gradle.configuration.ImportsReader;
+import org.gradle.execution.DefaultWorkValidationWarningRecorder;
 import org.gradle.initialization.ClassLoaderRegistry;
-import org.gradle.initialization.ClassLoaderScopeListeners;
 import org.gradle.initialization.DefaultClassLoaderRegistry;
 import org.gradle.initialization.DefaultJdkToolsInitializer;
 import org.gradle.initialization.FlatClassLoaderRegistry;
@@ -61,16 +61,14 @@ import org.gradle.internal.Factory;
 import org.gradle.internal.classloader.DefaultClassLoaderFactory;
 import org.gradle.internal.classpath.ClassPath;
 import org.gradle.internal.concurrent.ExecutorFactory;
-import org.gradle.internal.deprecation.DeprecationLogger;
 import org.gradle.internal.environment.GradleBuildEnvironment;
 import org.gradle.internal.event.ListenerManager;
+import org.gradle.internal.execution.history.OverlappingOutputDetector;
 import org.gradle.internal.execution.history.changes.DefaultExecutionStateChangeDetector;
 import org.gradle.internal.execution.history.changes.ExecutionStateChangeDetector;
-import org.gradle.internal.execution.steps.ValidateStep;
+import org.gradle.internal.execution.history.impl.DefaultOverlappingOutputDetector;
 import org.gradle.internal.filewatch.DefaultFileWatcherFactory;
 import org.gradle.internal.filewatch.FileWatcherFactory;
-import org.gradle.internal.fingerprint.overlap.OverlappingOutputDetector;
-import org.gradle.internal.fingerprint.overlap.impl.DefaultOverlappingOutputDetector;
 import org.gradle.internal.installation.CurrentGradleInstallation;
 import org.gradle.internal.installation.GradleRuntimeShadedJarDetector;
 import org.gradle.internal.instantiation.InjectAnnotationHandler;
@@ -121,7 +119,7 @@ import java.util.List;
 public class GlobalScopeServices extends WorkerSharedGlobalScopeServices {
 
     protected final ClassPath additionalModuleClassPath;
-    private GradleBuildEnvironment environment;
+    private final GradleBuildEnvironment environment;
 
     public GlobalScopeServices(final boolean longLiving) {
         this(longLiving, ClassPath.EMPTY);
@@ -134,7 +132,6 @@ public class GlobalScopeServices extends WorkerSharedGlobalScopeServices {
     }
 
     void configure(ServiceRegistration registration, ClassLoaderRegistry classLoaderRegistry) {
-        registration.add(ClassLoaderScopeListeners.class);
         final List<PluginServiceRegistry> pluginServiceFactories = new DefaultServiceLocator(classLoaderRegistry.getRuntimeClassLoader(), classLoaderRegistry.getPluginsClassLoader()).getAll(PluginServiceRegistry.class);
         for (PluginServiceRegistry pluginServiceRegistry : pluginServiceFactories) {
             registration.add(PluginServiceRegistry.class, pluginServiceRegistry);
@@ -320,9 +317,7 @@ public class GlobalScopeServices extends WorkerSharedGlobalScopeServices {
         return new DefaultOverlappingOutputDetector();
     }
 
-    ValidateStep.ValidationWarningReporter createValidationWarningReporter() {
-        return behaviour -> DeprecationLogger.deprecateBehaviour(behaviour)
-            .willBeRemovedInGradle7()
-            .withUserManual("more_about_tasks", "sec:up_to_date_checks").nagUser();
+    DefaultWorkValidationWarningRecorder createValidationWarningReporter() {
+        return new DefaultWorkValidationWarningRecorder();
     }
 }

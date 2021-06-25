@@ -17,35 +17,52 @@
 package org.gradle.api.internal.artifacts.transform
 
 import com.google.common.collect.ImmutableList
-import com.google.common.collect.Maps
 import org.gradle.api.artifacts.component.ComponentArtifactIdentifier
+import org.gradle.api.internal.artifacts.ivyservice.resolveengine.artifact.ArtifactVisitor
 import org.gradle.api.internal.artifacts.ivyservice.resolveengine.artifact.ResolvableArtifact
+import org.gradle.api.internal.artifacts.ivyservice.resolveengine.artifact.ResolvedArtifactSet
+import org.gradle.api.internal.attributes.ImmutableAttributes
 import org.gradle.internal.Try
+import org.gradle.internal.model.CalculatedValue
 import org.gradle.internal.operations.BuildOperation
 import org.gradle.internal.operations.BuildOperationQueue
 import spock.lang.Specification
 
 class TransformingAsyncArtifactListenerTest extends Specification {
-    def transformation = Mock(Transformation)
+    def transformation = Mock(TransformationStep)
+    def targetAttributes = Mock(ImmutableAttributes)
+    def result = ImmutableList.builder()
     CacheableInvocation<TransformationSubject> invocation = Mock(CacheableInvocation)
     def operationQueue = Mock(BuildOperationQueue)
-    def transformationNodeRegistry = Mock(TransformationNodeRegistry)
-    def listener  = new TransformingAsyncArtifactListener(transformation, operationQueue, Maps.newHashMap(), Mock(ExecutionGraphDependenciesResolver), transformationNodeRegistry)
+    def listener = new TransformingAsyncArtifactListener([new BoundTransformationStep(transformation, Stub(TransformUpstreamDependencies))], targetAttributes, result)
     def file = new File("foo")
     def artifactFile = new File("foo-artifact")
     def artifactId = Stub(ComponentArtifactIdentifier)
+    def source = Stub(CalculatedValue) {
+        isFinalized() >> true
+        getValue() >> Try.successful(file)
+    }
     def artifact = Stub(ResolvableArtifact) {
         getId() >> artifactId
+        getFileSource() >> source
         getFile() >> artifactFile
     }
-    def node = Mock(TransformationNode)
+    def artifacts = Mock(ResolvedArtifactSet.Artifacts)
 
     def "adds expensive artifact transformations to the build operation queue"() {
         when:
-        listener.artifactAvailable(artifact)
+        listener.visitArtifacts(artifacts)
+        def artifacts = result.build()
 
         then:
-        1 * transformationNodeRegistry.getIfExecuted(artifactId, transformation) >> Optional.empty()
+        artifacts.size() == 1
+        1 * artifacts.visit(_) >> { ArtifactVisitor visitor -> visitor.visitArtifact(null, null, artifact) }
+        0 * _
+
+        when:
+        artifacts[0].startFinalization(operationQueue, true)
+
+        then:
         1 * transformation.createInvocation(_, _, _) >> invocation
         1 * invocation.getCachedResult() >> Optional.empty()
         1 * operationQueue.add(_ as BuildOperation)
@@ -53,21 +70,20 @@ class TransformingAsyncArtifactListenerTest extends Specification {
 
     def "runs cheap artifact transformations immediately when not scheduled"() {
         when:
-        listener.artifactAvailable(artifact)
+        listener.visitArtifacts(artifacts)
+        def artifacts = result.build()
 
         then:
-        1 * transformationNodeRegistry.getIfExecuted(artifactId, transformation) >> Optional.empty()
-        1 * transformation.createInvocation({ it.files == [this.artifactFile] }, _ as ExecutionGraphDependenciesResolver, _) >> invocation
-        1 * invocation.getCachedResult() >> Optional.of(Try.successful(TransformationSubject.initial(file)))
-    }
+        artifacts.size() == 1
+        1 * artifacts.visit(_) >> { ArtifactVisitor visitor -> visitor.visitArtifact(null, null, artifact) }
+        0 * _
 
-    def "re-uses scheduled artifact transformation result"() {
         when:
-        listener.artifactAvailable(artifact)
+        artifacts[0].startFinalization(operationQueue, true)
 
         then:
-        1 * transformationNodeRegistry.getIfExecuted(artifactId, transformation) >> Optional.of(node)
-        1 * node.getTransformedSubject() >> Try.successful(TransformationSubject.initial(artifact.id, artifact.file).createSubjectFromResult(ImmutableList.of()))
-        0 * transformation.createInvocation(_, _ as ExecutionGraphDependenciesResolver, _)
+        1 * transformation.createInvocation({ it.files == [this.artifactFile] }, _ as TransformUpstreamDependencies, _) >> invocation
+        2 * invocation.getCachedResult() >> Optional.of(Try.successful(TransformationSubject.initial(artifact)))
+        0 * operationQueue._
     }
 }

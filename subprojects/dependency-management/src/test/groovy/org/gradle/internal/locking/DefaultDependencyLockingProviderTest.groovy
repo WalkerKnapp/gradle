@@ -22,7 +22,6 @@ import org.gradle.api.artifacts.DependencySubstitution
 import org.gradle.api.artifacts.component.ModuleComponentIdentifier
 import org.gradle.api.artifacts.dsl.LockMode
 import org.gradle.api.internal.DomainObjectContext
-import org.gradle.api.internal.FeaturePreviews
 import org.gradle.api.internal.artifacts.DefaultModuleIdentifier
 import org.gradle.api.internal.artifacts.ivyservice.dependencysubstitution.DependencySubstitutionRules
 import org.gradle.api.internal.file.FilePropertyFactory
@@ -49,13 +48,13 @@ class DefaultDependencyLockingProviderTest extends Specification {
     TestNameTestDirectoryProvider tmpDir = new TestNameTestDirectoryProvider(getClass())
 
     TestFile lockDir = tmpDir.createDir(LockFileReaderWriter.DEPENDENCY_LOCKING_FOLDER)
+    TestFile uniqueLockFile = tmpDir.file(LockFileReaderWriter.UNIQUE_LOCKFILE_NAME)
 
     FileResolver resolver = Mock()
     StartParameter startParameter = Mock()
     DomainObjectContext context = Mock()
     DependencySubstitutionRules dependencySubstitutionRules = Mock()
     FileResourceListener listener = Mock()
-    FeaturePreviews featurePreviews = new FeaturePreviews()
     PropertyFactory propertyFactory = new DefaultPropertyFactory(Stub(PropertyHost))
     FilePropertyFactory filePropertyFactory = TestFiles.filePropertyFactory()
 
@@ -67,32 +66,15 @@ class DefaultDependencyLockingProviderTest extends Specification {
         context.getProjectPath() >> Path.path(':')
         resolver.canResolveRelativePath() >> true
         resolver.resolve(LockFileReaderWriter.DEPENDENCY_LOCKING_FOLDER) >> lockDir
-        resolver.resolve(LockFileReaderWriter.UNIQUE_LOCKFILE_NAME) >> tmpDir.file(LockFileReaderWriter.UNIQUE_LOCKFILE_NAME)
+        resolver.resolve(LockFileReaderWriter.UNIQUE_LOCKFILE_NAME) >> uniqueLockFile
         startParameter.getLockedDependenciesToUpdate() >> []
         provider = newProvider()
-    }
-
-    def 'can persist resolved modules as lockfile'() {
-        given:
-        startParameter.isWriteDependencyLocks() >> true
-        provider = newProvider()
-        def modules = [module('org', 'foo', '1.0'), module('org','bar','1.3')] as Set
-
-        when:
-        provider.persistResolvedDependencies('conf', modules, emptySet())
-
-        then:
-        lockDir.file('conf.lockfile').text == """${LockFileReaderWriter.LOCKFILE_HEADER_LIST.join('\n')}
-org:bar:1.3
-org:foo:1.0
-""".denormalize()
     }
 
     def 'can persist resolved modules as unique lockfile'() {
         given:
         tmpDir.file(LockFileReaderWriter.UNIQUE_LOCKFILE_NAME) << "empty=conf"
         startParameter.isWriteDependencyLocks() >> true
-        featurePreviews.enableFeature(FeaturePreviews.Feature.ONE_LOCKFILE_PER_PROJECT)
         provider = newProvider()
         def modules = [module('org', 'foo', '1.0'), module('org','bar','1.3')] as Set
         provider.loadLockState('conf')
@@ -102,7 +84,7 @@ org:foo:1.0
         provider.buildFinished()
 
         then:
-        tmpDir.file(LockFileReaderWriter.UNIQUE_LOCKFILE_NAME).text == """${LockFileReaderWriter.LOCKFILE_HEADER_LIST.join('\n')}
+        uniqueLockFile.text == """${LockFileReaderWriter.LOCKFILE_HEADER_LIST.join('\n')}
 org:bar:1.3=conf
 org:foo:1.0=conf
 empty=
@@ -113,10 +95,6 @@ empty=
     @Unroll
     def 'can load lockfile as strict constraints (Unique: #unique)'() {
         given:
-        if (unique) {
-            featurePreviews.enableFeature(FeaturePreviews.Feature.ONE_LOCKFILE_PER_PROJECT)
-            provider = newProvider()
-        }
         writeLockFile(['org:bar:1.3', 'org:foo:1.0'], unique)
 
         when:
@@ -127,6 +105,9 @@ empty=
         result.getLockedDependencies() == [newId(DefaultModuleIdentifier.newId('org', 'bar'), '1.3'), newId(DefaultModuleIdentifier.newId('org', 'foo'), '1.0')] as Set
 
         1 * listener.fileObserved(_)
+        if (!unique) {
+            1 * listener.fileObserved(_)
+        }
 
         where:
         unique << [true, false]
@@ -138,9 +119,6 @@ empty=
         startParameter = Mock()
         startParameter.isWriteDependencyLocks() >> true
         startParameter.getLockedDependenciesToUpdate() >> ['org:foo']
-        if (unique) {
-            featurePreviews.enableFeature(FeaturePreviews.Feature.ONE_LOCKFILE_PER_PROJECT)
-        }
         provider = newProvider()
         writeLockFile(['org:bar:1.3', 'org:foo:1.0'], unique)
 
@@ -161,9 +139,6 @@ empty=
         startParameter = Mock()
         startParameter.isWriteDependencyLocks() >> true
         startParameter.getLockedDependenciesToUpdate() >> ['org:*']
-        if (unique) {
-            featurePreviews.enableFeature(FeaturePreviews.Feature.ONE_LOCKFILE_PER_PROJECT)
-        }
         provider = newProvider()
         writeLockFile(['org:bar:1.3', 'org:foo:1.0'], unique)
 
@@ -184,9 +159,6 @@ empty=
         startParameter = Mock()
         startParameter.isWriteDependencyLocks() >> true
         startParameter.getLockedDependenciesToUpdate() >> ['org.*:foo']
-        if (unique) {
-            featurePreviews.enableFeature(FeaturePreviews.Feature.ONE_LOCKFILE_PER_PROJECT)
-        }
         provider = newProvider()
         writeLockFile(['org.bar:foo:1.3', 'com:foo:1.0'], unique)
 
@@ -204,16 +176,13 @@ empty=
     @Unroll
     def 'can filter lock entries impacted by dependency substitutions (Unique: #unique)'() {
         given:
-        dependencySubstitutionRules.hasRules() >> true
+        dependencySubstitutionRules.rulesMayAddProjectDependency() >> true
         Action< DependencySubstitution> substitutionAction = Mock()
         dependencySubstitutionRules.ruleAction >> substitutionAction
         substitutionAction.execute(_ as DependencySubstitution) >> { DependencySubstitution ds ->
             if (ds.requested.displayName.contains('foo')) {
                 ds.useTarget(null)
             }
-        }
-        if (unique) {
-            featurePreviews.enableFeature(FeaturePreviews.Feature.ONE_LOCKFILE_PER_PROJECT)
         }
         provider = newProvider()
         writeLockFile(['org:bar:1.1', 'org:foo:1.1'], unique)
@@ -231,10 +200,6 @@ empty=
     @Unroll
     def 'fails with invalid content in lock file (Unique: #unique)'() {
         given:
-        if (unique) {
-            featurePreviews.enableFeature(FeaturePreviews.Feature.ONE_LOCKFILE_PER_PROJECT)
-        }
-        provider = newProvider()
         writeLockFile(["invalid"], unique)
 
         when:
@@ -257,10 +222,6 @@ empty=
     @Unroll
     def 'fails with missing lockfile in strict mode (Unique: #unique)'() {
         given:
-        if (unique) {
-            featurePreviews.enableFeature(FeaturePreviews.Feature.ONE_LOCKFILE_PER_PROJECT)
-        }
-        provider = newProvider()
         provider.getLockMode().set(LockMode.STRICT)
 
         when:
@@ -275,8 +236,50 @@ empty=
         unique << [true, false]
     }
 
+    @Unroll
+    def 'fails with invalid ignored dependencies notation #notation'() {
+        uniqueLockFile << """
+org:foo:1.0=conf
+empty=
+"""
+        provider.ignoredDependencies.add(notation)
+
+        when:
+        provider.loadLockState('conf')
+
+        then:
+        def ex = thrown(IllegalArgumentException)
+        ex.message == "Ignored dependencies format must be <group>:<artifact> but '$invalid' is invalid."
+
+        where:
+        notation        | invalid
+        'invalid'       | 'invalid'
+        ',org:foo'      | ''
+        'org:foo:1.0'   | 'org:foo:1.0'
+        '*:*'           | '*:*'
+    }
+
+    def 'can drop lock state for no longer locked configuration'() {
+        uniqueLockFile << """
+org:foo:1.0=conf,otherConf
+empty=
+"""
+        startParameter.isWriteDependencyLocks() >> true
+        provider = newProvider()
+
+        when:
+        provider.confirmConfigurationNotLocked('conf')
+        provider.buildFinished()
+
+        then:
+        uniqueLockFile.text == """${LockFileReaderWriter.LOCKFILE_HEADER_LIST.join('\n')}
+org:foo:1.0=otherConf
+empty=
+""".denormalize()
+    }
+
     private DefaultDependencyLockingProvider newProvider() {
-        new DefaultDependencyLockingProvider(resolver, startParameter, context, dependencySubstitutionRules, featurePreviews, propertyFactory, filePropertyFactory, listener)
+        new DefaultDependencyLockingProvider(resolver, startParameter, context, dependencySubstitutionRules, propertyFactory, filePropertyFactory, listener)
     }
 
     def writeLockFile(List<String> modules, boolean unique = true, String configuration = 'conf') {

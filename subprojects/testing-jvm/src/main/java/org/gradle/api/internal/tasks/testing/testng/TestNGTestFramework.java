@@ -34,6 +34,7 @@ import org.gradle.api.tasks.testing.testng.TestNGOptions;
 import org.gradle.internal.Factory;
 import org.gradle.internal.actor.ActorFactory;
 import org.gradle.internal.id.IdGenerator;
+import org.gradle.internal.scan.UsedByScanPlugin;
 import org.gradle.internal.service.ServiceRegistry;
 import org.gradle.internal.time.Clock;
 import org.gradle.process.internal.worker.WorkerProcessBuilder;
@@ -44,6 +45,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.Callable;
 
+@UsedByScanPlugin("test-retry")
 public class TestNGTestFramework implements TestFramework {
     private final TestNGOptions options;
     private final TestNGDetector detector;
@@ -54,13 +56,14 @@ public class TestNGTestFramework implements TestFramework {
     private final Factory<File> testTaskTemporaryDir;
     private transient ClassLoader testClassLoader;
 
+    @UsedByScanPlugin("test-retry")
     public TestNGTestFramework(final Test testTask, FileCollection classpath, DefaultTestFilter filter, ObjectFactory objects) {
         this.filter = filter;
         this.objects = objects;
         this.testTaskPath = testTask.getPath();
         this.testTaskClasspath = classpath;
         this.testTaskTemporaryDir = testTask.getTemporaryDirFactory();
-        options = objects.newInstance(TestNGOptions.class, testTask.getProject().getProjectDir());
+        options = objects.newInstance(TestNGOptions.class);
         conventionMapOutputDirectory(options, testTask.getReports().getHtml());
         detector = new TestNGDetector(new ClassFileExtractionManager(testTask.getTemporaryDirFactory()));
     }
@@ -69,7 +72,7 @@ public class TestNGTestFramework implements TestFramework {
         new DslObject(options).getConventionMapping().map("outputDirectory", new Callable<File>() {
             @Override
             public File call() {
-                return html.getDestination();
+                return html.getOutputLocation().getAsFile().getOrNull();
             }
         });
     }

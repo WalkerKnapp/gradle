@@ -31,6 +31,8 @@ class JavaLibraryOutgoingElementsBuilderIntegrationTest extends AbstractIntegrat
                 id 'java-library'
                 id 'maven-publish'
             }
+            def jvm = extensions.create(org.gradle.api.plugins.jvm.internal.JvmPluginExtension, "jvm", org.gradle.api.plugins.jvm.internal.DefaultJvmPluginExtension)
+
             group = 'com.acme'
             version = '1.4'
 
@@ -54,7 +56,7 @@ class JavaLibraryOutgoingElementsBuilderIntegrationTest extends AbstractIntegrat
     def "configures an additional outgoing variant (#scenario, #capability)"() {
         buildFile << """
             def shadowJar = tasks.register("shadowJar", Jar) {
-                classifier = 'all'
+                archiveClassifier = 'all'
                 from(sourceSets.main.output)
             }
 

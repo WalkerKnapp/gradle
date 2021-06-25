@@ -19,6 +19,7 @@ package org.gradle.kotlin.dsl.fixtures
 import com.nhaarman.mockito_kotlin.doReturn
 import com.nhaarman.mockito_kotlin.mock
 import org.gradle.api.Project
+import org.gradle.api.internal.file.temp.GradleUserHomeTemporaryFileProvider
 import org.gradle.api.internal.initialization.ClassLoaderScope
 import org.gradle.configuration.DefaultImportsReader
 import org.gradle.groovy.scripts.ScriptSource
@@ -49,15 +50,32 @@ fun eval(
     script: String,
     target: Any,
     baseCacheDir: File,
+    baseTempDir: File,
     scriptCompilationClassPath: ClassPath = testRuntimeClassPath,
     scriptRuntimeClassPath: ClassPath = ClassPath.EMPTY
 ) {
     SimplifiedKotlinScriptEvaluator(
         baseCacheDir,
+        baseTempDir,
         scriptCompilationClassPath,
         scriptRuntimeClassPath = scriptRuntimeClassPath
     ).use {
         it.eval(script, target)
+    }
+}
+
+
+/**
+ * A simplified Service Registry, suitable for cheaper testing of the DSL outside of Gradle.
+ */
+private
+class SimplifiedKotlinDefaultServiceRegistry(
+    private val baseTempDir: File,
+) : DefaultServiceRegistry() {
+    init {
+        register {
+            add(GradleUserHomeTemporaryFileProvider::class.java, GradleUserHomeTemporaryFileProvider { baseTempDir })
+        }
     }
 }
 
@@ -68,8 +86,9 @@ fun eval(
 private
 class SimplifiedKotlinScriptEvaluator(
     private val baseCacheDir: File,
+    private val baseTempDir: File,
     private val scriptCompilationClassPath: ClassPath,
-    private val serviceRegistry: ServiceRegistry = DefaultServiceRegistry(),
+    private val serviceRegistry: ServiceRegistry = SimplifiedKotlinDefaultServiceRegistry(baseTempDir),
     private val scriptRuntimeClassPath: ClassPath = ClassPath.EMPTY
 ) : AutoCloseable {
 
@@ -131,8 +150,8 @@ class SimplifiedKotlinScriptEvaluator(
             scriptHost: KotlinScriptHost<*>,
             templateId: String,
             sourceHash: HashCode,
-            parentClassLoader: ClassLoader,
-            accessorsClassPath: ClassPath?,
+            compilationClassPath: ClassPath,
+            accessorsClassPath: ClassPath,
             initializer: (File) -> Unit
         ): File = baseCacheDir.resolve(sourceHash.toString()).resolve(templateId).also { cacheDir ->
             cacheDir.mkdirs()
@@ -148,11 +167,18 @@ class SimplifiedKotlinScriptEvaluator(
         override fun startCompilerOperation(description: String): AutoCloseable =
             mock()
 
-        override fun loadClassInChildScopeOf(classLoaderScope: ClassLoaderScope, childScopeId: String, location: File, className: String, accessorsClassPath: ClassPath?): CompiledScript =
+        override fun loadClassInChildScopeOf(
+            classLoaderScope: ClassLoaderScope,
+            childScopeId: String,
+            location: File,
+            className: String,
+            accessorsClassPath: ClassPath
+        ): CompiledScript =
             DummyCompiledScript(
                 classLoaderFor(scriptRuntimeClassPath + DefaultClassPath.of(location))
                     .also { classLoaders += it }
-                    .loadClass(className))
+                    .loadClass(className)
+            )
 
         override fun applyPluginsTo(scriptHost: KotlinScriptHost<*>, pluginRequests: PluginRequests) = Unit
 
@@ -176,14 +202,14 @@ class SimplifiedKotlinScriptEvaluator(
 }
 
 
-class DummyCompiledScript(override val programFor: Class<*>) : CompiledScript {
+class DummyCompiledScript(override val program: Class<*>) : CompiledScript {
     override fun onReuse() {
     }
 
     override fun equals(other: Any?) = when {
         other === this -> true
         other == null || other.javaClass != this.javaClass -> false
-        else -> programFor == (other as DummyCompiledScript).programFor
+        else -> program == (other as DummyCompiledScript).program
     }
 }
 

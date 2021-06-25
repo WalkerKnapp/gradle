@@ -23,13 +23,17 @@ import org.gradle.api.provider.Property
 import org.gradle.api.provider.Provider
 import org.gradle.api.provider.SetProperty
 import org.gradle.integtests.fixtures.AbstractIntegrationSpec
-import org.gradle.integtests.fixtures.ToBeFixedForConfigurationCache
 import org.gradle.integtests.fixtures.TestBuildCache
+import org.gradle.integtests.fixtures.executer.GradleContextualExecuter
 import org.gradle.internal.Actions
+import org.gradle.internal.reflect.problems.ValidationProblemId
+import org.gradle.internal.reflect.validation.ValidationMessageChecker
+import org.gradle.internal.reflect.validation.ValidationTestFor
 import spock.lang.Issue
+import spock.lang.Requires
 import spock.lang.Unroll
 
-class TaskParametersIntegrationTest extends AbstractIntegrationSpec {
+class TaskParametersIntegrationTest extends AbstractIntegrationSpec implements ValidationMessageChecker {
 
     def "reports which properties are not serializable"() {
         buildFile << """
@@ -50,7 +54,7 @@ class TaskParametersIntegrationTest extends AbstractIntegrationSpec {
         fails "foo"
         then:
         failure.assertHasDescription("Execution failed for task ':foo'.")
-        failure.assertHasCause("Unable to store input properties for task ':foo'. Property 'b' with value 'xxx' cannot be serialized.")
+        failure.assertHasCause("Input property 'b' with value 'xxx' cannot be serialized.")
     }
 
     def "deals gracefully with not serializable contents of GStrings"() {
@@ -373,6 +377,87 @@ task someTask {
         "123"                | "123 as short"
     }
 
+    @Requires({ GradleContextualExecuter.embedded })
+    // this test only works in embedded mode because of the use of validation test fixtures
+    def "invalid task causes VFS to drop"() {
+        buildFile << """
+            import org.gradle.integtests.fixtures.validation.ValidationProblem
+
+            class InvalidTask extends DefaultTask {
+                @ValidationProblem inputFile
+
+                @TaskAction void execute() {
+                    println "Executed"
+                }
+            }
+
+            task invalid(type: InvalidTask)
+        """
+
+        expectThatExecutionOptimizationDisabledWarningIsDisplayed(executer, dummyValidationProblem('InvalidTask', 'inputFile'))
+
+        when:
+        run "invalid", "--info"
+        then:
+        executedAndNotSkipped(":invalid")
+        outputContains("Invalidating VFS because task ':invalid' failed validation")
+    }
+
+    @Requires({ GradleContextualExecuter.embedded })
+    // this test only works in embedded mode because of the use of validation test fixtures
+    def "validation warnings are displayed once"() {
+        buildFile << """
+            import org.gradle.integtests.fixtures.validation.ValidationProblem
+
+            class InvalidTask extends DefaultTask {
+                @ValidationProblem File inputFile
+
+                @TaskAction void execute() {
+                    println "Executed"
+                }
+            }
+
+            task invalid(type: InvalidTask)
+        """
+
+        expectThatExecutionOptimizationDisabledWarningIsDisplayed(executer, dummyValidationProblem('InvalidTask', 'inputFile'))
+
+        when:
+        run "invalid"
+        then:
+        executedAndNotSkipped(":invalid")
+        output.count("- Type 'InvalidTask' property 'inputFile' test problem. Reason: This is a test.") == 1
+    }
+
+    @Requires({ GradleContextualExecuter.embedded })
+    // this test only works in embedded mode because of the use of validation test fixtures
+    def "validation warnings are reported even when task is skipped"() {
+        buildFile << """
+            import org.gradle.integtests.fixtures.validation.ValidationProblem
+
+            class InvalidTask extends SourceTask {
+                @ValidationProblem File inputFile
+
+                @TaskAction void execute() {
+                    println "Executed"
+                }
+            }
+
+            task invalid(type: InvalidTask)
+        """
+
+        expectThatExecutionOptimizationDisabledWarningIsDisplayed(executer, dummyValidationProblem('InvalidTask', 'inputFile'))
+
+        when:
+        run "invalid"
+        then:
+        skipped(":invalid")
+    }
+
+    @ValidationTestFor([
+        ValidationProblemId.MUTABLE_TYPE_WITH_SETTER,
+        ValidationProblemId.INCORRECT_USE_OF_INPUT_ANNOTATION
+    ])
     @Unroll
     def "task can use input property of type #type"() {
         file("buildSrc/src/main/java/SomeTask.java") << """
@@ -404,65 +489,78 @@ task someTask(type: SomeTask) {
     d = file("build/out")
 }
 """
-        if (expectDeprecation) {
-            executer.beforeExecute { executer.expectDeprecationWarning() }
-        }
-
-        given:
-        succeeds "someTask"
+        def isError = expectedValidationProblem != null
 
         when:
-        run "someTask"
+        if (isError) {
+            fails 'someTask'
+        } else {
+            succeeds "someTask"
+        }
 
         then:
-        skipped(":someTask")
+        if (isError) {
+            failure.error.contains(expectedValidationProblem)
+        }
 
         when:
         buildFile.replace("v = $initialValue", "v = $newValue")
-        executer.withArgument("-i")
-        run "someTask"
+        executer.withArgument("--info")
+        if (isError) {
+            fails 'someTask'
+        } else {
+            succeeds "someTask"
+        }
 
         then:
-        executedAndNotSkipped(":someTask")
-        outputContains("Value of input property 'v' has changed for task ':someTask'")
+        if (isError) {
+            failure.error.contains(expectedValidationProblem)
+        } else {
+            outputContains("Value of input property 'v' has changed for task ':someTask'")
+        }
 
-        when:
-        run "someTask"
-
-        then:
-        skipped(":someTask")
+        and:
+        if (isError) {
+            fails 'someTask'
+        } else {
+            succeeds "someTask"
+        }
 
         where:
-        type                                  | initialValue                                          | newValue                                                     | expectDeprecation
-        "String"                              | "'value 1'"                                           | "'value 2'"                                                  | false
-        "java.io.File"                        | "file('file1')"                                       | "file('file2')"                                              | true
-        "boolean"                             | "true"                                                | "false"                                                      | false
-        "Boolean"                             | "Boolean.TRUE"                                        | "Boolean.FALSE"                                              | false
-        "int"                                 | "123"                                                 | "-45"                                                        | false
-        "Integer"                             | "123"                                                 | "-45"                                                        | false
-        "long"                                | "123"                                                 | "-45"                                                        | false
-        "Long"                                | "123"                                                 | "-45"                                                        | false
-        "short"                               | "123"                                                 | "-45"                                                        | false
-        "Short"                               | "123"                                                 | "-45"                                                        | false
-        "java.math.BigDecimal"                | "12.3"                                                | "-45.432"                                                    | false
-        "java.math.BigInteger"                | "12"                                                  | "-45"                                                        | false
-        "java.util.List<String>"              | "['value1', 'value2']"                                | "['value1']"                                                 | false
-        "java.util.List<String>"              | "[]"                                                  | "['value1', null, false, 123, 12.4, ['abc'], [true] as Set]" | false
-        "String[]"                            | "new String[0]"                                       | "['abc'] as String[]"                                        | false
-        "Object[]"                            | "[123, 'abc'] as Object[]"                            | "['abc'] as String[]"                                        | false
-        "java.util.Collection<String>"        | "['value1', 'value2']"                                | "['value1'] as SortedSet"                                    | false
-        "java.util.Set<String>"               | "['value1', 'value2'] as Set"                         | "['value1'] as Set"                                          | false
-        "Iterable<java.io.File>"              | "[file('1'), file('2')] as Set"                       | "files('1')"                                                 | false
-        FileCollection.name                   | "files('1', '2')"                                     | "configurations.create('empty')"                             | true
-        "java.util.Map<String, Boolean>"      | "[a: true, b: false]"                                 | "[a: true, b: true]"                                         | false
-        "${Provider.name}<String>"            | "providers.provider { 'a' }"                          | "providers.provider { 'b' }"                                 | false
-        "${Property.name}<String>"            | "objects.property(String); v.set('abc')"              | "objects.property(String); v.set('123')"                     | true
-        "${ListProperty.name}<String>"        | "objects.listProperty(String); v.set(['abc'])"        | "objects.listProperty(String); v.set(['123'])"               | false
-        "${SetProperty.name}<String>"         | "objects.setProperty(String); v.set(['abc'])"         | "objects.setProperty(String); v.set(['123'])"                | false
-        "${MapProperty.name}<String, Number>" | "objects.mapProperty(String, Number); v.set([a: 12])" | "objects.mapProperty(String, Number); v.set([a: 10])"        | false
+        type                                  | initialValue                                          | newValue                                                     | expectedValidationProblem
+        "String"                              | "'value 1'"                                           | "'value 2'"                                                  | null
+        "java.io.File"                        | "file('file1')"                                       | "file('file2')"                                              | incorrectUseOfInputAnnotation { type('SomeTask') property('v') propertyType('File') }
+        "boolean"                             | "true"                                                | "false"                                                      | null
+        "Boolean"                             | "Boolean.TRUE"                                        | "Boolean.FALSE"                                              | null
+        "int"                                 | "123"                                                 | "-45"                                                        | null
+        "Integer"                             | "123"                                                 | "-45"                                                        | null
+        "long"                                | "123"                                                 | "-45"                                                        | null
+        "Long"                                | "123"                                                 | "-45"                                                        | null
+        "short"                               | "123"                                                 | "-45"                                                        | null
+        "Short"                               | "123"                                                 | "-45"                                                        | null
+        "java.math.BigDecimal"                | "12.3"                                                | "-45.432"                                                    | null
+        "java.math.BigInteger"                | "12"                                                  | "-45"                                                        | null
+        "java.util.List<String>"              | "['value1', 'value2']"                                | "['value1']"                                                 | null
+        "java.util.List<String>"              | "[]"                                                  | "['value1', null, false, 123, 12.4, ['abc'], [true] as Set]" | null
+        "String[]"                            | "new String[0]"                                       | "['abc'] as String[]"                                        | null
+        "Object[]"                            | "[123, 'abc'] as Object[]"                            | "['abc'] as String[]"                                        | null
+        "java.util.Collection<String>"        | "['value1', 'value2']"                                | "['value1'] as SortedSet"                                    | null
+        "java.util.Set<String>"               | "['value1', 'value2'] as Set"                         | "['value1'] as Set"                                          | null
+        "Iterable<java.io.File>"              | "[file('1'), file('2')] as Set"                       | "files('1')"                                                 | null
+        FileCollection.name                   | "files('1', '2')"                                     | "configurations.create('empty')"                             | incorrectUseOfInputAnnotation { type('SomeTask') property('v') propertyType('FileCollection') }
+        "java.util.Map<String, Boolean>"      | "[a: true, b: false]"                                 | "[a: true, b: true]"                                         | null
+        "${Provider.name}<String>"            | "providers.provider { 'a' }"                          | "providers.provider { 'b' }"                                 | null
+        "${Property.name}<String>"            | "objects.property(String); v.set('abc')"              | "objects.property(String); v.set('123')"                     | "Type 'SomeTask': property 'v' of mutable type 'org.gradle.api.provider.Property' is writable. Properties of type 'org.gradle.api.provider.Property' are already mutable. Possible solution: Remove the 'setV' method. ${learnAt("validation_problems", "mutable_type_with_setter")}."
+        "${ListProperty.name}<String>"        | "objects.listProperty(String); v.set(['abc'])"        | "objects.listProperty(String); v.set(['123'])"               | null
+        "${SetProperty.name}<String>"         | "objects.setProperty(String); v.set(['abc'])"         | "objects.setProperty(String); v.set(['123'])"                | null
+        "${MapProperty.name}<String, Number>" | "objects.mapProperty(String, Number); v.set([a: 12])" | "objects.mapProperty(String, Number); v.set([a: 10])"        | null
     }
 
+    @ValidationTestFor(
+        ValidationProblemId.VALUE_NOT_SET
+    )
     def "null input properties registered via TaskInputs.property are not allowed"() {
+        expectReindentedValidationMessage()
         buildFile << """
             task test {
                 inputs.property("input", { null })
@@ -472,7 +570,7 @@ task someTask(type: SomeTask) {
         expect:
         fails "test"
         failure.assertHasDescription("A problem was found with the configuration of task ':test' (type 'DefaultTask').")
-        failure.assertHasCause("No value has been specified for property 'input'.")
+        failureDescriptionContains(missingValueMessage { property('input') })
     }
 
     def "optional null input properties registered via TaskInputs.property are allowed"() {
@@ -486,8 +584,12 @@ task someTask(type: SomeTask) {
         succeeds "test"
     }
 
+    @ValidationTestFor(
+        ValidationProblemId.VALUE_NOT_SET
+    )
     @Unroll
     def "null input files registered via TaskInputs.#method are not allowed"() {
+        expectReindentedValidationMessage()
         buildFile << """
             task test {
                 inputs.${method}({ null }) withPropertyName "input"
@@ -497,7 +599,7 @@ task someTask(type: SomeTask) {
         expect:
         fails "test"
         failure.assertHasDescription("A problem was found with the configuration of task ':test' (type 'DefaultTask').")
-        failure.assertHasCause("No value has been specified for property 'input'.")
+        failureDescriptionContains(missingValueMessage { property('input') })
 
         where:
         method << ["file", "files", "dir"]
@@ -518,8 +620,12 @@ task someTask(type: SomeTask) {
         method << ["file", "files", "dir"]
     }
 
+    @ValidationTestFor(
+        ValidationProblemId.VALUE_NOT_SET
+    )
     @Unroll
     def "null output files registered via TaskOutputs.#method are not allowed"() {
+        expectReindentedValidationMessage()
         buildFile << """
             task test {
                 outputs.${method}({ null }) withPropertyName "output"
@@ -529,7 +635,7 @@ task someTask(type: SomeTask) {
         expect:
         fails "test"
         failure.assertHasDescription("A problem was found with the configuration of task ':test' (type 'DefaultTask').")
-        failure.assertHasCause("No value has been specified for property 'output'.")
+        failureDescriptionContains(missingValueMessage { property('output') })
 
         where:
         method << ["file", "files", "dir", "dirs"]
@@ -550,8 +656,12 @@ task someTask(type: SomeTask) {
         method << ["file", "files", "dir", "dirs"]
     }
 
+    @ValidationTestFor(
+        ValidationProblemId.INPUT_FILE_DOES_NOT_EXIST
+    )
     @Unroll
     def "missing input files registered via TaskInputs.#method are not allowed"() {
+        expectReindentedValidationMessage()
         buildFile << """
             task test {
                 inputs.${method}({ "missing" }) withPropertyName "input"
@@ -560,18 +670,28 @@ task someTask(type: SomeTask) {
         """
 
         expect:
+        def missingFile = file('missing')
         fails "test"
         failure.assertHasDescription("A problem was found with the configuration of task ':test' (type 'DefaultTask').")
-        failure.assertHasCause("$type '${file("missing")}' specified for property 'input' does not exist.")
+        failureDescriptionContains(inputDoesNotExist {
+            property('input')
+                .kind(fileType)
+                .missing(missingFile)
+                .includeLink()
+        })
 
         where:
-        method | type
+        method | fileType
         "file" | "File"
         "dir"  | "Directory"
     }
 
+    @ValidationTestFor(
+        ValidationProblemId.UNEXPECTED_INPUT_FILE_TYPE
+    )
     @Unroll
     def "wrong input file type registered via TaskInputs.#method is not allowed"() {
+        expectReindentedValidationMessage()
         file("input-file.txt").touch()
         file("input-dir").createDir()
         buildFile << """
@@ -582,20 +702,30 @@ task someTask(type: SomeTask) {
         """
 
         expect:
+        def unexpected = file(path)
         fails "test"
         failure.assertHasDescription("A problem was found with the configuration of task ':test' (type 'DefaultTask').")
-        failure.assertHasCause("${type.capitalize()} '${file(path)}' specified for property 'input' is not a $type.")
+        failureDescriptionContains(unexpectedInputType {
+            property('input')
+                .kind(fileType)
+                .missing(unexpected)
+                .includeLink()
+        })
 
         where:
-        method | path             | type
+        method | path             | fileType
         "file" | "input-dir"      | "file"
         "dir"  | "input-file.txt" | "directory"
     }
 
+    @ValidationTestFor(
+        ValidationProblemId.CANNOT_WRITE_OUTPUT
+    )
     @Unroll
-    def "wrong output file type registered via TaskOutputs.#method is not allowed"() {
-        file("output-file.txt").touch()
-        file("output-dir").createDir()
+    def "wrong output file type registered via TaskOutputs.#method is not allowed (files)"() {
+        expectReindentedValidationMessage()
+        def outputDir = file("output-dir")
+        outputDir.createDir()
         buildFile << """
             task test {
                 outputs.${method}({ "$path" }) withPropertyName "output"
@@ -605,14 +735,77 @@ task someTask(type: SomeTask) {
 
         expect:
         fails "test"
-        failure.assertHasCause(message.replace("<PATH>", file(path).absolutePath))
+        failureDescriptionContains(cannotWriteToFile {
+            property('output')
+                .file(outputDir)
+                .isNotFile()
+                .includeLink()
+        })
 
         where:
-        method  | path             | message
-        "file"  | "output-dir"      | "Cannot write to file '<PATH>' specified for property 'output' as it is a directory."
-        "files" | "output-dir"      | "Cannot write to file '<PATH>' specified for property 'output' as it is a directory."
-        "dir"   | "output-file.txt" | "Directory '<PATH>' specified for property 'output' is not a directory."
-        "dirs"  | "output-file.txt" | "Directory '<PATH>' specified for property 'output' is not a directory."
+        method  | path
+        "file"  | "output-dir"
+        "files" | "output-dir"
+    }
+
+    @ValidationTestFor(
+        ValidationProblemId.CANNOT_WRITE_OUTPUT
+    )
+    @Unroll
+    def "wrong output file type registered via TaskOutputs.#method is not allowed (directories)"() {
+        expectReindentedValidationMessage()
+        def outputFile = file("output-file.txt")
+        outputFile.touch()
+        buildFile << """
+            task test {
+                outputs.${method}({ "$path" }) withPropertyName "output"
+                doLast {}
+            }
+        """
+
+        expect:
+        fails "test"
+        failureDescriptionContains(cannotWriteToDir {
+            property('output')
+                .dir(outputFile)
+                .isNotDirectory()
+                .includeLink()
+        })
+
+        where:
+        method  | path
+        "dir"   | "output-file.txt"
+        "dirs"  | "output-file.txt"
+    }
+
+    @ValidationTestFor(
+        ValidationProblemId.CANNOT_WRITE_OUTPUT
+    )
+    @Issue("https://github.com/gradle/gradle/issues/15679")
+    def "fileTrees with regular file roots cannot be used as output files"() {
+        expectReindentedValidationMessage()
+        buildScript """
+            task myTask {
+                inputs.file file('input.txt')
+                outputs.files(files('build/output.txt').asFileTree).withPropertyName('output')
+                doLast {
+                    file('build/output.txt').text = new File('input.txt').text
+                }
+            }
+        """.stripIndent()
+
+
+        def outputFile = file('build/output.txt')
+        outputFile.text = "pre-existing"
+        file('input.txt').text = 'input file'
+
+        expect:
+        fails('myTask')
+        failureDescriptionContains(cannotCreateRootOfFileTree {
+            property('output')
+                .dir(outputFile)
+                .includeLink()
+        })
     }
 
     def "can specify null as an input property in ad-hoc task"() {
@@ -651,10 +844,65 @@ task someTask(type: SomeTask) {
         succeeds "foo"
     }
 
-    @ToBeFixedForConfigurationCache(because = "task references other task")
+    def "reports the input property which failed to evaluate"() {
+        buildFile("""
+            abstract class FailingTask extends DefaultTask {
+                @Input
+                abstract Property<String> getStringInput()
+
+                @TaskAction
+                void doStuff() {
+                    println("Hello world")
+                }
+            }
+
+            tasks.register("failingTask", FailingTask) {
+                stringInput.set(provider { throw new RuntimeException("BOOM") })
+            }
+        """)
+
+        when:
+        fails "failingTask"
+        then:
+        failureHasCause("Failed to calculate the value of task ':failingTask' property 'stringInput'.")
+        failureHasCause("BOOM")
+        if (GradleContextualExecuter.isConfigCache()) {
+            failureDescriptionContains("Configuration cache problems found in this build.")
+        }
+    }
+
     def "input and output properties are not evaluated too often"() {
         buildFile << """
-            import javax.inject.Inject
+            import org.gradle.api.services.BuildServiceParameters
+
+            abstract class EvaluationCountBuildService implements BuildService<BuildServiceParameters.None> {
+                int outputFileCount = 0
+                int inputFileCount = 0
+                int inputValueCount = 0
+                int nestedInputCount = 0
+                int nestedInputValueCount = 0
+
+                void outputFile() {
+                    outputFileCount++
+                }
+
+                void inputFile() {
+                    inputFileCount++
+                }
+
+                void inputValue() {
+                    inputValueCount++
+                }
+
+                void nestedInput() {
+                    nestedInputCount++
+                }
+
+                void nestedInputValue() {
+                    nestedInputValueCount++
+                }
+            }
+            def evaluationCount = project.getGradle().getSharedServices().registerIfAbsent("evaluationCount", EvaluationCountBuildService) {}
 
             @CacheableTask
             abstract class CustomTask extends DefaultTask {
@@ -663,40 +911,32 @@ task someTask(type: SomeTask) {
                 abstract ProjectLayout getLayout()
 
                 @Internal
-                int outputFileCount = 0
-                @Internal
-                int inputFileCount = 0
-                @Internal
-                int inputValueCount = 0
-                @Internal
-                int nestedInputCount = 0
-                @Internal
-                int nestedInputValueCount = 0
+                abstract Property<EvaluationCountBuildService> getEvaluationCountService()
 
                 private NestedBean bean = new NestedBean()
 
                 @OutputFile
                 File getOutputFile() {
-                    count("outputFile", ++outputFileCount)
+                    count("outputFile")
                     return layout.buildDirectory.file("foo.bar").get().asFile
                 }
 
                 @InputFile
                 @PathSensitive(PathSensitivity.NONE)
                 File getInputFile() {
-                    count("inputFile", ++inputFileCount)
+                    count("inputFile")
                     return layout.projectDirectory.file("input.txt").asFile
                 }
 
                 @Input
                 String getInput() {
-                    count("inputValue", ++inputValueCount)
+                    count("inputValue")
                     return "Input"
                 }
 
                 @Nested
                 Object getBean() {
-                    count("nestedInput", ++nestedInputCount)
+                    count("nestedInput")
                     return bean
                 }
 
@@ -705,13 +945,16 @@ task someTask(type: SomeTask) {
                     outputFile.text = inputFile.text
                 }
 
-                void count(String name, int currentValue) {
+                void count(String name) {
+                    def service = evaluationCountService.get()
+                    service."\${name}"()
+                    def currentValue = service."\${name}Count"
                     println "Evaluating \${name} \${currentValue}"
                 }
 
                 class NestedBean {
                     @Input getFirst() {
-                        count("nestedInputValue", ++nestedInputValueCount)
+                        count("nestedInputValue")
                         return "first"
                     }
 
@@ -721,22 +964,32 @@ task someTask(type: SomeTask) {
                 }
             }
 
-            task myTask(type: CustomTask)
+            task myTask(type: CustomTask) {
+                evaluationCountService = evaluationCount
+            }
 
             task assertInputCounts {
                 dependsOn myTask
+                def propertyNames = ['outputFileCount', 'inputFileCount', 'inputValueCount', 'nestedInputCount', 'nestedInputValueCount']
+                def gradleProperties = propertyNames.collectEntries { [(it) : providers.gradleProperty(it)]}
                 doLast {
                     ['outputFileCount', 'inputFileCount', 'inputValueCount', 'nestedInputCount', 'nestedInputValueCount'].each { name ->
-                        assert myTask."\$name" == providers.gradleProperty(name).get() as Integer
+                        assert evaluationCount.get()."\$name" == gradleProperties[name].get() as Integer
                     }
                 }
             }
         """
         def inputFile = file('input.txt')
         inputFile.text = "input"
-        def expectedCounts = [inputFile: 3, outputFile: 3, nestedInput: 3, inputValue: 1, nestedInputValue: 1]
-        def expectedUpToDateCounts = [inputFile: 2, outputFile: 2, nestedInput: 3, inputValue: 1, nestedInputValue: 1]
+        def expectedCounts = [inputFile: 3, outputFile: 2, nestedInput: 2, inputValue: 1, nestedInputValue: 1]
+        def expectedIncrementalCounts = GradleContextualExecuter.configCache ?
+            [inputFile: 2, outputFile: 2, nestedInput: 1, inputValue: 1, nestedInputValue: 1]
+            : expectedCounts
+        def expectedUpToDateCounts = GradleContextualExecuter.configCache ?
+            [inputFile: 1, outputFile: 1, nestedInput: 1, inputValue: 1, nestedInputValue: 1]
+            : [inputFile: 2, outputFile: 1, nestedInput: 2, inputValue: 1, nestedInputValue: 1]
         def arguments = ["assertInputCounts"] + expectedCounts.collect { name, count -> "-P${name}Count=${count}" }
+        def incrementalBuildArguments = ["assertInputCounts"] + expectedIncrementalCounts.collect { name, count -> "-P${name}Count=${count}" }
         def upToDateArguments = ["assertInputCounts"] + expectedUpToDateCounts.collect { name, count -> "-P${name}Count=${count}" }
         def localCache = new TestBuildCache(file('cache-dir'))
         settingsFile << localCache.localCacheConfiguration()
@@ -748,7 +1001,7 @@ task someTask(type: SomeTask) {
         when:
         inputFile.text = "changed"
         then:
-        withBuildCache().succeeds(*arguments)
+        withBuildCache().succeeds(*incrementalBuildArguments)
         executedAndNotSkipped(':myTask')
         and:
         succeeds(*upToDateArguments)

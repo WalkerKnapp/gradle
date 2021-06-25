@@ -30,7 +30,7 @@ import elmish.tree.Tree
 import elmish.tree.TreeView
 import elmish.tree.viewSubTrees
 
-import kotlin.browser.window
+import kotlinx.browser.window
 
 
 internal
@@ -45,6 +45,10 @@ sealed class ProblemNode {
     data class Bean(val type: String) : ProblemNode()
 
     data class Property(val kind: String, val name: String, val owner: String) : ProblemNode()
+
+    data class BuildLogic(val location: String) : ProblemNode()
+
+    data class BuildLogicClass(val type: String) : ProblemNode()
 
     data class Label(val text: String) : ProblemNode()
 
@@ -89,7 +93,7 @@ object ConfigurationCacheReportPage : Component<ConfigurationCacheReportPage.Mod
         val documentationLink: String,
         val totalProblems: Int,
         val messageTree: ProblemTreeModel,
-        val taskTree: ProblemTreeModel,
+        val locationTree: ProblemTreeModel,
         val displayFilter: DisplayFilter = DisplayFilter.All,
         val tab: Tab = Tab.ByMessage
     )
@@ -100,7 +104,7 @@ object ConfigurationCacheReportPage : Component<ConfigurationCacheReportPage.Mod
 
     enum class Tab(val text: String) {
         ByMessage("Problems grouped by message"),
-        ByTask("Problems grouped by tasks")
+        ByLocation("Problems grouped by location")
     }
 
     sealed class Intent {
@@ -118,7 +122,7 @@ object ConfigurationCacheReportPage : Component<ConfigurationCacheReportPage.Mod
 
     override fun step(intent: Intent, model: Model): Model = when (intent) {
         is Intent.TaskTreeIntent -> model.copy(
-            taskTree = TreeView.step(intent.delegate, model.taskTree)
+            locationTree = TreeView.step(intent.delegate, model.locationTree)
         )
         is Intent.MessageTreeIntent -> model.copy(
             messageTree = TreeView.step(intent.delegate, model.messageTree)
@@ -160,14 +164,14 @@ object ConfigurationCacheReportPage : Component<ConfigurationCacheReportPage.Mod
             div(
                 attributes { className("groups") },
                 displayTabButton(Tab.ByMessage, model.tab, model.messageTree.problemCount),
-                displayTabButton(Tab.ByTask, model.tab, model.taskTree.problemCount)
+                displayTabButton(Tab.ByLocation, model.tab, model.locationTree.problemCount)
             )
         ),
         div(
             attributes { className("content") },
             when (model.tab) {
                 Tab.ByMessage -> viewTree(model.messageTree, Intent::MessageTreeIntent, model.displayFilter)
-                Tab.ByTask -> viewTree(model.taskTree, Intent::TaskTreeIntent, model.displayFilter)
+                Tab.ByLocation -> viewTree(model.locationTree, Intent::TaskTreeIntent, model.displayFilter)
             }
         )
     )
@@ -264,6 +268,13 @@ object ConfigurationCacheReportPage : Component<ConfigurationCacheReportPage.Mod
             span("bean of type "),
             reference(node.type)
         )
+        is ProblemNode.BuildLogic -> span(
+            span(node.location)
+        )
+        is ProblemNode.BuildLogicClass -> span(
+            span("class "),
+            reference(node.type)
+        )
         is ProblemNode.Label -> span(
             node.text
         )
@@ -298,7 +309,8 @@ object ConfigurationCacheReportPage : Component<ConfigurationCacheReportPage.Mod
             emptyList()
         } else {
             listOf(viewNode(docLink))
-        })
+        }
+    )
 
     private
     fun treeButtonFor(child: Tree.Focus<ProblemNode>, treeIntent: (ProblemTreeIntent) -> Intent): View<Intent> =

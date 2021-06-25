@@ -15,7 +15,7 @@
 [[java_library_plugin]]
 = The Java Library Plugin
 
-The Java Library plugin expands the capabilities of the <<java_plugin.adoc#,Java plugin>> by providing specific knowledge about Java libraries.
+The Java Library plugin expands the capabilities of the <<java_plugin.adoc#java_plugin,Java plugin>> by providing specific knowledge about Java libraries.
 In particular, a Java library exposes an API to consumers (i.e., other projects using the Java or the Java Library plugin).
 All the source sets, tasks and configurations exposed by the Java plugin are implicitly available when using this plugin.
 
@@ -56,11 +56,11 @@ Dependencies appearing in the `api` configurations will be transitively exposed 
 
 [NOTE]
 ====
-The `compile` configuration still exists but should not be used as it will not offer the guarantees that the `api` and `implementation` configurations provide.
+The `compile` and `runtime` configurations have been removed with Gradle 7.0. Please refer to the <<upgrading_version_6.adoc#sec:configuration_removal, upgrade guide>> how to migrate to `implementation` and `api` configurations`.
 ====
 
-If your build consumes a published module with POM metadata, the Java and Java Library plugins both honor api and implementation separation through the scopes used in the pom.
-Meaning that the compile classpath only includes `compile` scoped dependencies, while the runtime classpath adds the `runtime` scoped dependencies as well.
+If your build consumes a published module with POM metadata, the Java and Java Library plugins both honor api and implementation separation through the scopes used in the POM.
+Meaning that the compile classpath only includes Maven `compile` scoped dependencies, while the runtime classpath adds the Maven `runtime` scoped dependencies as well.
 
 This often does not have an effect on modules published with Maven, where the POM that defines the project is directly published as metadata.
 There, the compile scope includes both dependencies that were required to compile the project (i.e. implementation dependencies) and dependencies required to compile against the published library (i.e. API dependencies).
@@ -123,7 +123,7 @@ include::sample[dir="snippets/java-library/quickstart/kotlin",files="build.gradl
 [[sec:java_library_configurations_graph]]
 == The Java Library plugin configurations
 
-The following graph describes the main configurations setup when the Java Library plugin is in use.
+The following graph describes how configurations are setup when the Java Library plugin is in use.
 
 image::java-library-ignore-deprecated-main.png[]
 
@@ -134,11 +134,6 @@ image::java-library-ignore-deprecated-main.png[]
 And the next graph describes the test configurations setup:
 
 image::java-library-ignore-deprecated-test.png[]
-
-[NOTE]
-====
-The _compile_, _testCompile_, _runtime_ and _testRuntime_ configurations inherited from the Java plugin are still available but are deprecated. You should avoid using them, as they are only kept for backwards compatibility.
-====
 
 The role of each configuration is described in the following tables:
 
@@ -151,43 +146,49 @@ The role of each configuration is described in the following tables:
 | Declaring API dependencies
 | no
 | no
-| This is where you should declare dependencies which are transitively exported to consumers, for compile.
+| This is where you declare dependencies which are transitively exported to consumers, for compile time and runtime.
 
 | `implementation`
 | Declaring implementation dependencies
 | no
 | no
-| This is where you should declare dependencies which are purely internal and not meant to be exposed to consumers.
+| This is where you declare dependencies which are purely internal and not meant to be exposed to consumers (they are still exposed to consumers at runtime).
 
 | `compileOnly`
 | Declaring compile only dependencies
 | no
 | no
-| This is where you should declare dependencies which are only required at compile time, but should not leak into the runtime. This typically includes dependencies which are shaded when found at runtime.
+| This is where you declare dependencies which are required at compile time, but not at runtime. This typically includes dependencies which are shaded when found at runtime.
+
+| `compileOnlyApi`
+| Declaring compile only API dependencies
+| no
+| no
+| This is where you declare dependencies which are required at compile time by your module and consumers, but not at runtime. This typically includes dependencies which are shaded when found at runtime.
 
 | `runtimeOnly`
 | Declaring runtime dependencies
 | no
 | no
-| This is where you should declare dependencies which are only required at runtime, and not at compile time.
+| This is where you declare dependencies which are only required at runtime, and not at compile time.
 
 | `testImplementation`
 | Test dependencies
 | no
 | no
-| This is where you should declare dependencies which are used to compile tests.
+| This is where you declare dependencies which are used to compile tests.
 
 | `testCompileOnly`
 | Declaring test compile only dependencies
 | no
 | no
-| This is where you should declare dependencies which are only required at test compile time, but should not leak into the runtime. This typically includes dependencies which are shaded when found at runtime.
+| This is where you declare dependencies which are only required at test compile time, but should not leak into the runtime. This typically includes dependencies which are shaded when found at runtime.
 
 | `testRuntimeOnly`
 | Declaring test runtime dependencies
 | no
 | no
-| This is where you should declare dependencies which are only required at test runtime, and not at test compile time.
+| This is where you declare dependencies which are only required at test runtime, and not at test compile time.
 |===
 
 .Java Library plugin — configurations used by consumers
@@ -263,7 +264,7 @@ To tell the Java compiler that a Jar is a module, as opposed to a traditional Ja
 It is an alternative to the _classpath_, which is the traditional way to tell the compiler about compiled dependencies.
 Gradle will automatically put a Jar of your dependencies on the module path, instead of the classpath, if these three things are true:
 
-* Module path inference is turned on via `java. modularity.inferModulePath.set(true)`
+* `java.modularity.inferModulePath` is *not* turned off
 * We are actually building a module (as opposed to a traditional library) which we expressed by adding the `module-info.java` file.
   (Another option is to add the `Automatic-Module-Name` Jar manifest attribute as <<#sec:java_library_modular_auto,described further down>>.)
 * The Jar our module depends on is itself a module, which Gradles decides based on the presence of a `module-info.class` -- the compiled version of the module descriptor -- in the Jar.
@@ -271,17 +272,6 @@ Gradle will automatically put a Jar of your dependencies on the module path, ins
 
 In the following, some more details about defining Java modules and how that interacts with Gradle's dependency management are described.
 You can also look at a link:../samples/sample_java_modules_multi_project.html[ready made example] to try out the Java Module support directly.
-
-[NOTE]
-====
-Java Module System support is an incubating feature and therefore you need to turn on _module path inference_ explicitly as shown below.
-====
-
-.Activate module path inference
-====
-include::sample[dir="snippets/java-library/module/groovy",files="build.gradle[tags=inferModulePath]"]
-include::sample[dir="snippets/java-library/module/kotlin",files="build.gradle.kts[tags=inferModulePath]"]
-====
 
 === Declaring module dependencies
 
@@ -304,6 +294,10 @@ Ideally the declarations should be in sync as seen in the following table.
 | `requires static`
 | `compileOnly`
 | Declaring compile only dependencies
+
+| `requires static transitive`
+| `compileOnlyApi`
+| Declaring compile only API dependencies
 |===
 
 Gradle currently does not automatically check if the dependency declarations are in sync.
@@ -358,9 +352,24 @@ While a real module cannot directly depend on the unnamed module (only by adding
 Thus, if you cannot avoid to rely on a library without module information, you can wrap that library in an automatic module as part of your project.
 How you do that is described in the next section.
 
-Another way to deal with non-modules is to enrich existing Jars with module descriptors yourself using <<artifact_transforms.adoc#,artifact transforms>>.
+Another way to deal with non-modules is to enrich existing Jars with module descriptors yourself using <<artifact_transforms.adoc#sec:abm_artifact_transforms,artifact transforms>>.
 link:../samples/sample_java_modules_with_transform.html[This sample] contains a small _buildSrc_ plugin registering such a transform which you may use and adjust to your needs.
 This can be interesting if you want to build a fully <<application_plugin.adoc#sec:application_modular,modular application>> and want the java runtime to treat everything as a real module.
+
+=== Disabling Java Module support
+
+In rare cases, you might want to disable the built-in Java Module support and define the module path by other means.
+To achieve this, you can disable the functionality to automatically put any Jar on the module path.
+Then Gradle puts Jars with module information on the classpath, even if you have a `module-info.java` in your source set.
+This corresponds to the behaviour of Gradle versions <7.0.
+
+To make this work, you need to set `modularity.inferModulePath = false` on the Java extension (for all tasks) or on individual tasks.
+
+.Disable Gradle's module path inference
+====
+include::sample[dir="snippets/java-library/module-disabled/groovy",files="build.gradle[tags=disableModulePath]"]
+include::sample[dir="snippets/java-library/module-disabled/kotlin",files="build.gradle.kts[tags=disableModulePath]"]
+====
 
 [[sec:java_library_modular_auto]]
 === Building an automatic module
@@ -416,5 +425,5 @@ Note, since this has other performance impacts and potentially side effects, by 
 [[sec:library_distribution]]
 == Distributing a library
 
-Aside from <<publishing_setup.adoc#,publishing>> a library to a component repository, you may sometimes need to package a library and its dependencies in a distribution deliverable.
-The <<java_library_distribution_plugin.adoc#,Java Library Distribution Plugin>> is there to help you do just that.
+Aside from <<publishing_setup.adoc#publishing_components,publishing>> a library to a component repository, you may sometimes need to package a library and its dependencies in a distribution deliverable.
+The <<java_library_distribution_plugin.adoc#java_library_distribution_plugin,Java Library Distribution Plugin>> is there to help you do just that.

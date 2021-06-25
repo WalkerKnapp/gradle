@@ -16,8 +16,6 @@
 
 package org.gradle.caching.internal.controller.impl
 
-import com.google.common.collect.ImmutableList
-import com.google.common.collect.ImmutableMap
 import groovy.transform.Immutable
 import org.gradle.api.internal.cache.StringInterner
 import org.gradle.caching.BuildCacheKey
@@ -31,14 +29,17 @@ import org.gradle.internal.file.FileMetadata.AccessType
 import org.gradle.internal.file.TreeType
 import org.gradle.internal.file.impl.DefaultFileMetadata
 import org.gradle.internal.hash.HashCode
-import org.gradle.internal.snapshot.CompleteDirectorySnapshot
-import org.gradle.internal.snapshot.CompleteFileSystemLocationSnapshot
+import org.gradle.internal.snapshot.DirectorySnapshot
+import org.gradle.internal.snapshot.FileSystemLocationSnapshot
 import org.gradle.internal.snapshot.RegularFileSnapshot
+import org.gradle.internal.snapshot.SnapshotVisitorUtil
 import org.gradle.internal.vfs.FileSystemAccess
 import org.gradle.test.fixtures.file.CleanupTestDirectory
 import org.gradle.test.fixtures.file.TestNameTestDirectoryProvider
 import org.junit.Rule
 import spock.lang.Specification
+
+import java.time.Duration
 
 import static org.gradle.internal.file.TreeType.DIRECTORY
 import static org.gradle.internal.file.TreeType.FILE
@@ -71,9 +72,12 @@ class DefaultBuildCacheCommandFactoryTest extends Specification {
         def load = commandFactory.createLoad(key, entity)
 
         def outputFileSnapshot = new RegularFileSnapshot(outputFile.absolutePath, outputFile.name, HashCode.fromInt(234), DefaultFileMetadata.file(15, 234, AccessType.DIRECT))
-        def fileSnapshots = ImmutableMap.of(
-            "outputDir", new CompleteDirectorySnapshot(outputDir.getAbsolutePath(), outputDir.name, ImmutableList.of(new RegularFileSnapshot(outputDirFile.getAbsolutePath(), outputDirFile.name, HashCode.fromInt(123), DefaultFileMetadata.file(46, 123, AccessType.DIRECT))), HashCode.fromInt(456), AccessType.DIRECT),
-            "outputFile", outputFileSnapshot)
+        def fileSnapshots = [
+            outputDir: new DirectorySnapshot(outputDir.getAbsolutePath(), outputDir.name, AccessType.DIRECT, HashCode.fromInt(456), [
+                new RegularFileSnapshot(outputDirFile.getAbsolutePath(), outputDirFile.name, HashCode.fromInt(123), DefaultFileMetadata.file(46, 123, AccessType.DIRECT))
+            ]),
+            outputFile: outputFileSnapshot
+        ]
 
         when:
         def result = load.load(input)
@@ -86,11 +90,11 @@ class DefaultBuildCacheCommandFactoryTest extends Specification {
         1 * packer.unpack(entity, input, originReader) >> new BuildCacheEntryPacker.UnpackResult(originMetadata, 123L, fileSnapshots)
 
         then:
-        1 * fileSystemAccess.record(_ as CompleteDirectorySnapshot) >> { CompleteFileSystemLocationSnapshot snapshot  ->
+        1 * fileSystemAccess.record(_ as DirectorySnapshot) >> { FileSystemLocationSnapshot snapshot  ->
             assert snapshot.absolutePath == outputDir.absolutePath
             assert snapshot.name == outputDir.name
         }
-        1 * fileSystemAccess.record(_ as RegularFileSnapshot) >> { CompleteFileSystemLocationSnapshot snapshot ->
+        1 * fileSystemAccess.record(_ as RegularFileSnapshot) >> { FileSystemLocationSnapshot snapshot ->
             assert snapshot.absolutePath == outputFileSnapshot.absolutePath
             assert snapshot.name == outputFileSnapshot.name
             assert snapshot.hash == outputFileSnapshot.hash
@@ -100,8 +104,8 @@ class DefaultBuildCacheCommandFactoryTest extends Specification {
         result.artifactEntryCount == 123
         result.metadata.originMetadata == originMetadata
         result.metadata.resultingSnapshots.keySet() as List == ["outputDir", "outputFile"]
-        result.metadata.resultingSnapshots["outputFile"].fingerprints.keySet() == [outputFile.absolutePath] as Set
-        result.metadata.resultingSnapshots["outputDir"].fingerprints.keySet() == [outputDir, outputDirFile]*.absolutePath as Set
+        SnapshotVisitorUtil.getAbsolutePaths(result.metadata.resultingSnapshots["outputFile"], true) == [outputFile.absolutePath]
+        SnapshotVisitorUtil.getAbsolutePaths(result.metadata.resultingSnapshots["outputDir"], true) == [outputDir.absolutePath, outputDirFile.absolutePath]
         0 * _
     }
 
@@ -134,17 +138,17 @@ class DefaultBuildCacheCommandFactoryTest extends Specification {
     def "store invokes packer"() {
         def output = Mock(OutputStream)
         def entity = entity(prop("output"))
-        def outputFingerprints = Mock(Map)
-        def command = commandFactory.createStore(key, entity, outputFingerprints, 421L)
+        def outputSnapshots = Mock(Map)
+        def command = commandFactory.createStore(key, entity, outputSnapshots, Duration.ofMillis(421L))
 
         when:
         def result = command.store(output)
 
         then:
-        1 * originFactory.createWriter(entity, 421L) >> originWriter
+        1 * originFactory.createWriter(entity, Duration.ofMillis(421L)) >> originWriter
 
         then:
-        1 * packer.pack(entity, outputFingerprints, output, originWriter) >> new BuildCacheEntryPacker.PackResult(123)
+        1 * packer.pack(entity, outputSnapshots, output, originWriter) >> new BuildCacheEntryPacker.PackResult(123)
 
         then:
         result.artifactEntryCount == 123

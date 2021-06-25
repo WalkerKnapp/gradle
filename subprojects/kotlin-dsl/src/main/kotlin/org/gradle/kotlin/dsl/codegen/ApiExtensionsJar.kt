@@ -21,18 +21,21 @@ import org.gradle.kotlin.dsl.support.compileToDirectory
 import org.gradle.kotlin.dsl.support.zipTo
 
 import com.google.common.annotations.VisibleForTesting
+import org.gradle.api.internal.file.temp.TemporaryFileProvider
 
 import java.io.File
 
 
 @VisibleForTesting
 fun generateApiExtensionsJar(
+    temporaryFileProvider: TemporaryFileProvider,
     outputFile: File,
     gradleJars: Collection<File>,
     gradleApiMetadataJar: File,
     onProgress: () -> Unit
 ) {
     ApiExtensionsJarGenerator(
+        temporaryFileProvider,
         gradleJars,
         gradleApiMetadataJar,
         onProgress
@@ -42,6 +45,7 @@ fun generateApiExtensionsJar(
 
 private
 class ApiExtensionsJarGenerator(
+    val temporaryFileProvider: TemporaryFileProvider,
     val gradleJars: Collection<File>,
     val gradleApiMetadataJar: File,
     val onProgress: () -> Unit = {}
@@ -55,7 +59,7 @@ class ApiExtensionsJarGenerator(
 
     private
     fun tempDirFor(outputFile: File): File =
-        createTempDir(outputFile.nameWithoutExtension, outputFile.extension).apply {
+        temporaryFileProvider.createTemporaryDirectory(outputFile.nameWithoutExtension, outputFile.extension).apply {
             deleteOnExit()
         }
 
@@ -71,8 +75,8 @@ class ApiExtensionsJarGenerator(
 
     private
     fun sourceFilesFor(outputDir: File) =
-        (gradleApiExtensionsSourceFilesFor(outputDir)
-            + builtinPluginIdExtensionsSourceFileFor(outputDir))
+        gradleApiExtensionsSourceFilesFor(outputDir) +
+            builtinPluginIdExtensionsSourceFileFor(outputDir)
 
     private
     fun gradleApiExtensionsSourceFilesFor(outputDir: File) =
@@ -123,6 +127,7 @@ fun compileKotlinApiExtensionsTo(
             "Unable to compile Gradle Kotlin DSL API Extensions Jar\n" +
                 "\tFrom:\n" +
                 sourceFiles.joinToString("\n\t- ", prefix = "\t- ", postfix = "\n") +
-                "\tSee compiler logs for details.")
+                "\tSee compiler logs for details."
+        )
     }
 }

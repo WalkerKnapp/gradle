@@ -17,6 +17,8 @@
 package org.gradle.internal.watch.vfs;
 
 import org.gradle.internal.operations.BuildOperationRunner;
+import org.gradle.internal.service.scopes.Scopes;
+import org.gradle.internal.service.scopes.ServiceScope;
 import org.gradle.internal.vfs.VirtualFileSystem;
 
 import java.io.File;
@@ -24,12 +26,17 @@ import java.io.File;
 /**
  * Controls the lifecycle and book-keeping for file system watching.
  */
+@ServiceScope(Scopes.UserHome.class)
 public interface BuildLifecycleAwareVirtualFileSystem extends VirtualFileSystem {
 
     /**
      * Called when the build is started.
+     *
+     * @return whether watching the file system is currently enabled. This requires that the feature
+     * is supported on the current operating system, it is enabled for the build, and has been successfully
+     * started.
      */
-    void afterBuildStarted(boolean watchingEnabled, BuildOperationRunner buildOperationRunner);
+    boolean afterBuildStarted(WatchMode watchingEnabled, VfsLogging vfsLogging, WatchLogging watchLogging, BuildOperationRunner buildOperationRunner);
 
     /**
      * Register a watchable hierarchy.
@@ -43,5 +50,6 @@ public interface BuildLifecycleAwareVirtualFileSystem extends VirtualFileSystem 
     /**
      * Called when the build is finished.
      */
-    void beforeBuildFinished(boolean watchingEnabled, BuildOperationRunner buildOperationRunner, int maximumNumberOfWatchedHierarchies);
+    void beforeBuildFinished(WatchMode watchMode, VfsLogging vfsLogging, WatchLogging watchLogging, BuildOperationRunner buildOperationRunner, int maximumNumberOfWatchedHierarchies);
+
 }

@@ -34,7 +34,7 @@ public class DefaultGradleConnector extends GradleConnector implements ProjectCo
     private final DistributionFactory distributionFactory;
     private Distribution distribution;
 
-    private final List<DefaultProjectConnection> connections = new ArrayList<>(4);
+    private final List<DefaultProjectConnection> connections = new ArrayList<DefaultProjectConnection>(4);
     private boolean stopped = false;
 
     private final DefaultConnectionParameters.Builder connectionParamsBuilder = DefaultConnectionParameters.builder();
@@ -110,7 +110,7 @@ public class DefaultGradleConnector extends GradleConnector implements ProjectCo
     }
 
     public GradleConnector useDistributionBaseDir(File distributionBaseDir) {
-        distributionFactory.setDistributionBaseDir(distributionBaseDir);
+        connectionParamsBuilder.setDistributionBaseDir(distributionBaseDir);
         return this;
     }
 

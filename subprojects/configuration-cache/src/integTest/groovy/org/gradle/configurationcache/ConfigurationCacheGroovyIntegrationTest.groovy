@@ -16,10 +16,6 @@
 
 package org.gradle.configurationcache
 
-
-import static org.gradle.integtests.fixtures.RepoScriptBlockUtil.jcenterRepository
-
-
 class ConfigurationCacheGroovyIntegrationTest extends AbstractConfigurationCacheIntegrationTest {
 
     def "build on Groovy project with JUnit tests"() {
@@ -30,7 +26,7 @@ class ConfigurationCacheGroovyIntegrationTest extends AbstractConfigurationCache
         buildFile << """
             plugins { id 'groovy' }
 
-            ${jcenterRepository()}
+            ${mavenCentralRepository()}
 
             dependencies {
                 implementation(localGroovy())
@@ -99,17 +95,10 @@ class ConfigurationCacheGroovyIntegrationTest extends AbstractConfigurationCache
         """
 
         when:
-        configurationCacheRunLenient "build"
+        configurationCacheRun "build"
 
         then:
         configurationCache.assertStateStored()
-        problems.assertResultHasProblems(result) {
-            withUniqueProblems(
-                "field 'groovyClasspath' from type 'org.gradle.api.tasks.compile.GroovyCompile': value 'Groovy runtime classpath' failed to visit file collection"
-            )
-            withTotalProblemsCount(2)
-            withProblemsWithStackTraceCount(2)
-        }
 
         when:
         configurationCacheRun "clean"
@@ -136,12 +125,6 @@ class ConfigurationCacheGroovyIntegrationTest extends AbstractConfigurationCache
 
         then:
         configurationCache.assertStateStored()
-        problems.assertResultHasProblems(result) {
-            withUniqueProblems(
-                "field 'groovyClasspath' from type 'org.gradle.api.tasks.compile.GroovyCompile': value 'Groovy runtime classpath' failed to visit file collection"
-            )
-            withProblemsWithStackTraceCount(1)
-        }
 
         and:
         result.assertTaskExecuted(":compileGroovy")

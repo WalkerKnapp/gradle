@@ -19,12 +19,12 @@ package org.gradle.internal.watch
 import com.google.common.collect.ImmutableSet
 import org.apache.commons.io.FileUtils
 import org.gradle.cache.GlobalCacheLocations
-import org.gradle.integtests.fixtures.ToBeFixedForConfigurationCache
+import org.gradle.integtests.fixtures.executer.GradleContextualExecuter
 import org.gradle.internal.os.OperatingSystem
 import org.gradle.internal.service.scopes.VirtualFileSystemServices
 import org.gradle.test.fixtures.server.http.MavenHttpRepository
 import org.gradle.test.fixtures.server.http.RepositoryHttpServer
-import org.gradle.util.TextUtil
+import org.gradle.util.internal.TextUtil
 import org.junit.Rule
 import spock.lang.Issue
 import spock.lang.Unroll
@@ -67,10 +67,9 @@ class WatchedDirectoriesFileSystemWatchingIntegrationTest extends AbstractFileSy
         withWatchFs().run "hello", "--info"
         then:
         outputContains "Hello from original task!"
-        assertWatchableHierarchies([ImmutableSet.of(testDirectory)] * 2)
+        assertWatchableHierarchies([ImmutableSet.of(testDirectory), ImmutableSet.of(testDirectory, file("buildSrc"))])
     }
 
-    @ToBeFixedForConfigurationCache(because = "composite build not yet supported")
     def "works with composite build"() {
         buildTestFixture.withBuildInSubDir()
         def includedBuild = singleProjectBuild("includedBuild") {
@@ -108,7 +107,9 @@ class WatchedDirectoriesFileSystemWatchingIntegrationTest extends AbstractFileSy
         withWatchFs().run("assemble", "--info")
         then:
         skipped(":includedBuild:jar")
-        assertWatchableHierarchies([ImmutableSet.of(consumer, includedBuild)] * 2)
+        // configuration cache registers all build directories at startup so the cache fingerprint can be checked
+        def expectedWatchableCount = GradleContextualExecuter.isConfigCache() ? 3 : 2
+        assertWatchableHierarchies([ImmutableSet.of(consumer, includedBuild)] * expectedWatchableCount)
 
         when:
         includedBuild.file("src/main/java/NewClass.java")  << "public class NewClass {}"
@@ -117,7 +118,6 @@ class WatchedDirectoriesFileSystemWatchingIntegrationTest extends AbstractFileSy
         executedAndNotSkipped(":includedBuild:jar")
     }
 
-    @ToBeFixedForConfigurationCache(because = "GradleBuild task is not yet supported")
     def "works with GradleBuild task"() {
         buildTestFixture.withBuildInSubDir()
         def buildInBuild = singleProjectBuild("buildInBuild") {
@@ -176,6 +176,7 @@ class WatchedDirectoriesFileSystemWatchingIntegrationTest extends AbstractFileSy
 
         when:
         inDirectory(settingsDir)
+        executer.expectDocumentedDeprecationWarning("Subproject ':sub' has location '${file("sub").absolutePath}' which is outside of the project root. This behaviour has been deprecated and is scheduled to be removed in Gradle 8.0. Consult the upgrading guide for further information: https://docs.gradle.org/current/userguide/upgrading_version_7.html#deprecated_flat_project_structure")
         withWatchFs().run("thing")
         then:
         executed ":sub:thing"
@@ -324,7 +325,6 @@ class WatchedDirectoriesFileSystemWatchingIntegrationTest extends AbstractFileSy
         assertWatchedHierarchies([projectDir])
     }
 
-    @ToBeFixedForConfigurationCache(because = "composite build not yet supported")
     def "stops watching hierarchies when the limit has been reached"() {
         buildTestFixture.withBuildInSubDir()
         def includedBuild = singleProjectBuild("includedBuild") {
@@ -355,6 +355,27 @@ class WatchedDirectoriesFileSystemWatchingIntegrationTest extends AbstractFileSy
         executedAndNotSkipped(":includedBuild:jar")
         assertWatchedHierarchies([includedBuild])
         postBuildOutputContains("Watching too many directories in the file system (watching 2, limit 1), dropping some state from the virtual file system")
+    }
+
+    def "does not show unsupported watching hierarchies warning for test directory"() {
+        buildFile << """
+            task myTask {
+                def inputFile = file("input.txt")
+                def outputFile = file("output.txt")
+                inputs.file(inputFile)
+                outputs.file(outputFile)
+                doLast {
+                    outputFile.text = inputFile.text
+                }
+            }
+        """
+        file("input.txt").text = "input"
+
+        when:
+        run "myTask", "--debug"
+        then:
+        assertWatchedHierarchies([testDirectory])
+        result.assertNotPostBuildOutput("Some of the file system contents retained in the virtual file system are on file systems that Gradle doesn't support watching.")
     }
 
     void assertWatchableHierarchies(List<Set<File>> expectedWatchableHierarchies) {

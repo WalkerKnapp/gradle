@@ -19,13 +19,12 @@
 package org.gradle.integtests.resolve.api
 
 import org.gradle.integtests.fixtures.AbstractDependencyResolutionTest
-import org.gradle.integtests.fixtures.FluidDependenciesResolveRunner
+import org.gradle.integtests.fixtures.extensions.FluidDependenciesResolveTest
 import org.gradle.integtests.fixtures.resolve.ResolveTestFixture
-import org.junit.runner.RunWith
 import spock.lang.Issue
 import spock.lang.Unroll
 
-@RunWith(FluidDependenciesResolveRunner)
+@FluidDependenciesResolveTest
 class ResolutionResultApiIntegrationTest extends AbstractDependencyResolutionTest {
     ResolveTestFixture resolve = new ResolveTestFixture(buildFile, 'conf')
 
@@ -62,10 +61,10 @@ class ResolutionResultApiIntegrationTest extends AbstractDependencyResolutionTes
                     def result = configurations.conf.incoming.resolutionResult
                     result.allComponents {
                         if(it.id instanceof ModuleComponentIdentifier) {
-                            println it.id.module + ":" + it.id.version + " " + it.selectionReason.description
+                            println it.id.module + ":" + it.id.version + " " + it.selectionReason
                         }
                         else if(it.id instanceof ProjectComponentIdentifier) {
-                            println it.moduleVersion.name + ":" + it.moduleVersion.version + " " + it.selectionReason.description
+                            println it.moduleVersion.name + ":" + it.moduleVersion.version + " " + it.selectionReason
                         }
                     }
                 }
@@ -143,7 +142,7 @@ baz:1.0 requested
     def "resolution result API gives access to dependency reasons in case of conflict and selection by rule"() {
         given:
         mavenRepo.with {
-            def leaf1 = module('org.test', 'leaf', '1.0').publish()
+            module('org.test', 'leaf', '1.0').publish()
             def leaf2 = module('org.test', 'leaf', '1.1').publish()
             module('org.test', 'a', '1.0')
                 .dependsOn('org.test', 'leaf', '0.9')
@@ -636,7 +635,7 @@ testRuntimeClasspath
         buildFile << """
         apply plugin: 'java-library'
 
-        ${jcenterRepository()}
+        ${mavenCentralRepository()}
 
         configurations.all {
             resolutionStrategy.capabilitiesResolution.withCapability('com.google.collections:google-collections') {

@@ -16,7 +16,6 @@
 
 package org.gradle.integtests.resolve.locking
 
-import org.gradle.integtests.fixtures.FeaturePreviewsFixture
 import org.gradle.integtests.fixtures.ToBeFixedForConfigurationCache
 import spock.lang.Unroll
 
@@ -28,9 +27,6 @@ abstract class AbstractValidatingLockingIntegrationTest extends AbstractLockingI
         mavenRepo.module('org', 'foo', '1.0').publish()
         mavenRepo.module('org', 'foo', '1.1').publish()
 
-        if (unique) {
-            FeaturePreviewsFixture.enableOneLockfilePerProject(settingsFile)
-        }
         buildFile << """
 dependencyLocking {
     lockAllConfigurations()
@@ -76,9 +72,6 @@ dependencies {
         mavenRepo.module('org', 'foo', '1.0').publish()
         mavenRepo.module('org', 'foo', '1.1').publish()
 
-        if (unique) {
-            FeaturePreviewsFixture.enableOneLockfilePerProject(settingsFile)
-        }
         buildFile << """
 dependencyLocking {
     lockAllConfigurations()
@@ -122,9 +115,6 @@ dependencies {
         mavenRepo.module('org', 'foo', '1.0').publish()
         mavenRepo.module('org', 'bar', '1.0').publish()
 
-        if (unique) {
-            FeaturePreviewsFixture.enableOneLockfilePerProject(settingsFile)
-        }
         buildFile << """
 dependencyLocking {
     lockAllConfigurations()
@@ -152,7 +142,7 @@ dependencies {
         fails 'checkDeps'
 
         then:
-        failure.assertHasCause("Could not resolve all dependencies for configuration ':lockedConf'.")
+        failure.assertHasCause("Could not resolve all files for configuration ':lockedConf'.")
         failure.assertHasCause("Did not resolve 'org:bar:1.0' which is part of the dependency lock state")
         failure.assertHasCause("Did not resolve 'org:baz:1.0' which is part of the dependency lock state")
 
@@ -165,9 +155,7 @@ dependencies {
     def 'fails when lock file does not contain entry for module in resolution result (unique: #unique)'() {
         mavenRepo.module('org', 'foo', '1.0').publish()
         mavenRepo.module('org', 'bar', '1.0').publish()
-        if (unique) {
-            FeaturePreviewsFixture.enableOneLockfilePerProject(settingsFile)
-        }
+
         buildFile << """
 dependencyLocking {
     lockAllConfigurations()
@@ -196,7 +184,7 @@ dependencies {
         fails 'checkDeps'
 
         then:
-        failure.assertHasCause("Could not resolve all dependencies for configuration ':lockedConf'.")
+        failure.assertHasCause("Could not resolve all files for configuration ':lockedConf'.")
         failure.assertHasCause("Resolved 'org:bar:1.0' which is not part of the dependency lock state")
 
         where:
@@ -208,9 +196,6 @@ dependencies {
     def 'fails when resolution result is empty and lock file contains entries (unique: #unique)'() {
         mavenRepo.module('org', 'foo', '1.0').publish()
 
-        if (unique) {
-            FeaturePreviewsFixture.enableOneLockfilePerProject(settingsFile)
-        }
         buildFile << """
 dependencyLocking {
     lockAllConfigurations()
@@ -233,7 +218,7 @@ configurations {
         fails 'checkDeps'
 
         then:
-        failure.assertHasCause('Could not resolve all dependencies for configuration \':lockedConf\'.')
+        failure.assertHasCause('Could not resolve all files for configuration \':lockedConf\'.')
         failure.assertHasCause('Did not resolve \'org:foo:1.0\' which is part of the dependency lock state')
 
         where:
@@ -246,9 +231,6 @@ configurations {
         mavenRepo.module('org', 'foo', '1.0').publish()
         mavenRepo.module('org', 'foo', '1.1').publish()
 
-        if (unique) {
-            FeaturePreviewsFixture.enableOneLockfilePerProject(settingsFile)
-        }
         buildFile << """
 dependencyLocking {
     lockAllConfigurations()
@@ -295,9 +277,6 @@ dependencies {
         mavenRepo.module('org', 'foo', '1.1').publish()
         mavenRepo.module('org', 'bar', '1.0').publish()
 
-        if (unique) {
-            FeaturePreviewsFixture.enableOneLockfilePerProject(settingsFile)
-        }
         buildFile << """
 dependencyLocking {
     lockAllConfigurations()
@@ -339,4 +318,78 @@ dependencies {
         unique << [true, false]
     }
 
+    @Unroll
+    def 'does not fail when lock file contains entry that is in ignored dependencies (unique: #unique)'() {
+        mavenRepo.module('org', 'foo', '1.0').publish()
+        mavenRepo.module('org', 'bar', '1.0').publish()
+
+        buildFile << """
+dependencyLocking {
+    lockAllConfigurations()
+    lockMode = LockMode.${lockMode()}
+    ignoredDependencies.add('org:bar')
+}
+
+repositories {
+    maven {
+        name 'repo'
+        url '${mavenRepo.uri}'
+    }
+}
+configurations {
+    lockedConf
+}
+
+dependencies {
+    lockedConf 'org:foo:1.+'
+}
+"""
+
+        lockfileFixture.createLockfile('lockedConf',['org:bar:1.0', 'org:foo:1.0'], unique)
+
+        expect:
+        succeeds 'checkDeps'
+
+        where:
+        unique << [true, false]
+    }
+
+    @Unroll
+    def 'does not fail when resolution result contains ignored dependency (unique: #unique)'() {
+        mavenRepo.module('org', 'foo', '1.0').publish()
+        mavenRepo.module('org', 'foo', '1.1').publish()
+        mavenRepo.module('org', 'bar', '1.0').publish()
+        mavenRepo.module('org', 'bar', '1.1').publish()
+
+        buildFile << """
+dependencyLocking {
+    lockAllConfigurations()
+    lockMode = LockMode.${lockMode()}
+    ignoredDependencies.add('org:bar')
+}
+
+repositories {
+    maven {
+        name 'repo'
+        url '${mavenRepo.uri}'
+    }
+}
+configurations {
+    lockedConf
+}
+
+dependencies {
+    lockedConf 'org:foo:1.+'
+    lockedConf 'org:bar:1.+'
+}
+"""
+
+        lockfileFixture.createLockfile('lockedConf', ['org:foo:1.0'], unique)
+
+        expect:
+        succeeds 'checkDeps'
+
+        where:
+        unique << [true, false]
+    }
 }

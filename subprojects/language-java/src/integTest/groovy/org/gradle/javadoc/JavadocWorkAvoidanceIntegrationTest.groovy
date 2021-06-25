@@ -17,14 +17,17 @@
 package org.gradle.javadoc
 
 import org.gradle.integtests.fixtures.AbstractIntegrationSpec
+import org.gradle.integtests.fixtures.MissingTaskDependenciesFixture
 import org.gradle.integtests.fixtures.executer.GradleContextualExecuter
+import org.gradle.internal.reflect.problems.ValidationProblemId
+import org.gradle.internal.reflect.validation.ValidationTestFor
 import org.gradle.test.fixtures.ConcurrentTestUtil
 import org.gradle.test.fixtures.archive.ZipTestFixture
 import spock.lang.IgnoreIf
 import spock.lang.Issue
 
 @IgnoreIf({ GradleContextualExecuter.parallel })
-class JavadocWorkAvoidanceIntegrationTest extends AbstractIntegrationSpec {
+class JavadocWorkAvoidanceIntegrationTest extends AbstractIntegrationSpec implements MissingTaskDependenciesFixture {
     def setup() {
         settingsFile << "include 'a', 'b'"
         buildFile << '''
@@ -78,6 +81,9 @@ class JavadocWorkAvoidanceIntegrationTest extends AbstractIntegrationSpec {
         result.assertTasksSkipped(":a:compileJava", ":a:processResources", ":a:classes", ":a:javadoc")
     }
 
+    @ValidationTestFor(
+        ValidationProblemId.IMPLICIT_DEPENDENCY
+    )
     def "order of upstream jar entries does not matter"() {
         given:
         file("a/build.gradle") << '''
@@ -108,6 +114,8 @@ class JavadocWorkAvoidanceIntegrationTest extends AbstractIntegrationSpec {
         }
         // Generate external jar with entries in alphabetical order
         def externalJar = file('build/libs/external.jar')
+        expectMissingDependencyDeprecation(":alphabetic", ":a:compileJava", file("build/libs/external.jar"))
+        expectMissingDependencyDeprecation(":alphabetic", ":a:javadoc", file("build/libs/external.jar"))
         succeeds("alphabetic", ":a:javadoc")
         new ZipTestFixture(externalJar).hasDescendantsInOrder('META-INF/MANIFEST.MF', 'a', 'b', 'c', 'd')
 
@@ -154,6 +162,8 @@ class JavadocWorkAvoidanceIntegrationTest extends AbstractIntegrationSpec {
             file("external/$it").touch()
         }
         // Generate external jar with entries with a current timestamp
+        expectMissingDependencyDeprecation(":currentTime", ":a:compileJava", file("build/libs/external.jar"))
+        expectMissingDependencyDeprecation(":currentTime", ":a:javadoc", file("build/libs/external.jar"))
         succeeds("currentTime", ":a:javadoc")
         def oldHash = externalJar.md5Hash
         when:
@@ -195,6 +205,8 @@ class JavadocWorkAvoidanceIntegrationTest extends AbstractIntegrationSpec {
         duplicate.text = "duplicate"
 
         // Generate external jar with entries with a duplicate 'a' file
+        expectMissingDependencyDeprecation(":duplicate", ":a:compileJava", file("build/libs/external.jar"))
+        expectMissingDependencyDeprecation(":duplicate", ":a:javadoc", file("build/libs/external.jar"))
         succeeds("duplicate", ":a:javadoc")
         def oldHash = externalJar.md5Hash
 

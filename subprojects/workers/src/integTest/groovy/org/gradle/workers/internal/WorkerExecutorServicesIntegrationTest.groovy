@@ -137,7 +137,7 @@ class WorkerExecutorServicesIntegrationTest extends AbstractWorkerExecutorIntegr
         file("anotherProject/bar/foo").text == "foo2"
 
         and:
-        if (isolationMode == "IsolationMode.PROCESS") {
+        if (isolationMode == "'processIsolation'") {
             assertSameDaemonWasUsed("runInWorker", "runInWorker2")
         }
 
@@ -263,7 +263,7 @@ class WorkerExecutorServicesIntegrationTest extends AbstractWorkerExecutorIntegr
             execOperations.javaexec {
                 executable org.gradle.internal.jvm.Jvm.current().getJavaExecutable()
                 classpath(parameters.classpath)
-                main 'org.gradle.TestMain'
+                mainClass = 'org.gradle.TestMain'
                 args parameters.projectDir, parameters.testFile
             }
         """

@@ -121,7 +121,7 @@ class BuildScriptClasspathIntegrationSpec extends AbstractIntegrationSpec implem
             buildscript {
                 repositories {
                     flatDir { dirs 'repo' }
-                    maven{ url "${repo.uri}" }
+                    maven { url "${repo.uri}" }
                 }
                 dependencies {
                     ${dependencies}
@@ -282,6 +282,31 @@ class BuildScriptClasspathIntegrationSpec extends AbstractIntegrationSpec implem
 
         when:
         succeeds()
+
+        then:
+        noExceptionThrown()
+    }
+
+    def "classpath can contain signed jar"() {
+        given:
+        buildFile << """
+            buildscript {
+                ${mavenCentralRepository()}
+                dependencies {
+                    classpath("org.bouncycastle:bcprov-jdk15on:1.66")
+                }
+            }
+
+            tasks.register('checkSignature') {
+                doLast {
+                    def signedClass = org.bouncycastle.jce.provider.BouncyCastleProvider.class
+                    assert signedClass.signers != null
+                }
+            }
+        """
+
+        when:
+        succeeds 'checkSignature'
 
         then:
         noExceptionThrown()

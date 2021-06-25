@@ -16,9 +16,10 @@
 
 package org.gradle.buildinit.plugins
 
+import org.gradle.buildinit.plugins.fixtures.ScriptDslFixture
 import org.gradle.buildinit.plugins.internal.modifiers.BuildInitDsl
 import org.gradle.test.fixtures.ConcurrentTestUtil
-import org.gradle.util.TextUtil
+import org.gradle.util.internal.TextUtil
 
 class BuildInitInteractiveIntegrationTest extends AbstractInitIntegrationSpec {
 
@@ -66,7 +67,7 @@ class BuildInitInteractiveIntegrationTest extends AbstractInitIntegrationSpec {
         handle.waitForFinish()
 
         then:
-        dslFixtureFor(BuildInitDsl.KOTLIN).assertGradleFilesGenerated()
+        ScriptDslFixture.of(BuildInitDsl.KOTLIN, targetDir, null).assertGradleFilesGenerated()
     }
 
     def "user can provide details for JVM based build"() {
@@ -91,6 +92,14 @@ class BuildInitInteractiveIntegrationTest extends AbstractInitIntegrationSpec {
             assert handle.standardOutput.contains("4: Kotlin")
         }
         handle.stdinPipe.write(("3" + TextUtil.platformLineSeparator).bytes)
+
+        // Select 'Single project'
+        ConcurrentTestUtil.poll(60) {
+            assert handle.standardOutput.contains("Split functionality across multiple subprojects?:")
+            assert handle.standardOutput.contains("1: no - only one application project")
+            assert handle.standardOutput.contains("2: yes - application and library projects")
+        }
+        handle.stdinPipe.write(("1" + TextUtil.platformLineSeparator).bytes)
 
         // Select 'kotlin' DSL
         ConcurrentTestUtil.poll(60) {
@@ -187,6 +196,6 @@ class BuildInitInteractiveIntegrationTest extends AbstractInitIntegrationSpec {
         handle.waitForFinish()
 
         then:
-        dslFixtureFor(BuildInitDsl.KOTLIN).assertGradleFilesGenerated()
+        ScriptDslFixture.of(BuildInitDsl.KOTLIN, targetDir, null).assertGradleFilesGenerated()
     }
 }

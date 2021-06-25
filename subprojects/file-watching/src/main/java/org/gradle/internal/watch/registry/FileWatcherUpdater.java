@@ -16,11 +16,13 @@
 
 package org.gradle.internal.watch.registry;
 
-import org.gradle.internal.snapshot.CompleteFileSystemLocationSnapshot;
+import org.gradle.internal.snapshot.FileSystemLocationSnapshot;
 import org.gradle.internal.snapshot.SnapshotHierarchy;
+import org.gradle.internal.watch.vfs.WatchMode;
 
 import javax.annotation.CheckReturnValue;
 import java.io.File;
+import java.nio.file.Path;
 import java.util.Collection;
 
 public interface FileWatcherUpdater {
@@ -36,15 +38,15 @@ public interface FileWatcherUpdater {
      *
      * @see FileWatcherRegistry#virtualFileSystemContentsChanged(Collection, Collection, SnapshotHierarchy)
      */
-    void virtualFileSystemContentsChanged(Collection<CompleteFileSystemLocationSnapshot> removedSnapshots, Collection<CompleteFileSystemLocationSnapshot> addedSnapshots, SnapshotHierarchy root);
+    void virtualFileSystemContentsChanged(Collection<FileSystemLocationSnapshot> removedSnapshots, Collection<FileSystemLocationSnapshot> addedSnapshots, SnapshotHierarchy root);
 
     /**
      * Remove everything from the root which can't be kept after the current build finished.
      *
-     * @see FileWatcherRegistry#buildFinished(SnapshotHierarchy, int)
+     * @see FileWatcherRegistry#buildFinished(SnapshotHierarchy, WatchMode, int)
      */
     @CheckReturnValue
-    SnapshotHierarchy buildFinished(SnapshotHierarchy root, int maximumNumberOfWatchedHierarchies);
+    SnapshotHierarchy buildFinished(SnapshotHierarchy root, WatchMode watchMode, int maximumNumberOfWatchedHierarchies);
 
-    int getNumberOfWatchedHierarchies();
+    Collection<Path> getWatchedHierarchies();
 }

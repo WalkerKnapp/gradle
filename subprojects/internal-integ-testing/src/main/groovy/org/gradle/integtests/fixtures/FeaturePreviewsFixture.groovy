@@ -24,15 +24,15 @@ enableFeaturePreview('GROOVY_COMPILATION_AVOIDANCE')
 """
     }
 
-    static void enableOneLockfilePerProject(File settings) {
+    static void enableTypeSafeProjectAccessors(File settings) {
         settings << """
-enableFeaturePreview('ONE_LOCKFILE_PER_PROJECT')
+            enableFeaturePreview('TYPESAFE_PROJECT_ACCESSORS')
 """
     }
 
-    static void enableUpdatedVersionSorting(File settings) {
+    static void enableVersionCatalog(File settings) {
         settings << """
-            enableFeaturePreview('VERSION_ORDERING_V2')
-"""
+            enableFeaturePreview("VERSION_CATALOGS")
+        """
     }
 }

@@ -32,7 +32,6 @@ import org.gradle.api.Describable;
 import org.gradle.api.DomainObjectSet;
 import org.gradle.api.NamedDomainObjectContainer;
 import org.gradle.api.NonExtensible;
-import org.gradle.api.Transformer;
 import org.gradle.api.file.ConfigurableFileCollection;
 import org.gradle.api.file.ConfigurableFileTree;
 import org.gradle.api.file.DirectoryProperty;
@@ -81,6 +80,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
@@ -116,7 +116,7 @@ abstract class AbstractClassGenerator implements ClassGenerator {
     private final ImmutableSet<Class<? extends Annotation>> disabledAnnotations;
     private final ImmutableSet<Class<? extends Annotation>> enabledAnnotations;
     private final ImmutableMultimap<Class<? extends Annotation>, TypeToken<?>> allowedTypesForAnnotation;
-    private final Transformer<GeneratedClassImpl, Class<?>> generator = type -> generateUnderLock(type);
+    private final Function<Class<?>, GeneratedClassImpl> generator = this::generateUnderLock;
     private final PropertyRoleAnnotationHandler roleHandler;
 
     protected AbstractClassGenerator(Collection<? extends InjectAnnotationHandler> allKnownAnnotations,
@@ -160,7 +160,7 @@ abstract class AbstractClassGenerator implements ClassGenerator {
 
     @Override
     public <T> GeneratedClass<? extends T> generate(Class<T> type) {
-        GeneratedClassImpl generatedClass = generatedClasses.get(type);
+        GeneratedClassImpl generatedClass = generatedClasses.getIfPresent(type);
         if (generatedClass == null) {
             // It is possible that multiple threads will execute this branch concurrently, when the type is missing. However, the contract for `get()` below will ensure that
             // only one thread will actually generate the implementation class
@@ -178,6 +178,7 @@ abstract class AbstractClassGenerator implements ClassGenerator {
         InjectAnnotationPropertyHandler injectionHandler = new InjectAnnotationPropertyHandler();
         PropertyTypePropertyHandler propertyTypedHandler = new PropertyTypePropertyHandler();
         ManagedPropertiesHandler managedPropertiesHandler = new ManagedPropertiesHandler();
+        NamePropertyHandler namePropertyHandler = new NamePropertyHandler();
         ExtensibleTypePropertyHandler extensibleTypeHandler = new ExtensibleTypePropertyHandler();
         DslMixInPropertyType dslMixInHandler = new DslMixInPropertyType(extensibleTypeHandler);
 
@@ -187,6 +188,7 @@ abstract class AbstractClassGenerator implements ClassGenerator {
         handlers.add(dslMixInHandler);
         handlers.add(propertyTypedHandler);
         handlers.add(servicesHandler);
+        handlers.add(namePropertyHandler);
         handlers.add(managedPropertiesHandler);
         for (Class<? extends Annotation> annotation : enabledAnnotations) {
             customAnnotationPropertyHandlers.add(new CustomInjectAnnotationPropertyHandler(annotation));
@@ -216,11 +218,16 @@ abstract class AbstractClassGenerator implements ClassGenerator {
                 handler.applyTo(generationVisitor);
             }
 
+            boolean shouldImplementNameProperty = namePropertyHandler.hasNameProperty();
             if (type.isInterface()) {
-                generationVisitor.addDefaultConstructor();
+                if (shouldImplementNameProperty) {
+                    generationVisitor.addNameConstructor();
+                } else {
+                    generationVisitor.addDefaultConstructor();
+                }
             } else {
                 for (Constructor<?> constructor : type.getConstructors()) {
-                    generationVisitor.addConstructor(constructor);
+                    generationVisitor.addConstructor(constructor, shouldImplementNameProperty);
                 }
             }
 
@@ -373,10 +380,21 @@ abstract class AbstractClassGenerator implements ClassGenerator {
         return property.isReadOnly() && !property.getMainGetter().shouldOverride() && isPropertyType(property.getType());
     }
 
+    private static boolean isIneligibleForConventionMapping(PropertyMetadata property) {
+        // Provider API types should have conventions set through convention() instead of
+        // using convention mapping.
+        return Provider.class.isAssignableFrom(property.getType());
+    }
+
     private static boolean isLazyAttachProperty(PropertyMetadata property) {
         // Property is read only and getter is not final, so attach owner lazily when queried
         // This should apply to all 'managed' types however only the Provider types and @Nested value current implement OwnerAware
         return property.isReadOnly() && !property.getOverridableGetters().isEmpty() && (Provider.class.isAssignableFrom(property.getType()) || property.hasAnnotation(Nested.class));
+    }
+
+    private static boolean isNameProperty(PropertyMetadata property) {
+        // Property is read only, called "name", has type String and getter is abstract
+        return property.isReadOnly() && "name".equals(property.getName()) && property.getType() == String.class && property.getMainGetter().isAbstract();
     }
 
     private static boolean isPropertyType(Class<?> type) {
@@ -961,6 +979,8 @@ abstract class AbstractClassGenerator implements ClassGenerator {
         private final List<PropertyMetadata> mutableProperties = new ArrayList<>();
         private final List<PropertyMetadata> readOnlyProperties = new ArrayList<>();
         private final List<PropertyMetadata> eagerAttachProperties = new ArrayList<>();
+        private final List<PropertyMetadata> ineligibleProperties = new ArrayList<>();
+
         private boolean hasFields;
 
         @Override
@@ -974,6 +994,10 @@ abstract class AbstractClassGenerator implements ClassGenerator {
                 // Property is read-only and main getter is final, so attach eagerly in constructor
                 // If the getter is not final, then attach lazily in the getter
                 eagerAttachProperties.add(property);
+            }
+
+            if (isIneligibleForConventionMapping(property)) {
+                ineligibleProperties.add(property);
             }
         }
 
@@ -1018,6 +1042,9 @@ abstract class AbstractClassGenerator implements ClassGenerator {
                 boolean applyRole = isRoleType(property);
                 visitor.attachDuringConstruction(property, applyRole);
             }
+            for (PropertyMetadata property : ineligibleProperties) {
+                visitor.markPropertyAsIneligibleForConventionMapping(property);
+            }
         }
 
         @Override
@@ -1041,6 +1068,38 @@ abstract class AbstractClassGenerator implements ClassGenerator {
             if (!hasFields) {
                 visitor.addManagedMethods(mutableProperties, readOnlyProperties);
             }
+        }
+    }
+
+    private static class NamePropertyHandler extends ClassGenerationHandler {
+
+        private PropertyMetadata nameProperty;
+
+        @Override
+        void visitProperty(PropertyMetadata property) {
+            if (isNameProperty(property)) {
+                nameProperty = property;
+            }
+        }
+
+        @Override
+        boolean claimPropertyImplementation(PropertyMetadata property) {
+            if (isNameProperty(property)) {
+                nameProperty = property;
+                return true;
+            }
+            return false;
+        }
+
+        @Override
+        void applyTo(ClassGenerationVisitor visitor) {
+            if (nameProperty != null) {
+                visitor.addNameProperty();
+            }
+        }
+
+        boolean hasNameProperty() {
+            return nameProperty != null;
         }
     }
 
@@ -1317,6 +1376,8 @@ abstract class AbstractClassGenerator implements ClassGenerator {
 
         void attachDuringConstruction(PropertyMetadata property, boolean applyRole);
 
+        void markPropertyAsIneligibleForConventionMapping(PropertyMetadata property);
+
         ClassGenerationVisitor builder();
     }
 
@@ -1325,9 +1386,15 @@ abstract class AbstractClassGenerator implements ClassGenerator {
     }
 
     protected interface ClassGenerationVisitor {
-        void addConstructor(Constructor<?> constructor);
+        void addConstructor(Constructor<?> constructor, boolean addNameParameter);
+
+        default void addConstructor(Constructor<?> constructor) {
+            addConstructor(constructor, false);
+        }
 
         void addDefaultConstructor();
+
+        void addNameConstructor();
 
         void mixInDynamicAware();
 
@@ -1372,6 +1439,8 @@ abstract class AbstractClassGenerator implements ClassGenerator {
         void addActionMethod(Method method);
 
         void addPropertySetterOverloads(PropertyMetadata property, MethodMetadata getter);
+
+        void addNameProperty();
 
         Class<?> generate() throws Exception;
     }

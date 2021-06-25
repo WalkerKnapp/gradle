@@ -18,15 +18,22 @@ package org.gradle.integtests.fixtures.timeout;
 
 import java.io.BufferedReader;
 import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.PrintStream;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -50,7 +57,7 @@ public class JavaProcessStackTracesMonitor {
     private static final Pattern UNIX_PID_PATTERN = Pattern.compile("([0-9]+)");
 
     public static void main(String[] args) {
-        System.out.println(getAllStackTracesByJstack());
+        printAllStackTracesByJstack(new File(args[0]));
     }
 
     private static void assertTrue(boolean condition, String message) {
@@ -206,9 +213,9 @@ public class JavaProcessStackTracesMonitor {
             ByteArrayOutputStream stdout = connectStream(process.getInputStream(), latch);
             ByteArrayOutputStream stderr = connectStream(process.getErrorStream(), latch);
 
-            int code = process.waitFor();
-            latch.await();
-            return new ExecResult(args, code, stdout.toString(), stderr.toString());
+            process.waitFor(1, TimeUnit.MINUTES);
+            latch.await(1, TimeUnit.MINUTES);
+            return new ExecResult(args, process.exitValue(), stdout.toString(), stderr.toString());
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
@@ -234,7 +241,15 @@ public class JavaProcessStackTracesMonitor {
     }
 
 
-    public static String getAllStackTracesByJstack() {
-        return ps().getSuspiciousDaemons().stream().map(JavaProcessInfo::jstack).collect(Collectors.joining("\n"));
+    public static File printAllStackTracesByJstack(File dir) {
+        try {
+            String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd-HH-mm-ss"));
+            String output = ps().getSuspiciousDaemons().stream().map(JavaProcessInfo::jstack).collect(Collectors.joining("\n"));
+            Path outputFile = dir.toPath().resolve(timestamp + ".threaddump");
+            Files.write(outputFile, output.getBytes(StandardCharsets.UTF_8));
+            return outputFile.toFile();
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
     }
 }

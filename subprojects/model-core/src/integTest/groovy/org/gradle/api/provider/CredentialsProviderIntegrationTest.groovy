@@ -18,7 +18,6 @@ package org.gradle.api.provider
 
 import groovy.transform.NotYetImplemented
 import org.gradle.integtests.fixtures.AbstractIntegrationSpec
-import org.gradle.integtests.fixtures.ToBeFixedForConfigurationCache
 import org.gradle.integtests.fixtures.UnsupportedWithConfigurationCache
 import org.gradle.integtests.fixtures.executer.GradleContextualExecuter
 import org.hamcrest.CoreMatchers
@@ -30,7 +29,7 @@ class CredentialsProviderIntegrationTest extends AbstractIntegrationSpec {
 
     def setup() {
         settingsFile << "rootProject.name='credentials-provider-test'"
-        buildFile << """
+        buildFile """
             abstract class TaskWithCredentials extends DefaultTask {
 
                 @Input
@@ -66,7 +65,7 @@ class CredentialsProviderIntegrationTest extends AbstractIntegrationSpec {
 
     def "can execute a task when credentials are missing for task not in execution graph"() {
         when:
-        buildFile << """
+        buildFile """
             def firstTask = tasks.register('firstTask') {
             }
 
@@ -130,7 +129,6 @@ class CredentialsProviderIntegrationTest extends AbstractIntegrationSpec {
         failure.assertHasErrorOutput("- testCredentialsPassword")
     }
 
-    @ToBeFixedForConfigurationCache(because = ":tasks")
     def "missing credentials declared as task inputs do not break tasks listing"() {
         when:
         buildFile << """
@@ -239,9 +237,10 @@ class CredentialsProviderIntegrationTest extends AbstractIntegrationSpec {
         }
 
         where:
-        credentialsType       | errorMessage
-        'AwsCredentials'      | "The following Gradle properties are missing for 'test' credentials:\n  - testAccessKey\n  - testSecretKey"
-        'PasswordCredentials' | "The following Gradle properties are missing for 'test' credentials:\n  - testUsername\n  - testPassword"
+        credentialsType         | errorMessage
+        'AwsCredentials'        | "The following Gradle properties are missing for 'test' credentials:\n  - testAccessKey\n  - testSecretKey"
+        'PasswordCredentials'   | "The following Gradle properties are missing for 'test' credentials:\n  - testUsername\n  - testPassword"
+        'HttpHeaderCredentials' | "The following Gradle properties are missing for 'test' credentials:\n  - testAuthHeaderName\n  - testAuthHeaderValue"
     }
 
     @UnsupportedWithConfigurationCache(because = "test checks behavior with and without configuration cache")

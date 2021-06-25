@@ -23,7 +23,7 @@ import org.gradle.api.internal.DefaultClassPathProvider
 import org.gradle.api.internal.DefaultClassPathRegistry
 import org.gradle.api.internal.classpath.ModuleRegistry
 import org.gradle.api.internal.file.TestFiles
-import org.gradle.api.internal.file.TmpDirTemporaryFileProvider
+import org.gradle.api.internal.file.temp.TemporaryFileProvider
 import org.gradle.api.logging.LogLevel
 import org.gradle.cache.CacheRepository
 import org.gradle.cache.internal.CacheFactory
@@ -31,7 +31,8 @@ import org.gradle.cache.internal.CacheScopeMapping
 import org.gradle.cache.internal.DefaultCacheRepository
 import org.gradle.cache.internal.DefaultCacheScopeMapping
 import org.gradle.internal.id.LongIdGenerator
-import org.gradle.internal.jvm.inspection.CachingJvmVersionDetector
+import org.gradle.internal.jvm.inspection.CachingJvmMetadataDetector
+import org.gradle.internal.jvm.inspection.DefaultJvmMetadataDetector
 import org.gradle.internal.jvm.inspection.DefaultJvmVersionDetector
 import org.gradle.internal.logging.LoggingManagerInternal
 import org.gradle.internal.logging.TestOutputEventListener
@@ -51,7 +52,7 @@ import org.gradle.process.internal.worker.child.WorkerProcessClassPathProvider
 import org.gradle.test.fixtures.file.TestNameTestDirectoryProvider
 import org.gradle.testfixtures.internal.NativeServicesTestFixture
 import org.gradle.util.GradleVersion
-import org.gradle.util.RedirectStdOutAndErr
+import org.gradle.util.internal.RedirectStdOutAndErr
 import org.junit.Rule
 import spock.lang.Shared
 import spock.lang.Specification
@@ -76,8 +77,23 @@ abstract class AbstractWorkerProcessIntegrationSpec extends Specification {
     final ClassPathRegistry classPathRegistry = new DefaultClassPathRegistry(new DefaultClassPathProvider(moduleRegistry), workerProcessClassPathProvider)
     final JavaExecHandleFactory execHandleFactory = TestFiles.javaExecHandleFactory(tmpDir.testDirectory)
     final OutputEventListener outputEventListener = new TestOutputEventListener()
-    DefaultWorkerProcessFactory workerFactory = new DefaultWorkerProcessFactory(loggingManager(LogLevel.DEBUG), server, classPathRegistry, new LongIdGenerator(), tmpDir.file("gradleUserHome"), new TmpDirTemporaryFileProvider(),
-        execHandleFactory, new CachingJvmVersionDetector(new DefaultJvmVersionDetector(execHandleFactory)), outputEventListener, Stub(MemoryManager))
+    final TemporaryFileProvider tmpDirTemporaryFileProvider = TestFiles.tmpDirTemporaryFileProvider(tmpDir.testDirectory)
+    final DefaultJvmMetadataDetector defaultJvmMetadataDetector = new DefaultJvmMetadataDetector(
+        execHandleFactory as ExecHandleFactory,
+        tmpDirTemporaryFileProvider
+    )
+    DefaultWorkerProcessFactory workerFactory = new DefaultWorkerProcessFactory(
+        loggingManager(LogLevel.DEBUG),
+        server,
+        classPathRegistry,
+        new LongIdGenerator(),
+        tmpDir.file("gradleUserHome"),
+        tmpDirTemporaryFileProvider,
+        execHandleFactory,
+        new DefaultJvmVersionDetector(new CachingJvmMetadataDetector(defaultJvmMetadataDetector)),
+        outputEventListener,
+        Stub(MemoryManager)
+    )
 
     def setup() {
         CurrentBuildOperationRef.instance().set(new DefaultBuildOperationRef(new OperationIdentifier(123), null))
@@ -85,11 +101,14 @@ abstract class AbstractWorkerProcessIntegrationSpec extends Specification {
 
     def cleanup() {
         CurrentBuildOperationRef.instance().clear()
-        workerProcessClassPathProvider.close()
     }
 
     def cleanupSpec() {
         services.close()
+    }
+
+    File gradleUserHome() {
+        return tmpDir.file("gradleUserHome")
     }
 
     Class<?> compileWithoutClasspath(String className, String classText) {

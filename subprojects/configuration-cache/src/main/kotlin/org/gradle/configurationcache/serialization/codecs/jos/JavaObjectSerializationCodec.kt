@@ -26,7 +26,9 @@ import org.gradle.configurationcache.serialization.codecs.BrokenValue
 import org.gradle.configurationcache.serialization.codecs.Decoding
 import org.gradle.configurationcache.serialization.codecs.Encoding
 import org.gradle.configurationcache.serialization.codecs.EncodingProducer
+import org.gradle.configurationcache.serialization.decodeBean
 import org.gradle.configurationcache.serialization.decodePreservingIdentity
+import org.gradle.configurationcache.serialization.encodeBean
 import org.gradle.configurationcache.serialization.encodePreservingIdentityOf
 import org.gradle.configurationcache.serialization.logPropertyProblem
 import org.gradle.configurationcache.serialization.readEnum
@@ -129,10 +131,6 @@ class JavaObjectSerializationCodec : EncodingProducer, Decoding {
                         }
                     }
                 }
-                Format.WriteReplace -> {
-                    readResolve(readNonNull())
-                        .also { putIdentity(id, it) }
-                }
                 Format.ReadResolve -> {
                     readResolve(decodeBean())
                         .also { putIdentity(id, it) }
@@ -203,13 +201,8 @@ class JavaObjectSerializationCodec : EncodingProducer, Decoding {
         override suspend fun WriteContext.encode(value: Any) {
             encodePreservingIdentityOf(value) {
                 val replacement = writeReplace.invoke(value)
-                if (replacement === value) {
-                    writeEnum(Format.ReadResolve)
-                    encodeBean(value)
-                } else {
-                    writeEnum(Format.WriteReplace)
-                    write(replacement)
-                }
+                writeEnum(Format.ReadResolve)
+                encodeBean(replacement)
             }
         }
     }
@@ -226,7 +219,6 @@ class JavaObjectSerializationCodec : EncodingProducer, Decoding {
 
     private
     enum class Format {
-        WriteReplace,
         ReadResolve,
         WriteObject,
         ReadObject,
@@ -305,37 +297,12 @@ fun StructuredMessage.Builder.failedJOS(value: Any) {
 
 
 private
-suspend fun WriteContext.encodeBean(value: Any) {
-    val beanType = value.javaClass
-    withBeanTrace(beanType) {
-        writeClass(beanType)
-        beanStateWriterFor(beanType).run {
-            writeStateOf(value)
-        }
-    }
-}
-
-
-private
 inline fun ReadContext.decodingBeanWithId(id: Int, decode: (Any, Class<*>, BeanStateReader) -> Unit): Any? {
     val beanType = readClass()
     return withBeanTrace(beanType) {
         val beanStateReader = beanStateReaderFor(beanType)
         beanStateReader.run { newBeanWithId(false, id) }.also { bean ->
             decode(bean, beanType, beanStateReader)
-        }
-    }
-}
-
-
-private
-suspend fun ReadContext.decodeBean(): Any {
-    val beanType = readClass()
-    return withBeanTrace(beanType) {
-        beanStateReaderFor(beanType).run {
-            newBean(false).also {
-                readStateOf(it)
-            }
         }
     }
 }

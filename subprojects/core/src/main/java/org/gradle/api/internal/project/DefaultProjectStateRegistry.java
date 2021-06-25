@@ -20,12 +20,15 @@ import com.google.common.collect.Maps;
 import org.gradle.api.Project;
 import org.gradle.api.artifacts.component.BuildIdentifier;
 import org.gradle.api.artifacts.component.ProjectComponentIdentifier;
+import org.gradle.api.internal.initialization.ClassLoaderScope;
 import org.gradle.initialization.DefaultProjectDescriptor;
 import org.gradle.internal.Factories;
 import org.gradle.internal.Factory;
 import org.gradle.internal.Pair;
 import org.gradle.internal.build.BuildState;
 import org.gradle.internal.model.CalculatedModelValue;
+import org.gradle.internal.model.ModelContainer;
+import org.gradle.internal.resources.ProjectLeaseRegistry;
 import org.gradle.internal.resources.ResourceLock;
 import org.gradle.internal.work.WorkerLeaseService;
 import org.gradle.util.Path;
@@ -35,8 +38,10 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.Consumer;
 import java.util.function.Function;
 
 public class DefaultProjectStateRegistry implements ProjectStateRegistry {
@@ -62,20 +67,22 @@ public class DefaultProjectStateRegistry implements ProjectStateRegistry {
     }
 
     @Override
-    public void registerProject(BuildState owner, DefaultProjectDescriptor projectDescriptor) {
+    public ProjectState registerProject(BuildState owner, DefaultProjectDescriptor projectDescriptor) {
         synchronized (lock) {
-            addProject(owner, projectDescriptor);
+            return addProject(owner, projectDescriptor);
         }
     }
 
-    private void addProject(BuildState owner, DefaultProjectDescriptor descriptor) {
+    private ProjectState addProject(BuildState owner, DefaultProjectDescriptor descriptor) {
         Path projectPath = descriptor.path();
         Path identityPath = owner.getIdentityPathForProject(projectPath);
         ProjectComponentIdentifier projectIdentifier = owner.getIdentifierForProject(projectPath);
-        ProjectStateImpl projectState = new ProjectStateImpl(owner, identityPath, projectPath, descriptor.getName(), projectIdentifier);
+        IProjectFactory projectFactory = owner.getMutableModel().getServices().get(IProjectFactory.class);
+        ProjectStateImpl projectState = new ProjectStateImpl(owner, identityPath, projectPath, descriptor.getName(), projectIdentifier, descriptor, projectFactory);
         projectsByPath.put(identityPath, projectState);
         projectsById.put(projectIdentifier, projectState);
         projectsByCompId.put(Pair.of(owner.getBuildIdentifier(), projectPath), projectState);
+        return projectState;
     }
 
     @Override
@@ -127,6 +134,7 @@ public class DefaultProjectStateRegistry implements ProjectStateRegistry {
     @Override
     public <T> T withMutableStateOfAllProjects(Factory<T> factory) {
         if (!ownerOfAllProjects.compareAndSet(null, Thread.currentThread())) {
+            // Already own all the projects
             if (ownerOfAllProjects.get() == Thread.currentThread()) {
                 return factory.create();
             }
@@ -139,21 +147,46 @@ public class DefaultProjectStateRegistry implements ProjectStateRegistry {
         }
     }
 
+    @Override
+    public void blocking(Runnable runnable) {
+        Thread owner = ownerOfAllProjects.get();
+        if (owner == Thread.currentThread()) {
+            ownerOfAllProjects.set(null);
+            try {
+                runnable.run();
+            } finally {
+                ownerOfAllProjects.set(owner);
+            }
+        } else {
+            workerLeaseService.blocking(runnable);
+        }
+    }
+
+    @Override
+    public <T> T allowUncontrolledAccessToAnyProject(Factory<T> factory) {
+        return workerLeaseService.allowUncontrolledAccessToAnyProject(factory);
+    }
+
     private class ProjectStateImpl implements ProjectState {
         private final Path projectPath;
         private final String projectName;
         private final ProjectComponentIdentifier identifier;
+        private final DefaultProjectDescriptor descriptor;
+        private final IProjectFactory projectFactory;
         private final BuildState owner;
         private final Path identityPath;
         private final ResourceLock projectLock;
+        private final Set<Thread> canDoAnythingToThisProject = new CopyOnWriteArraySet<>();
         private ProjectInternal project;
 
-        ProjectStateImpl(BuildState owner, Path identityPath, Path projectPath, String projectName, ProjectComponentIdentifier identifier) {
+        ProjectStateImpl(BuildState owner, Path identityPath, Path projectPath, String projectName, ProjectComponentIdentifier identifier, DefaultProjectDescriptor descriptor, IProjectFactory projectFactory) {
             this.owner = owner;
             this.identityPath = identityPath;
             this.projectPath = projectPath;
             this.projectName = projectName;
             this.identifier = identifier;
+            this.descriptor = descriptor;
+            this.projectFactory = projectFactory;
             this.projectLock = workerLeaseService.getProjectLock(owner.getIdentityPath(), identityPath);
         }
 
@@ -189,12 +222,18 @@ public class DefaultProjectStateRegistry implements ProjectStateRegistry {
         }
 
         @Override
-        public void attachMutableModel(ProjectInternal project) {
+        public void createMutableModel(ClassLoaderScope selfClassLoaderScope, ClassLoaderScope baseClassLoaderScope) {
             synchronized (this) {
                 if (this.project != null) {
                     throw new IllegalStateException(String.format("The project object for project %s has already been attached.", getIdentityPath()));
                 }
-                this.project = project;
+                ProjectInternal parent;
+                if (projectPath.equals(Path.ROOT)) {
+                    parent = null;
+                } else {
+                    parent = projectsByPath.get(identityPath.getParent()).getMutableModel();
+                }
+                this.project = projectFactory.createProject(owner.getMutableModel(), descriptor, this, parent, selfClassLoaderScope, baseClassLoaderScope);
             }
         }
 
@@ -209,6 +248,23 @@ public class DefaultProjectStateRegistry implements ProjectStateRegistry {
         }
 
         @Override
+        public void ensureConfigured() {
+            synchronized (this) {
+                getMutableModel().evaluate();
+            }
+        }
+
+        @Override
+        public void ensureTasksDiscovered() {
+            synchronized (this) {
+                ProjectInternal project = getMutableModel();
+                project.evaluate();
+                project.getTasks().discoverTasks();
+                project.bindAllModelRules();
+            }
+        }
+
+        @Override
         public ProjectComponentIdentifier getComponentIdentifier() {
             return identifier;
         }
@@ -219,16 +275,26 @@ public class DefaultProjectStateRegistry implements ProjectStateRegistry {
         }
 
         @Override
-        public void withMutableState(Runnable action) {
-            withMutableState(Factories.toFactory(action));
+        public void applyToMutableState(Consumer<? super ProjectInternal> action) {
+            fromMutableState(p -> {
+                action.accept(p);
+                return null;
+            });
         }
 
         @Override
-        public <T> T withMutableState(final Factory<? extends T> factory) {
+        public <S> S fromMutableState(Function<? super ProjectInternal, ? extends S> function) {
+            Thread currentThread = Thread.currentThread();
+            if (workerLeaseService.isAllowedUncontrolledAccessToAnyProject() || canDoAnythingToThisProject.contains(currentThread)) {
+                // Current thread is allowed to access anything at any time, so run the function
+                return function.apply(getMutableModel());
+            }
+
             Thread currentOwner = ownerOfAllProjects.get();
             if (currentOwner != null) {
-                if (currentOwner == Thread.currentThread()) {
-                    return factory.create();
+                if (currentOwner == currentThread) {
+                    // we hold the lock for all projects, can run the function
+                    return function.apply(getMutableModel());
                 }
                 throw new IllegalStateException(String.format("Cannot acquire state lock for %s as another thread (%s) currently holds the state lock for all projects.", project, currentOwner));
             }
@@ -237,38 +303,47 @@ public class DefaultProjectStateRegistry implements ProjectStateRegistry {
             if (currentLocks.contains(projectLock)) {
                 // if we already hold the project lock for this project
                 if (currentLocks.size() == 1) {
-                    // the lock for this project is the only lock we hold
-                    return factory.create();
+                    // the lock for this project is the only lock we hold, can run the function
+                    return function.apply(getMutableModel());
                 } else {
                     currentLocks = Lists.newArrayList(currentLocks);
                     currentLocks.remove(projectLock);
                     // release any other project locks we might happen to hold
-                    return workerLeaseService.withoutLocks(currentLocks, factory);
+                    return workerLeaseService.withoutLocks(currentLocks, () -> function.apply(getMutableModel()));
                 }
             } else {
                 // we don't currently hold the project lock
                 if (!currentLocks.isEmpty()) {
                     // we hold other project locks that we should release first
-                    return workerLeaseService.withoutLocks(currentLocks, new Factory<T>() {
-                        @Override
-                        public T create() {
-                            return withProjectLock(projectLock, factory);
-                        }
-                    });
+                    return workerLeaseService.withoutLocks(currentLocks, () -> withProjectLock(projectLock, function));
                 } else {
                     // we just need to get the lock for this project
-                    return withProjectLock(projectLock, factory);
+                    return withProjectLock(projectLock, function);
                 }
             }
         }
 
-        private <T> T withProjectLock(ResourceLock projectLock, final Factory<? extends T> factory) {
-            return workerLeaseService.withLocks(Collections.singleton(projectLock), factory);
+        @Override
+        public <S> S forceAccessToMutableState(Function<? super ProjectInternal, ? extends S> factory) {
+            Thread currentThread = Thread.currentThread();
+            boolean added = canDoAnythingToThisProject.add(currentThread);
+            try {
+                return factory.apply(getMutableModel());
+            } finally {
+                if (added) {
+                    canDoAnythingToThisProject.remove(currentThread);
+                }
+            }
+        }
+
+        private <S> S withProjectLock(ResourceLock projectLock, final Function<? super ProjectInternal, ? extends S> function) {
+            return workerLeaseService.withLocks(Collections.singleton(projectLock), () -> function.apply(getMutableModel()));
         }
 
         @Override
         public boolean hasMutableState() {
-            return ownerOfAllProjects.get() == Thread.currentThread() || workerLeaseService.getCurrentProjectLocks().contains(projectLock);
+            Thread currentThread = Thread.currentThread();
+            return canDoAnythingToThisProject.contains(currentThread) || workerLeaseService.isAllowedUncontrolledAccessToAnyProject() || ownerOfAllProjects.get() == currentThread || workerLeaseService.getCurrentProjectLocks().contains(projectLock);
         }
 
         @Override
@@ -278,13 +353,13 @@ public class DefaultProjectStateRegistry implements ProjectStateRegistry {
     }
 
     private static class CalculatedModelValueImpl<T> implements CalculatedModelValue<T> {
-        private final WorkerLeaseService workerLeaseService;
-        private final ProjectStateImpl owner;
+        private final ProjectLeaseRegistry projectLeaseRegistry;
+        private final ModelContainer<?> owner;
         private final ReentrantLock lock = new ReentrantLock();
         private volatile T value;
 
-        public CalculatedModelValueImpl(ProjectStateImpl owner, WorkerLeaseService workerLeaseService, @Nullable T initialValue) {
-            this.workerLeaseService = workerLeaseService;
+        public CalculatedModelValueImpl(ProjectStateImpl owner, WorkerLeaseService projectLeaseRegistry, @Nullable T initialValue) {
+            this.projectLeaseRegistry = projectLeaseRegistry;
             this.value = initialValue;
             this.owner = owner;
         }
@@ -314,7 +389,6 @@ public class DefaultProjectStateRegistry implements ProjectStateRegistry {
         public T update(Function<T, T> updateFunction) {
             acquireUpdateLock();
             try {
-                // Do not hold any locks while applying the update
                 T newValue = updateFunction.apply(value);
                 value = newValue;
                 return newValue;
@@ -335,7 +409,7 @@ public class DefaultProjectStateRegistry implements ProjectStateRegistry {
             }
 
             // Another thread holds the update lock, release the project locks and wait for the other thread to finish the update
-            workerLeaseService.withoutProjectLock(lock::lock);
+            projectLeaseRegistry.withoutProjectLock(lock::lock);
         }
 
         private void assertCanMutate() {

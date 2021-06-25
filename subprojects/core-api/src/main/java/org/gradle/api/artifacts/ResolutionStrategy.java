@@ -17,7 +17,6 @@
 package org.gradle.api.artifacts;
 
 import org.gradle.api.Action;
-import org.gradle.api.Incubating;
 
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
@@ -49,8 +48,8 @@ import java.util.concurrent.TimeUnit;
  *
  *     // add dependency substitution rules
  *     dependencySubstitution {
- *       substitute module('org.gradle:api') with project(':api')
- *       substitute project(':util') with module('org.gradle:util:3.0')
+ *       substitute module('org.gradle:api') using project(':api')
+ *       substitute project(':util') using module('org.gradle:util:3.0')
  *     }
  *
  *     // cache dynamic versions for 10 minutes
@@ -98,7 +97,6 @@ public interface ResolutionStrategy {
      * @return this resolution strategy
      * @since 6.1
      */
-    @Incubating
     ResolutionStrategy failOnDynamicVersions();
 
     /**
@@ -110,7 +108,6 @@ public interface ResolutionStrategy {
      * @return this resolution strategy
      * @since 6.1
      */
-    @Incubating
     ResolutionStrategy failOnChangingVersions();
 
     /**
@@ -124,7 +121,6 @@ public interface ResolutionStrategy {
      * @return this resolution strategy
      * @since 6.1
      */
-    @Incubating
     ResolutionStrategy failOnNonReproducibleResolution();
 
     /**
@@ -162,7 +158,6 @@ public interface ResolutionStrategy {
      * @return this resolution strategy instance
      * @since 6.0
      */
-    @Incubating
     ResolutionStrategy deactivateDependencyLocking();
 
 
@@ -174,7 +169,6 @@ public interface ResolutionStrategy {
      *
      * @since 6.2
      */
-    @Incubating
     ResolutionStrategy disableDependencyVerification();
 
     /**
@@ -182,7 +176,6 @@ public interface ResolutionStrategy {
      *
      * @since 6.2
      */
-    @Incubating
     ResolutionStrategy enableDependencyVerification();
 
     /**
@@ -358,11 +351,11 @@ public interface ResolutionStrategy {
      * configurations.all {
      *   resolutionStrategy.dependencySubstitution {
      *     // Substitute project and module dependencies
-     *     substitute module('org.gradle:api') with project(':api')
-     *     substitute project(':util') with module('org.gradle:util:3.0')
+     *     substitute module('org.gradle:api') using project(':api')
+     *     substitute project(':util') using module('org.gradle:util:3.0')
      *
      *     // Substitute one module dependency for another
-     *     substitute module('org.gradle:api:2.0') with module('org.gradle:api:2.1')
+     *     substitute module('org.gradle:api:2.0') using module('org.gradle:api:2.1')
      *   }
      * }
      * </pre>
@@ -396,7 +389,6 @@ public interface ResolutionStrategy {
      * @return this resolution strategy
      * @since 5.6
      */
-    @Incubating
     ResolutionStrategy capabilitiesResolution(Action<? super CapabilitiesResolution> action);
 
     /**
@@ -404,7 +396,6 @@ public interface ResolutionStrategy {
      *
      * @since 5.6
      */
-    @Incubating
     CapabilitiesResolution getCapabilitiesResolution();
 
     /**

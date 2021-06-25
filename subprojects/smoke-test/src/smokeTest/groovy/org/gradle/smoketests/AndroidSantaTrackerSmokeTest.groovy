@@ -17,87 +17,140 @@
 package org.gradle.smoketests
 
 import org.gradle.integtests.fixtures.UnsupportedWithConfigurationCache
-import org.gradle.profiler.Phase
-import org.gradle.profiler.ScenarioContext
-import org.gradle.profiler.mutations.ApplyNonAbiChangeToJavaSourceFileMutator
 import org.gradle.util.GradleVersion
-import org.gradle.util.Requires
-import org.gradle.util.TestPrecondition
-import spock.lang.Unroll
+import org.gradle.util.internal.VersionNumber
 
 import static org.gradle.testkit.runner.TaskOutcome.SUCCESS
 
-
-@Requires(TestPrecondition.JDK11_OR_EARLIER)
 class AndroidSantaTrackerSmokeTest extends AbstractAndroidSantaTrackerSmokeTest {
 
     // TODO:configuration-cache remove once fixed upstream
     @Override
     protected int maxConfigurationCacheProblems() {
-        return 100
+        return 150
     }
 
-    @Unroll
-    @UnsupportedWithConfigurationCache(iterationMatchers = [AGP_3_ITERATION_MATCHER, AGP_4_0_ITERATION_MATCHER])
-    def "check deprecation warnings produced by building Santa Tracker Java (agp=#agpVersion)"() {
+    def "plop (agp=#agpVersion)"() {
+        expect:
+        if (VersionNumber.parse(agpVersion).baseVersion < VersionNumber.version(4, 2)) {
+            println("OLD WITH DEPWARN")
+        } else {
+            println("RECENT NO DEPWARN")
+        }
+
+        where:
+        agpVersion << TESTED_AGP_VERSIONS
+    }
+
+    @UnsupportedWithConfigurationCache(iterationMatchers = [AGP_4_0_ITERATION_MATCHER, AGP_4_1_ITERATION_MATCHER])
+    def "check deprecation warnings produced by building Santa Tracker (agp=#agpVersion)"() {
 
         given:
+        AGP_VERSIONS.assumeCurrentJavaVersionIsSupportedBy(agpVersion)
+
+        and:
         def checkoutDir = temporaryFolder.createDir("checkout")
-        setupCopyOfSantaTracker(checkoutDir, 'Java', agpVersion)
+        setupCopyOfSantaTracker(checkoutDir)
 
         when:
-        def result = buildLocation(checkoutDir, agpVersion)
+        buildLocationMaybeExpectingWorkerExecutorDeprecation(checkoutDir, agpVersion)
 
         then:
-        if (agpVersion.startsWith('3.6')) {
-            expectDeprecationWarnings(result,
-                "Internal API constructor DefaultDomainObjectSet(Class<T>) has been deprecated. This is scheduled to be removed in Gradle 7.0. " +
-                    "Please use ObjectFactory.domainObjectSet(Class<T>) instead. " +
-                    "See https://docs.gradle.org/${GradleVersion.current().version}/userguide/custom_gradle_types.html#domainobjectset for more details."
-            )
-        } else {
-            expectNoDeprecationWarnings(result)
-        }
         assertConfigurationCacheStateStored()
 
         where:
         agpVersion << TESTED_AGP_VERSIONS
     }
 
-    @Unroll
-    @UnsupportedWithConfigurationCache(iterationMatchers = [AGP_3_ITERATION_MATCHER, AGP_4_0_ITERATION_MATCHER])
-    def "incremental Java compilation works for Santa Tracker Java (agp=#agpVersion)"() {
+    @UnsupportedWithConfigurationCache(iterationMatchers = [AGP_4_0_ITERATION_MATCHER, AGP_4_1_ITERATION_MATCHER])
+    def "incremental Java compilation works for Santa Tracker (agp=#agpVersion)"() {
 
         given:
-        def checkoutDir = temporaryFolder.createDir("checkout")
-        setupCopyOfSantaTracker(checkoutDir, 'Java', agpVersion)
-        def buildContext = new ScenarioContext(UUID.randomUUID(), "nonAbiChange").withBuild(Phase.MEASURE, 0)
+        AGP_VERSIONS.assumeCurrentJavaVersionIsSupportedBy(agpVersion)
 
         and:
-        def pathToClass = "com/google/android/apps/santatracker/map/BottomSheetBehavior"
-        def fileToChange = checkoutDir.file("santa-tracker/src/main/java/${pathToClass}.java")
-        def compiledClassFile = checkoutDir.file("santa-tracker/build/intermediates/javac/developmentDebug/classes/${pathToClass}.class")
-        def nonAbiChangeMutator = new ApplyNonAbiChangeToJavaSourceFileMutator(fileToChange)
+        def checkoutDir = temporaryFolder.createDir("checkout")
+        setupCopyOfSantaTracker(checkoutDir)
+
+        and:
+        def pathToClass = "com/google/android/apps/santatracker/tracker/ui/BottomSheetBehavior"
+        def fileToChange = checkoutDir.file("tracker/src/main/java/${pathToClass}.java")
+        def compiledClassFile = checkoutDir.file("tracker/build/intermediates/javac/debug/classes/${pathToClass}.class")
 
         when:
-        def result = buildLocation(checkoutDir, agpVersion)
+        def result = buildLocationMaybeExpectingWorkerExecutorDeprecation(checkoutDir, agpVersion)
         def md5Before = compiledClassFile.md5Hash
 
         then:
-        result.task(":santa-tracker:compileDevelopmentDebugJavaWithJavac").outcome == SUCCESS
+        result.task(":tracker:compileDebugJavaWithJavac").outcome == SUCCESS
         assertConfigurationCacheStateStored()
 
         when:
-        nonAbiChangeMutator.beforeBuild(buildContext)
-        buildLocation(checkoutDir, agpVersion)
+        fileToChange.replace("computeCurrentVelocity(1000", "computeCurrentVelocity(2000")
+        buildLocationMaybeExpectingWorkerExecutorDeprecation(checkoutDir, agpVersion)
         def md5After = compiledClassFile.md5Hash
 
         then:
-        result.task(":santa-tracker:compileDevelopmentDebugJavaWithJavac").outcome == SUCCESS
+        result.task(":tracker:compileDebugJavaWithJavac").outcome == SUCCESS
         assertConfigurationCacheStateLoaded()
         md5After != md5Before
 
         where:
         agpVersion << TESTED_AGP_VERSIONS
+    }
+
+    @UnsupportedWithConfigurationCache(iterationMatchers = [AGP_4_0_ITERATION_MATCHER, AGP_4_1_ITERATION_MATCHER, AGP_4_2_ITERATION_MATCHER])
+    def "can lint Santa-Tracker (agp=#agpVersion)"() {
+
+        given:
+        AGP_VERSIONS.assumeCurrentJavaVersionIsSupportedBy(agpVersion)
+
+        and:
+        def checkoutDir = temporaryFolder.createDir("checkout")
+        setupCopyOfSantaTracker(checkoutDir)
+
+        when:
+        def runner = runnerForLocationExpectingLintDeprecations(checkoutDir, agpVersion, "lintDebug",
+            [
+                "wearable-2.3.0.jar (com.google.android.wearable:wearable:2.3.0)",
+                "kotlin-android-extensions-runtime-1.5.10.jar (org.jetbrains.kotlin:kotlin-android-extensions-runtime:1.5.10)"
+            ])
+        def result = runner.buildAndFail()
+
+        then:
+        assertConfigurationCacheStateStored()
+        result.output.contains("Lint found errors in the project; aborting build.")
+
+        when:
+        result = runnerForLocationExpectingLintDeprecations(checkoutDir, agpVersion, "lintDebug",
+            [
+                "wearable-2.3.0.jar (com.google.android.wearable:wearable:2.3.0)",
+                "kotlin-android-extensions-runtime-1.5.10.jar (org.jetbrains.kotlin:kotlin-android-extensions-runtime:1.5.10)",
+                "appcompat-1.0.2.aar (androidx.appcompat:appcompat:1.0.2)"
+            ])
+            .buildAndFail()
+
+        then:
+        assertConfigurationCacheStateLoaded()
+        result.output.contains("Lint found errors in the project; aborting build.")
+
+        where:
+        agpVersion << TESTED_AGP_VERSIONS
+    }
+
+    private SmokeTestGradleRunner runnerForLocationExpectingLintDeprecations(File location, String agpVersion, String task, List<String> artifacts) {
+        SmokeTestGradleRunner runner = runnerForLocationMaybeExpectingWorkerExecutorDeprecation(location, agpVersion, task)
+        artifacts.each { artifact ->
+            runner.expectLegacyDeprecationWarningIf(
+                agpVersion.startsWith("4.1"),
+                "In plugin 'com.android.internal.version-check' type 'com.android.build.gradle.tasks.LintPerVariantTask' property 'allInputs' cannot be resolved:  " +
+                    "Cannot convert the provided notation to a File or URI: $artifact. " +
+                    "The following types/formats are supported:  - A String or CharSequence path, for example 'src/main/java' or '/usr/include'. - A String or CharSequence URI, for example 'file:/usr/include'. - A File instance. - A Path instance. - A Directory instance. - A RegularFile instance. - A URI or URL instance. - A TextResource instance. " +
+                    "Reason: An input file collection couldn't be resolved, making it impossible to determine task inputs. " +
+                    "Please refer to https://docs.gradle.org/${GradleVersion.current().version}/userguide/validation_problems.html#unresolvable_input for more details about this problem. " +
+                    "This behaviour has been deprecated and is scheduled to be removed in Gradle 8.0. " +
+                    "Execution optimizations are disabled to ensure correctness. See https://docs.gradle.org/${GradleVersion.current().version}/userguide/more_about_tasks.html#sec:up_to_date_checks for more details.")
+        }
+        return runner
     }
 }

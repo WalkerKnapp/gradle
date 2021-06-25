@@ -16,10 +16,10 @@
 
 package org.gradle.caching.http.internal
 
-import org.gradle.integtests.fixtures.AbstractIntegrationSpec
+import org.eclipse.jetty.servlet.FilterHolder
 import org.gradle.util.GradleVersion
-import org.mortbay.jetty.servlet.FilterHolder
 
+import javax.servlet.DispatcherType
 import javax.servlet.Filter
 import javax.servlet.FilterChain
 import javax.servlet.FilterConfig
@@ -27,7 +27,7 @@ import javax.servlet.ServletException
 import javax.servlet.ServletRequest
 import javax.servlet.ServletResponse
 
-class HttpBuildCacheRequestHeadersIntegrationTest extends AbstractIntegrationSpec implements HttpBuildCacheFixture {
+class HttpBuildCacheRequestHeadersIntegrationTest extends HttpBuildCacheFixture {
     def "sends X-Gradle-Version header with store and load requests"() {
         given:
         buildFile << """
@@ -57,7 +57,7 @@ class HttpBuildCacheRequestHeadersIntegrationTest extends AbstractIntegrationSpe
 
             @Override
             void destroy() {}
-        }), "/*", 1)
+        }), "/*", EnumSet.of(DispatcherType.REQUEST))
 
         settingsFile << withHttpBuildCacheServer()
 

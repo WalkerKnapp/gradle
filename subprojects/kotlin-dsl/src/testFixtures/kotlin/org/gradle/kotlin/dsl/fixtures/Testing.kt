@@ -2,8 +2,9 @@ package org.gradle.kotlin.dsl.fixtures
 
 import org.gradle.internal.classpath.ClassPath
 import org.gradle.kotlin.dsl.support.normaliseLineSeparators
-import org.gradle.util.TextUtil
+import org.gradle.util.internal.TextUtil
 
+import org.hamcrest.CoreMatchers.equalTo
 import org.hamcrest.CoreMatchers.instanceOf
 import org.hamcrest.MatcherAssert.assertThat
 
@@ -56,7 +57,8 @@ fun classLoaderFor(classPath: ClassPath): URLClassLoader =
 
 fun classLoaderFor(vararg classPath: File): URLClassLoader =
     URLClassLoader.newInstance(
-        classPath.map { it.toURI().toURL() }.toTypedArray())
+        classPath.map { it.toURI().toURL() }.toTypedArray()
+    )
 
 
 val File.normalisedPath
@@ -66,7 +68,7 @@ val File.normalisedPath
 fun assertStandardOutputOf(expected: String, action: () -> Unit): Unit =
     assertThat(
         standardOutputOf(action),
-        equalToMultiLineString(expected)
+        equalTo(expected.normaliseLineSeparators())
     )
 
 

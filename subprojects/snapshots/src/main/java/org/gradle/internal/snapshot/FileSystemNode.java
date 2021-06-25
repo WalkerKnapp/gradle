@@ -26,22 +26,12 @@ public interface FileSystemNode extends ReadOnlyFileSystemNode {
     /**
      * Stores information to the virtual file system that we have learned about.
      *
-     * Complete information, like {@link CompleteFileSystemLocationSnapshot}s, are not touched nor replaced.
+     * Complete information, like {@link FileSystemLocationSnapshot}s, are not touched nor replaced.
      */
-    FileSystemNode store(VfsRelativePath relativePath, CaseSensitivity caseSensitivity, MetadataSnapshot snapshot, SnapshotHierarchy.NodeDiffListener diffListener);
+    FileSystemNode store(VfsRelativePath targetPath, CaseSensitivity caseSensitivity, MetadataSnapshot snapshot, SnapshotHierarchy.NodeDiffListener diffListener);
 
     /**
      * Invalidates part of the node.
      */
-    Optional<FileSystemNode> invalidate(VfsRelativePath relativePath, CaseSensitivity caseSensitivity, SnapshotHierarchy.NodeDiffListener diffListener);
-
-    /**
-     * The path to the parent snapshot or the root of the file system.
-     */
-    String getPathToParent();
-
-    /**
-     * Creates a new node with the same children, but a different path to the parent.
-     */
-    FileSystemNode withPathToParent(String newPathToParent);
+    Optional<FileSystemNode> invalidate(VfsRelativePath targetPath, CaseSensitivity caseSensitivity, SnapshotHierarchy.NodeDiffListener diffListener);
 }

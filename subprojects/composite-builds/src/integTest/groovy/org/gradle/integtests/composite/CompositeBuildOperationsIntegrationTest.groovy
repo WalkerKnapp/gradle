@@ -20,7 +20,6 @@ import org.gradle.api.internal.tasks.execution.ExecuteTaskBuildOperationType
 import org.gradle.execution.taskgraph.NotifyTaskGraphWhenReadyBuildOperationType
 import org.gradle.initialization.ConfigureBuildBuildOperationType
 import org.gradle.initialization.LoadBuildBuildOperationType
-import org.gradle.integtests.fixtures.ToBeFixedForConfigurationCache
 import org.gradle.integtests.fixtures.build.BuildTestFile
 import org.gradle.internal.operations.trace.BuildOperationRecord
 import org.gradle.internal.taskgraph.CalculateTaskGraphBuildOperationType
@@ -43,7 +42,6 @@ class CompositeBuildOperationsIntegrationTest extends AbstractCompositeBuildInte
         includedBuilds << buildB
     }
 
-    @ToBeFixedForConfigurationCache
     def "generates build operations for tasks in included builds"() {
         given:
         dependency 'org.test:buildB:1.0'
@@ -66,7 +64,6 @@ class CompositeBuildOperationsIntegrationTest extends AbstractCompositeBuildInte
     }
 
     @Unroll
-    @ToBeFixedForConfigurationCache
     def "generates build lifecycle operations for included builds with #display"() {
         given:
         dependency "org.test:${dependencyName}:1.0"
@@ -109,12 +106,15 @@ class CompositeBuildOperationsIntegrationTest extends AbstractCompositeBuildInte
         taskGraphOps[1].details.buildPath == ":${buildName}"
         taskGraphOps[1].parentId == taskGraphOps[0].id
 
+        def runMainTasks = operations.first(Pattern.compile("Run main tasks"))
+        runMainTasks.parentId == root.id
+
         def runTasksOps = operations.all(Pattern.compile("Run tasks.*"))
         runTasksOps.size() == 2
-        runTasksOps[0].displayName == "Run tasks"
-        runTasksOps[0].parentId == root.id
-        runTasksOps[1].displayName == "Run tasks (:${buildName})"
-        runTasksOps[1].parentId == root.id
+        // Build operations are run in parallel, so can appear in either order
+        [runTasksOps[0].displayName, runTasksOps[1].displayName].sort() == ["Run tasks", "Run tasks (:${buildName})"]
+        runTasksOps[0].parentId == runMainTasks.id
+        runTasksOps[1].parentId == runMainTasks.id
 
         def graphNotifyOps = operations.all(NotifyTaskGraphWhenReadyBuildOperationType)
         graphNotifyOps.size() == 2
@@ -131,7 +131,90 @@ class CompositeBuildOperationsIntegrationTest extends AbstractCompositeBuildInte
         "rootProject.name='someLib'" | "buildB"  | "someLib"      | "configured root project name"
     }
 
-    @ToBeFixedForConfigurationCache
+    def "generates build lifecycle operations for multiple included builds"() {
+        given:
+        def buildC = multiProjectBuild("buildC", ["someLib"]) {
+            buildFile << """
+                allprojects {
+                    apply plugin: 'java'
+                }
+            """
+        }
+        includedBuilds << buildC
+        dependency "org.test:buildB:1.0"
+        dependency "org.test:buildC:1.0"
+        dependency buildB, "org.test:buildC:1.0"
+
+        when:
+        execute(buildA, ":jar", [])
+
+        then:
+        executed ":buildB:jar", ":buildC:jar"
+
+        and:
+        def root = operations.root(RunBuildBuildOperationType)
+
+        def taskGraphOps = operations.all(CalculateTaskGraphBuildOperationType)
+        taskGraphOps.size() == 3
+        taskGraphOps[0].displayName == "Calculate task graph"
+        taskGraphOps[0].details.buildPath == ":"
+        taskGraphOps[0].parentId == root.id
+        taskGraphOps[1].displayName == "Calculate task graph (:buildC)"
+        taskGraphOps[1].details.buildPath == ":buildC"
+        taskGraphOps[1].parentId == taskGraphOps[0].id
+        taskGraphOps[2].displayName == "Calculate task graph (:buildB)"
+        taskGraphOps[2].details.buildPath == ":buildB"
+        taskGraphOps[2].parentId == taskGraphOps[0].id
+    }
+
+    def "generates build lifecycle operations for multiple included builds used as buildscript dependencies"() {
+        given:
+        def buildC = multiProjectBuild("buildC", ["someLib"]) {
+            buildFile << """
+                allprojects {
+                    apply plugin: 'java'
+                }
+            """
+        }
+        includedBuilds << buildC
+        buildA.buildFile.text = """
+            buildscript {
+                dependencies {
+                    classpath 'org.test:buildB:1.0'
+                    classpath 'org.test:buildC:1.0'
+                }
+            }
+        """ + buildA.buildFile.text
+        dependency buildB, "org.test:buildC:1.0"
+
+        when:
+        execute(buildA, ":jar", [])
+
+        then:
+        executed ":buildB:jar", ":buildC:jar"
+
+        and:
+        def root = operations.root(RunBuildBuildOperationType)
+
+        def applyRootProjectBuildScript = operations.first(Pattern.compile("Apply build file 'build.gradle' to root project 'buildA'"))
+
+        // The task graph for buildC is calculated multiple times, once for buildscript dependency and again for the dependency from buildB
+        def taskGraphOps = operations.all(CalculateTaskGraphBuildOperationType)
+        taskGraphOps.size() == 4
+        taskGraphOps[0].displayName == "Calculate task graph (:buildC)"
+        taskGraphOps[0].details.buildPath == ":buildC"
+        taskGraphOps[0].parentId == applyRootProjectBuildScript.id
+        taskGraphOps[1].displayName == "Calculate task graph (:buildB)"
+        taskGraphOps[1].details.buildPath == ":buildB"
+        taskGraphOps[1].parentId == applyRootProjectBuildScript.id
+        taskGraphOps[2].displayName == "Calculate task graph (:buildC)"
+        taskGraphOps[2].details.buildPath == ":buildC"
+        taskGraphOps[2].parentId == applyRootProjectBuildScript.id
+        taskGraphOps[3].displayName == "Calculate task graph"
+        taskGraphOps[3].details.buildPath == ":"
+        taskGraphOps[3].parentId == root.id
+    }
+
     def "generates build lifecycle operations for included build used as buildscript and production dependency"() {
         given:
         buildA.buildFile.text = """
@@ -170,12 +253,14 @@ class CompositeBuildOperationsIntegrationTest extends AbstractCompositeBuildInte
         configureOps[1].details.buildPath == ":buildB"
         configureOps[1].parentId == configureOps[0].id
 
+        def applyRootProjectBuildScript = operations.first(Pattern.compile("Apply build file 'build.gradle' to root project 'buildA'"))
+
         // The task graph for buildB is calculated multiple times, once for buildscript dependency and again for production dependency
         def taskGraphOps = operations.all(CalculateTaskGraphBuildOperationType)
         taskGraphOps.size() == 3
         taskGraphOps[0].displayName == "Calculate task graph (:buildB)"
         taskGraphOps[0].details.buildPath == ":buildB"
-        // parent is 'apply build script to project'
+        taskGraphOps[0].parentId == applyRootProjectBuildScript.id
         taskGraphOps[1].displayName == "Calculate task graph"
         taskGraphOps[1].details.buildPath == ":"
         taskGraphOps[1].parentId == root.id
@@ -183,15 +268,18 @@ class CompositeBuildOperationsIntegrationTest extends AbstractCompositeBuildInte
         taskGraphOps[2].details.buildPath == ":buildB"
         taskGraphOps[2].parentId == taskGraphOps[1].id
 
+        def runMainTasks = operations.first(Pattern.compile("Run main tasks"))
+        runMainTasks.parentId == root.id
+
         // Tasks are run for buildB multiple times, once for buildscript dependency and again for production dependency
         def runTasksOps = operations.all(Pattern.compile("Run tasks.*"))
         runTasksOps.size() == 3
         runTasksOps[0].displayName == "Run tasks (:buildB)"
-        runTasksOps[0].parentId == root.id
-        runTasksOps[1].displayName == "Run tasks"
-        runTasksOps[1].parentId == root.id
-        runTasksOps[2].displayName == "Run tasks (:buildB)"
-        runTasksOps[2].parentId == root.id
+        runTasksOps[0].parentId == applyRootProjectBuildScript.id
+        // Build operations are run in parallel, so can appear in either order
+        [runTasksOps[1].displayName, runTasksOps[2].displayName].sort() == ["Run tasks", "Run tasks (:buildB)"]
+        runTasksOps[1].parentId == runMainTasks.id
+        runTasksOps[2].parentId == runMainTasks.id
 
         // Task graph ready event sent only once
         def graphNotifyOps = operations.all(NotifyTaskGraphWhenReadyBuildOperationType)

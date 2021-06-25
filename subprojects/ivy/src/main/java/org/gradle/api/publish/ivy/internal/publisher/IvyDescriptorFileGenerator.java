@@ -36,7 +36,7 @@ import org.gradle.api.publish.ivy.internal.dependency.IvyDependencyInternal;
 import org.gradle.api.publish.ivy.internal.dependency.IvyExcludeRule;
 import org.gradle.internal.xml.SimpleXmlWriter;
 import org.gradle.internal.xml.XmlTransformer;
-import org.gradle.util.CollectionUtils;
+import org.gradle.util.internal.CollectionUtils;
 
 import javax.xml.namespace.QName;
 import java.io.File;
@@ -260,7 +260,8 @@ public class IvyDescriptorFileGenerator {
         for (IvyDependencyInternal dependency : dependencies) {
             String org = dependency.getOrganisation();
             String module = dependency.getModule();
-            ModuleVersionIdentifier resolvedVersion = versionMappingStrategy.findStrategyForVariant(dependency.getAttributes()).maybeResolveVersion(org, module);
+            String projectPath  = dependency.getProjectPath();
+            ModuleVersionIdentifier resolvedVersion = versionMappingStrategy.findStrategyForVariant(dependency.getAttributes()).maybeResolveVersion(org, module, projectPath);
             if (resolvedVersion != null) {
                 org = resolvedVersion.getGroup();
                 module = resolvedVersion.getName();

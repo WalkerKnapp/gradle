@@ -10,7 +10,7 @@ plugins {
 // tag::unpack-archive-example[]
 tasks.register<Copy>("unpackFiles") {
     from(zipTree("src/resources/thirdPartyResources.zip"))
-    into("$buildDir/resources")
+    into(layout.buildDirectory.dir("resources"))
 }
 // end::unpack-archive-example[]
 
@@ -23,7 +23,7 @@ tasks.register<Copy>("unpackLibsDirectory") {
         }
         includeEmptyDirs = false  // <3>
     }
-    into("$buildDir/resources")
+    into(layout.buildDirectory.dir("resources"))
 }
 // end::unpack-archive-subset-example[]
 
@@ -31,7 +31,7 @@ tasks.register<Copy>("unpackLibsDirectory") {
 tasks.register<Zip>("zip") {
     from("src/dist")
     into("libs") {
-        from(configurations.runtime)
+        from(configurations.runtimeClasspath)
     }
 }
 // end::zip[]
@@ -40,7 +40,7 @@ tasks.register<Zip>("zip") {
 tasks.register<Tar>("tar") {
     from("src/dist")
     into("libs") {
-        from(configurations.runtime)
+        from(configurations.runtimeClasspath)
     }
 }
 // end::tar[]

@@ -18,17 +18,24 @@ package org.gradle.api.internal.initialization;
 
 import org.gradle.api.internal.DomainObjectContext;
 import org.gradle.api.internal.project.ProjectInternal;
-import org.gradle.internal.Factory;
 import org.gradle.internal.model.CalculatedModelValue;
 import org.gradle.internal.model.ModelContainer;
 import org.gradle.util.Path;
 
 import javax.annotation.Nullable;
+import java.util.function.Consumer;
 import java.util.function.Function;
 
-public class RootScriptDomainObjectContext implements DomainObjectContext, ModelContainer {
-
+public class RootScriptDomainObjectContext implements DomainObjectContext, ModelContainer<Object> {
+    private static final Object MODEL = new Object();
     public static final DomainObjectContext INSTANCE = new RootScriptDomainObjectContext();
+
+    public static final DomainObjectContext PLUGINS = new RootScriptDomainObjectContext() {
+        @Override
+        public boolean isPluginContext() {
+            return true;
+        }
+    };
 
     private RootScriptDomainObjectContext() {
     }
@@ -55,7 +62,7 @@ public class RootScriptDomainObjectContext implements DomainObjectContext, Model
     }
 
     @Override
-    public ModelContainer getModel() {
+    public ModelContainer<Object> getModel() {
         return this;
     }
 
@@ -65,13 +72,18 @@ public class RootScriptDomainObjectContext implements DomainObjectContext, Model
     }
 
     @Override
-    public <T> T withMutableState(Factory<? extends T> factory) {
-        return factory.create();
+    public <S> S fromMutableState(Function<? super Object, ? extends S> factory) {
+        return factory.apply(MODEL);
     }
 
     @Override
-    public void withMutableState(Runnable runnable) {
-        runnable.run();
+    public <S> S forceAccessToMutableState(Function<? super Object, ? extends S> factory) {
+        return factory.apply(MODEL);
+    }
+
+    @Override
+    public void applyToMutableState(Consumer<? super Object> action) {
+        action.accept(MODEL);
     }
 
     @Override
@@ -85,12 +97,22 @@ public class RootScriptDomainObjectContext implements DomainObjectContext, Model
     }
 
     @Override
+    public boolean isRootScript() {
+        return true;
+    }
+
+    @Override
+    public boolean isPluginContext() {
+        return false;
+    }
+
+    @Override
     public <T> CalculatedModelValue<T> newCalculatedValue(@Nullable T initialValue) {
         return new CalculatedModelValueImpl<>(initialValue);
     }
 
     private static class CalculatedModelValueImpl<T> implements CalculatedModelValue<T> {
-        private T value;
+        private volatile T value;
 
         CalculatedModelValueImpl(@Nullable T initialValue) {
             value = initialValue;
@@ -117,9 +139,11 @@ public class RootScriptDomainObjectContext implements DomainObjectContext, Model
 
         @Override
         public T update(Function<T, T> updateFunction) {
-            T newValue = updateFunction.apply(value);
-            value = newValue;
-            return newValue;
+            synchronized (this) {
+                T newValue = updateFunction.apply(value);
+                value = newValue;
+                return newValue;
+            }
         }
     }
 }

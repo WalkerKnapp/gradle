@@ -16,18 +16,20 @@
 
 package org.gradle.api.internal.artifacts;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableSortedMap;
 import com.google.common.collect.Sets;
-import org.gradle.BuildAdapter;
 import org.gradle.StartParameter;
 import org.gradle.api.capabilities.Capability;
-import org.gradle.api.initialization.Settings;
 import org.gradle.api.internal.ClassPathRegistry;
+import org.gradle.api.internal.CollectionCallbackActionDecorator;
 import org.gradle.api.internal.DocumentationRegistry;
 import org.gradle.api.internal.FeaturePreviews;
 import org.gradle.api.internal.GradleInternal;
 import org.gradle.api.internal.artifacts.component.ComponentIdentifierFactory;
 import org.gradle.api.internal.artifacts.component.DefaultComponentIdentifierFactory;
+import org.gradle.api.internal.artifacts.configurations.DependencyMetaDataProvider;
 import org.gradle.api.internal.artifacts.dsl.CapabilityNotationParserFactory;
 import org.gradle.api.internal.artifacts.dsl.dependencies.DependencyFactory;
 import org.gradle.api.internal.artifacts.ivyservice.ArtifactCacheLockingManager;
@@ -108,9 +110,11 @@ import org.gradle.api.internal.artifacts.repositories.transport.RepositoryTransp
 import org.gradle.api.internal.artifacts.verification.signatures.DefaultSignatureVerificationServiceFactory;
 import org.gradle.api.internal.artifacts.verification.signatures.SignatureVerificationServiceFactory;
 import org.gradle.api.internal.attributes.ImmutableAttributesFactory;
+import org.gradle.api.internal.catalog.DefaultDependenciesAccessors;
+import org.gradle.api.internal.catalog.DependenciesAccessorsWorkspaceProvider;
 import org.gradle.api.internal.file.FileCollectionFactory;
-import org.gradle.api.internal.file.TemporaryFileProvider;
-import org.gradle.api.internal.file.TmpDirTemporaryFileProvider;
+import org.gradle.api.internal.file.FileResolver;
+import org.gradle.api.internal.file.temp.TemporaryFileProvider;
 import org.gradle.api.internal.filestore.ArtifactIdentifierFileStore;
 import org.gradle.api.internal.filestore.DefaultArtifactIdentifierFileStore;
 import org.gradle.api.internal.filestore.TwoStageArtifactIdentifierFileStore;
@@ -119,22 +123,26 @@ import org.gradle.api.internal.notations.ClientModuleNotationParserFactory;
 import org.gradle.api.internal.notations.DependencyConstraintNotationParser;
 import org.gradle.api.internal.notations.DependencyNotationParser;
 import org.gradle.api.internal.notations.ProjectDependencyFactory;
-import org.gradle.api.internal.project.ProjectInternal;
-import org.gradle.api.internal.project.ProjectRegistry;
 import org.gradle.api.internal.project.ProjectStateRegistry;
 import org.gradle.api.internal.properties.GradleProperties;
 import org.gradle.api.internal.resources.ApiTextResourceAdapter;
 import org.gradle.api.internal.runtimeshaded.RuntimeShadedJarFactory;
+import org.gradle.api.model.ObjectFactory;
+import org.gradle.api.provider.ProviderFactory;
 import org.gradle.cache.CacheRepository;
 import org.gradle.cache.internal.CacheScopeMapping;
 import org.gradle.cache.internal.CleaningInMemoryCacheDecoratorFactory;
 import org.gradle.cache.internal.GeneratedGradleJarCache;
 import org.gradle.cache.internal.InMemoryCacheDecoratorFactory;
 import org.gradle.cache.internal.ProducerGuard;
-import org.gradle.initialization.InternalBuildFinishedListener;
+import org.gradle.caching.internal.origin.OriginMetadata;
+import org.gradle.configuration.internal.UserCodeApplicationContext;
+import org.gradle.initialization.DependenciesAccessors;
 import org.gradle.initialization.ProjectAccessListener;
+import org.gradle.initialization.internal.InternalBuildFinishedListener;
 import org.gradle.initialization.layout.BuildLayout;
 import org.gradle.initialization.layout.ProjectCacheDir;
+import org.gradle.internal.Try;
 import org.gradle.internal.build.BuildState;
 import org.gradle.internal.build.BuildStateRegistry;
 import org.gradle.internal.classpath.ClasspathBuilder;
@@ -143,14 +151,57 @@ import org.gradle.internal.component.external.model.ModuleComponentArtifactMetad
 import org.gradle.internal.component.external.model.PreferJavaRuntimeVariant;
 import org.gradle.internal.component.model.PersistentModuleSource;
 import org.gradle.internal.event.ListenerManager;
-import org.gradle.internal.file.FileAccessTimeJournal;
+import org.gradle.internal.execution.ExecutionEngine;
+import org.gradle.internal.execution.ExecutionResult;
+import org.gradle.internal.execution.OutputChangeListener;
+import org.gradle.internal.execution.OutputSnapshotter;
+import org.gradle.internal.execution.UnitOfWork;
+import org.gradle.internal.execution.WorkValidationContext;
+import org.gradle.internal.execution.caching.CachingState;
+import org.gradle.internal.execution.fingerprint.InputFingerprinter;
+import org.gradle.internal.execution.history.AfterPreviousExecutionState;
+import org.gradle.internal.execution.history.BeforeExecutionState;
+import org.gradle.internal.execution.history.ExecutionHistoryStore;
+import org.gradle.internal.execution.history.OverlappingOutputDetector;
+import org.gradle.internal.execution.history.changes.ExecutionStateChangeDetector;
+import org.gradle.internal.execution.impl.DefaultExecutionEngine;
+import org.gradle.internal.execution.steps.AssignWorkspaceStep;
+import org.gradle.internal.execution.steps.BroadcastChangingOutputsStep;
+import org.gradle.internal.execution.steps.CachingContext;
+import org.gradle.internal.execution.steps.CachingResult;
+import org.gradle.internal.execution.steps.CaptureStateAfterExecutionStep;
+import org.gradle.internal.execution.steps.CaptureStateBeforeExecutionStep;
+import org.gradle.internal.execution.steps.CreateOutputsStep;
+import org.gradle.internal.execution.steps.ExecuteStep;
+import org.gradle.internal.execution.steps.IdentifyStep;
+import org.gradle.internal.execution.steps.IdentityCacheStep;
+import org.gradle.internal.execution.steps.LoadExecutionStateStep;
+import org.gradle.internal.execution.steps.RemovePreviousOutputsStep;
+import org.gradle.internal.execution.steps.ResolveChangesStep;
+import org.gradle.internal.execution.steps.ResolveInputChangesStep;
+import org.gradle.internal.execution.steps.SkipUpToDateStep;
+import org.gradle.internal.execution.steps.Step;
+import org.gradle.internal.execution.steps.StoreExecutionStateStep;
+import org.gradle.internal.execution.steps.TimeoutStep;
+import org.gradle.internal.execution.steps.UpToDateResult;
+import org.gradle.internal.execution.steps.ValidateStep;
+import org.gradle.internal.execution.steps.ValidationFinishedContext;
+import org.gradle.internal.execution.timeout.TimeoutHandler;
+import org.gradle.internal.file.Deleter;
 import org.gradle.internal.file.RelativeFilePathResolver;
+import org.gradle.internal.fingerprint.CurrentFileCollectionFingerprint;
 import org.gradle.internal.hash.ChecksumService;
+import org.gradle.internal.hash.ClassLoaderHierarchyHasher;
 import org.gradle.internal.hash.FileHasher;
+import org.gradle.internal.id.UniqueId;
 import org.gradle.internal.installation.CurrentGradleInstallation;
 import org.gradle.internal.instantiation.InstantiatorFactory;
 import org.gradle.internal.logging.progress.ProgressLoggerFactory;
+import org.gradle.internal.management.DefaultDependencyResolutionManagement;
+import org.gradle.internal.management.DependencyResolutionManagementInternal;
+import org.gradle.internal.model.CalculatedValueContainerFactory;
 import org.gradle.internal.operations.BuildOperationExecutor;
+import org.gradle.internal.operations.CurrentBuildOperationRef;
 import org.gradle.internal.reflect.Instantiator;
 import org.gradle.internal.resolve.caching.ComponentMetadataRuleExecutor;
 import org.gradle.internal.resolve.caching.ComponentMetadataSupplierRuleExecutor;
@@ -172,13 +223,17 @@ import org.gradle.internal.resource.transfer.CachingTextUriResourceLoader;
 import org.gradle.internal.resource.transport.http.HttpConnectorFactory;
 import org.gradle.internal.service.ServiceRegistration;
 import org.gradle.internal.service.ServiceRegistry;
+import org.gradle.internal.snapshot.FileSystemSnapshot;
+import org.gradle.internal.snapshot.ValueSnapshot;
 import org.gradle.internal.snapshot.ValueSnapshotter;
 import org.gradle.internal.typeconversion.NotationParser;
-import org.gradle.util.BuildCommencedTimeProvider;
+import org.gradle.internal.vfs.VirtualFileSystem;
+import org.gradle.util.internal.BuildCommencedTimeProvider;
 import org.gradle.util.internal.SimpleMapInterner;
 
 import java.io.File;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
@@ -194,6 +249,31 @@ class DependencyManagementBuildScopeServices {
         registration.add(ProjectArtifactResolver.class);
         registration.add(ProjectArtifactSetResolver.class);
         registration.add(ProjectDependencyResolver.class);
+        registration.add(DefaultExternalResourceFileStore.Factory.class);
+        registration.add(DefaultArtifactIdentifierFileStore.Factory.class);
+    }
+
+    DependencyResolutionManagementInternal createSharedDependencyResolutionServices(Instantiator instantiator,
+                                                                                    UserCodeApplicationContext context,
+                                                                                    DependencyManagementServices dependencyManagementServices,
+                                                                                    FileResolver fileResolver,
+                                                                                    FileCollectionFactory fileCollectionFactory,
+                                                                                    DependencyMetaDataProvider dependencyMetaDataProvider,
+                                                                                    ObjectFactory objects,
+                                                                                    ProviderFactory providers,
+                                                                                    CollectionCallbackActionDecorator collectionCallbackActionDecorator,
+                                                                                    FeaturePreviews featurePreviews) {
+        return instantiator.newInstance(DefaultDependencyResolutionManagement.class,
+            context,
+            dependencyManagementServices,
+            fileResolver,
+            fileCollectionFactory,
+            dependencyMetaDataProvider,
+            objects,
+            providers,
+            collectionCallbackActionDecorator,
+            featurePreviews
+        );
     }
 
     DependencyManagementServices createDependencyManagementServices(ServiceRegistry parent) {
@@ -204,37 +284,35 @@ class DependencyManagementBuildScopeServices {
         return new DefaultComponentIdentifierFactory(buildRegistry.getBuild(currentBuild.getBuildIdentifier()));
     }
 
-    VersionComparator createVersionComparator(FeaturePreviews featurePreviews, ListenerManager listenerManager) {
-        DefaultVersionComparator defaultVersionComparator = new DefaultVersionComparator(featurePreviews);
-        // This needs to be removed once the feature preview disappears
-        listenerManager.addListener(new BuildAdapter() {
-            @Override
-            public void settingsEvaluated(Settings settings) {
-                defaultVersionComparator.configure();
-            }
-        });
-        return defaultVersionComparator;
+    VersionComparator createVersionComparator() {
+        return new DefaultVersionComparator();
+    }
+
+    DefaultProjectDependencyFactory createProjectDependencyFactory(
+        Instantiator instantiator,
+        StartParameter startParameter,
+        ProjectAccessListener projectAccessListener,
+        ImmutableAttributesFactory attributesFactory) {
+        NotationParser<Object, Capability> capabilityNotationParser = new CapabilityNotationParserFactory(false).create();
+        return new DefaultProjectDependencyFactory(
+            projectAccessListener, instantiator, startParameter.isBuildProjectDependencies(), capabilityNotationParser, attributesFactory);
     }
 
     DependencyFactory createDependencyFactory(
         Instantiator instantiator,
-        ListenerManager listenerManager,
-        StartParameter startParameter,
+        DefaultProjectDependencyFactory factory,
         ClassPathRegistry classPathRegistry,
         CurrentGradleInstallation currentGradleInstallation,
         FileCollectionFactory fileCollectionFactory,
         RuntimeShadedJarFactory runtimeShadedJarFactory,
-        ProjectAccessListener projectAccessListener,
         ImmutableAttributesFactory attributesFactory,
         SimpleMapInterner stringInterner) {
         NotationParser<Object, Capability> capabilityNotationParser = new CapabilityNotationParserFactory(false).create();
-        DefaultProjectDependencyFactory factory = new DefaultProjectDependencyFactory(
-            projectAccessListener, instantiator, startParameter.isBuildProjectDependencies(), capabilityNotationParser, attributesFactory);
         ProjectDependencyFactory projectDependencyFactory = new ProjectDependencyFactory(factory);
 
         return new DefaultDependencyFactory(
-            DependencyNotationParser.parser(instantiator, factory, classPathRegistry, fileCollectionFactory, runtimeShadedJarFactory, currentGradleInstallation, stringInterner),
-            DependencyConstraintNotationParser.parser(instantiator, factory, stringInterner),
+            DependencyNotationParser.parser(instantiator, factory, classPathRegistry, fileCollectionFactory, runtimeShadedJarFactory, currentGradleInstallation, stringInterner, attributesFactory, capabilityNotationParser),
+            DependencyConstraintNotationParser.parser(instantiator, factory, stringInterner, attributesFactory),
             new ClientModuleNotationParserFactory(instantiator, stringInterner).create(),
             capabilityNotationParser, projectDependencyFactory,
             attributesFactory);
@@ -377,14 +455,19 @@ class DependencyManagementBuildScopeServices {
         );
     }
 
-    FileStoreAndIndexProvider createFileStoreAndIndexProvider(BuildCommencedTimeProvider timeProvider, ArtifactCachesProvider artifactCaches, FileAccessTimeJournal fileAccessTimeJournal, ChecksumService checksumService) {
-        ExternalResourceFileStore writableFileStore = prepareExternalResourceFileStore(artifactCaches.getWritableCacheMetadata(), fileAccessTimeJournal, checksumService);
+    FileStoreAndIndexProvider createFileStoreAndIndexProvider(
+        BuildCommencedTimeProvider timeProvider,
+        ArtifactCachesProvider artifactCaches,
+        DefaultExternalResourceFileStore.Factory defaultExternalResourceFileStoreFactory,
+        DefaultArtifactIdentifierFileStore.Factory defaultArtifactIdentifierFileStoreFactory
+    ) {
+        ExternalResourceFileStore writableFileStore = defaultExternalResourceFileStoreFactory.create(artifactCaches.getWritableCacheMetadata());
         ExternalResourceFileStore externalResourceFileStore = artifactCaches.withReadOnlyCache((md, manager) ->
-            (ExternalResourceFileStore) new TwoStageExternalResourceFileStore(prepareExternalResourceFileStore(md, fileAccessTimeJournal, checksumService), writableFileStore)).orElse(writableFileStore);
+            (ExternalResourceFileStore) new TwoStageExternalResourceFileStore(defaultExternalResourceFileStoreFactory.create(md), writableFileStore)).orElse(writableFileStore);
         CachedExternalResourceIndex<String> writableByUrlCachedExternalResourceIndex = prepareArtifactUrlCachedResolutionIndex(timeProvider, artifactCaches.getWritableCacheLockingManager(), externalResourceFileStore, artifactCaches.getWritableCacheMetadata());
-        ArtifactIdentifierFileStore writableArtifactIdentifierFileStore = artifactCaches.withWritableCache((md, manager) -> prepareArtifactRevisionIdFileStore(md, fileAccessTimeJournal, checksumService));
+        ArtifactIdentifierFileStore writableArtifactIdentifierFileStore = artifactCaches.withWritableCache((md, manager) -> defaultArtifactIdentifierFileStoreFactory.create(md));
         ArtifactIdentifierFileStore artifactIdentifierFileStore = artifactCaches.withReadOnlyCache((md, manager) -> (ArtifactIdentifierFileStore) new TwoStageArtifactIdentifierFileStore(
-            prepareArtifactRevisionIdFileStore(md, fileAccessTimeJournal, checksumService),
+            defaultArtifactIdentifierFileStoreFactory.create(md),
             writableArtifactIdentifierFileStore
         )).orElse(writableArtifactIdentifierFileStore);
         return new FileStoreAndIndexProvider(
@@ -400,14 +483,6 @@ class DependencyManagementBuildScopeServices {
             externalResourceFileStore.getFileAccessTracker(),
             artifactCacheMetadata.getCacheDir().toPath()
         );
-    }
-
-    private ArtifactIdentifierFileStore prepareArtifactRevisionIdFileStore(ArtifactCacheMetadata artifactCacheMetadata, FileAccessTimeJournal fileAccessTimeJournal, ChecksumService checksumService) {
-        return new DefaultArtifactIdentifierFileStore(artifactCacheMetadata.getFileStoreDirectory(), new TmpDirTemporaryFileProvider(), fileAccessTimeJournal, checksumService);
-    }
-
-    private ExternalResourceFileStore prepareExternalResourceFileStore(ArtifactCacheMetadata artifactCacheMetadata, FileAccessTimeJournal fileAccessTimeJournal, ChecksumService checksumService) {
-        return new DefaultExternalResourceFileStore(artifactCacheMetadata.getExternalResourcesStoreDirectory(), new TmpDirTemporaryFileProvider(), fileAccessTimeJournal, checksumService);
     }
 
     TextUriResourceLoader.Factory createTextUrlResourceLoaderFactory(FileStoreAndIndexProvider fileStoreAndIndexProvider, RepositoryTransportFactory repositoryTransportFactory, RelativeFilePathResolver resolver) {
@@ -500,7 +575,8 @@ class DependencyManagementBuildScopeServices {
                                               ImmutableModuleIdentifierFactory moduleIdentifierFactory,
                                               RepositoryDisabler repositoryBlacklister,
                                               VersionParser versionParser,
-                                              ListenerManager listenerManager) {
+                                              ListenerManager listenerManager,
+                                              CalculatedValueContainerFactory calculatedValueContainerFactory) {
         return new ResolveIvyFactory(
             moduleRepositoryCacheProvider,
             startParameterResolutionOverride,
@@ -510,8 +586,8 @@ class DependencyManagementBuildScopeServices {
             moduleIdentifierFactory,
             repositoryBlacklister,
             versionParser,
-            listenerManager.getBroadcaster(ChangingValueDependencyResolutionListener.class)
-        );
+            listenerManager.getBroadcaster(ChangingValueDependencyResolutionListener.class),
+            calculatedValueContainerFactory);
     }
 
     ComponentSelectionDescriptorFactory createComponentSelectionDescriptorFactory() {
@@ -531,7 +607,9 @@ class DependencyManagementBuildScopeServices {
                                                                 VersionParser versionParser,
                                                                 ComponentMetadataSupplierRuleExecutor componentMetadataSupplierRuleExecutor,
                                                                 InstantiatorFactory instantiatorFactory,
-                                                                ComponentSelectionDescriptorFactory componentSelectionDescriptorFactory) {
+                                                                ComponentSelectionDescriptorFactory componentSelectionDescriptorFactory,
+                                                                FeaturePreviews featurePreviews,
+                                                                CalculatedValueContainerFactory calculatedValueContainerFactory) {
         return new DefaultArtifactDependencyResolver(
             buildOperationExecutor,
             resolverFactories,
@@ -546,15 +624,21 @@ class DependencyManagementBuildScopeServices {
             versionParser,
             componentMetadataSupplierRuleExecutor,
             instantiatorFactory,
-            componentSelectionDescriptorFactory);
+            componentSelectionDescriptorFactory,
+            featurePreviews,
+            calculatedValueContainerFactory);
     }
 
     ProjectPublicationRegistry createProjectPublicationRegistry() {
         return new DefaultProjectPublicationRegistry();
     }
 
-    LocalComponentProvider createProjectComponentProvider(ProjectStateRegistry projectStateRegistry, ProjectRegistry<ProjectInternal> projectRegistry, LocalComponentMetadataBuilder metaDataBuilder, ImmutableModuleIdentifierFactory moduleIdentifierFactory, BuildState currentBuild) {
-        return new DefaultProjectLocalComponentProvider(projectStateRegistry, projectRegistry, metaDataBuilder, moduleIdentifierFactory, currentBuild.getBuildIdentifier());
+    LocalComponentProvider createProjectComponentProvider(ProjectStateRegistry projectStateRegistry,
+                                                          LocalComponentMetadataBuilder metaDataBuilder,
+                                                          ImmutableModuleIdentifierFactory moduleIdentifierFactory,
+                                                          BuildState currentBuild,
+                                                          CalculatedValueContainerFactory calculatedValueContainerFactory) {
+        return new DefaultProjectLocalComponentProvider(projectStateRegistry, metaDataBuilder, moduleIdentifierFactory, currentBuild.getBuildIdentifier(), calculatedValueContainerFactory);
     }
 
     LocalComponentRegistry createLocalComponentRegistry(List<LocalComponentProvider> providers) {
@@ -569,18 +653,9 @@ class DependencyManagementBuildScopeServices {
         return new VersionParser();
     }
 
-    VersionSelectorScheme createVersionSelectorScheme(VersionComparator versionComparator, VersionParser versionParser, FeaturePreviews featurePreviews, ListenerManager listenerManager) {
-        DefaultVersionSelectorScheme delegate = new DefaultVersionSelectorScheme(versionComparator, versionParser, featurePreviews);
-        CachingVersionSelectorScheme selectorScheme = new CachingVersionSelectorScheme(delegate, featurePreviews);
-        // This needs to be removed once the feature preview disappears
-        listenerManager.addListener(new BuildAdapter() {
-            @Override
-            public void settingsEvaluated(Settings settings) {
-                delegate.configure();
-                selectorScheme.configure();
-            }
-        });
-
+    VersionSelectorScheme createVersionSelectorScheme(VersionComparator versionComparator, VersionParser versionParser) {
+        DefaultVersionSelectorScheme delegate = new DefaultVersionSelectorScheme(versionComparator, versionParser);
+        CachingVersionSelectorScheme selectorScheme = new CachingVersionSelectorScheme(delegate);
         return selectorScheme;
     }
 
@@ -615,7 +690,7 @@ class DependencyManagementBuildScopeServices {
         if (cacheDecoratorFactory instanceof CleaningInMemoryCacheDecoratorFactory) {
             listenerManager.addListener(new InternalBuildFinishedListener() {
                 @Override
-                public void buildFinished(GradleInternal build) {
+                public void buildFinished(GradleInternal build, boolean failed) {
                     ((CleaningInMemoryCacheDecoratorFactory) cacheDecoratorFactory).clearCaches(ComponentMetadataRuleExecutor::isMetadataRuleExecutorCache);
                 }
             });
@@ -648,9 +723,166 @@ class DependencyManagementBuildScopeServices {
     private void registerBuildFinishedHooks(ListenerManager listenerManager, DependencyVerificationOverride dependencyVerificationOverride) {
         listenerManager.addListener(new InternalBuildFinishedListener() {
             @Override
-            public void buildFinished(GradleInternal build) {
+            public void buildFinished(GradleInternal build, boolean failed) {
                 dependencyVerificationOverride.buildFinished(build);
             }
         });
+    }
+
+    DependenciesAccessors createDependenciesAccessorGenerator(ClassPathRegistry registry,
+                                                              DependenciesAccessorsWorkspaceProvider workspace,
+                                                              DefaultProjectDependencyFactory factory,
+                                                              ExecutionEngine executionEngine,
+                                                              FeaturePreviews featurePreviews,
+                                                              FileCollectionFactory fileCollectionFactory,
+                                                              InputFingerprinter inputFingerprinter) {
+        return new DefaultDependenciesAccessors(registry, workspace, factory, featurePreviews, executionEngine, fileCollectionFactory, inputFingerprinter);
+    }
+
+
+    /**
+     * Execution engine for usage above Gradle scope
+     *
+     * Currently used for running artifact transformations in buildscript blocks.
+     */
+    ExecutionEngine createExecutionEngine(
+        BuildOperationExecutor buildOperationExecutor,
+        CurrentBuildOperationRef currentBuildOperationRef,
+        ClassLoaderHierarchyHasher classLoaderHierarchyHasher,
+        Deleter deleter,
+        ExecutionStateChangeDetector changeDetector,
+        InputFingerprinter inputFingerprinter,
+        ListenerManager listenerManager,
+        OutputSnapshotter outputSnapshotter,
+        OverlappingOutputDetector overlappingOutputDetector,
+        TimeoutHandler timeoutHandler,
+        ValidateStep.ValidationWarningRecorder validationWarningRecorder,
+        VirtualFileSystem virtualFileSystem,
+        DocumentationRegistry documentationRegistry
+    ) {
+        OutputChangeListener outputChangeListener = listenerManager.getBroadcaster(OutputChangeListener.class);
+        // TODO: Figure out how to get rid of origin scope id in snapshot outputs step
+        UniqueId fixedUniqueId = UniqueId.from("dhwwyv4tqrd43cbxmdsf24wquu");
+        // @formatter:off
+        return new DefaultExecutionEngine(documentationRegistry,
+            new IdentifyStep<>(
+            new IdentityCacheStep<>(
+            new AssignWorkspaceStep<>(
+            new LoadExecutionStateStep<>(
+            new CaptureStateBeforeExecutionStep(buildOperationExecutor, classLoaderHierarchyHasher, outputSnapshotter, overlappingOutputDetector,
+            new ValidateStep<>(virtualFileSystem, validationWarningRecorder,
+            new NoOpCachingStateStep(
+            new ResolveChangesStep<>(changeDetector,
+            new SkipUpToDateStep<>(
+            new BroadcastChangingOutputsStep<>(outputChangeListener,
+            new StoreExecutionStateStep<>(
+            new CaptureStateAfterExecutionStep<>(buildOperationExecutor, fixedUniqueId, outputSnapshotter,
+            new CreateOutputsStep<>(
+            new TimeoutStep<>(timeoutHandler, currentBuildOperationRef,
+            new ResolveInputChangesStep<>(
+            new RemovePreviousOutputsStep<>(deleter, outputChangeListener,
+            new ExecuteStep<>(buildOperationExecutor
+        ))))))))))))))))));
+        // @formatter:on
+    }
+
+
+    private static class NoOpCachingStateStep implements Step<ValidationFinishedContext, CachingResult> {
+        private final Step<? super CachingContext, ? extends UpToDateResult> delegate;
+
+        public NoOpCachingStateStep(Step<? super CachingContext, ? extends UpToDateResult> delegate) {
+            this.delegate = delegate;
+        }
+
+        @Override
+        public CachingResult execute(UnitOfWork work, ValidationFinishedContext context) {
+            UpToDateResult result = delegate.execute(work, new CachingContext() {
+                @Override
+                public CachingState getCachingState() {
+                    return CachingState.NOT_DETERMINED;
+                }
+
+                @Override
+                public Optional<String> getRebuildReason() {
+                    return context.getRebuildReason();
+                }
+
+                @Override
+                public WorkValidationContext getValidationContext() {
+                    return context.getValidationContext();
+                }
+
+                @Override
+                public ImmutableSortedMap<String, ValueSnapshot> getInputProperties() {
+                    return context.getInputProperties();
+                }
+
+                @Override
+                public ImmutableSortedMap<String, CurrentFileCollectionFingerprint> getInputFileProperties() {
+                    return context.getInputFileProperties();
+                }
+
+                @Override
+                public UnitOfWork.Identity getIdentity() {
+                    return context.getIdentity();
+                }
+
+                @Override
+                public File getWorkspace() {
+                    return context.getWorkspace();
+                }
+
+                @Override
+                public Optional<ExecutionHistoryStore> getHistory() {
+                    return context.getHistory();
+                }
+
+                @Override
+                public Optional<AfterPreviousExecutionState> getAfterPreviousExecutionState() {
+                    return context.getAfterPreviousExecutionState();
+                }
+
+                @Override
+                public Optional<ValidationResult> getValidationProblems() {
+                    return context.getValidationProblems();
+                }
+
+                @Override
+                public Optional<BeforeExecutionState> getBeforeExecutionState() {
+                    return context.getBeforeExecutionState();
+                }
+            });
+            return new CachingResult() {
+                @Override
+                public CachingState getCachingState() {
+                    return CachingState.NOT_DETERMINED;
+                }
+
+                @Override
+                public ImmutableList<String> getExecutionReasons() {
+                    return result.getExecutionReasons();
+                }
+
+                @Override
+                public ImmutableSortedMap<String, FileSystemSnapshot> getOutputFilesProduceByWork() {
+                    return result.getOutputFilesProduceByWork();
+                }
+
+                @Override
+                public Optional<OriginMetadata> getReusedOutputOriginMetadata() {
+                    return result.getReusedOutputOriginMetadata();
+                }
+
+                @Override
+                public Try<ExecutionResult> getExecutionResult() {
+                    return result.getExecutionResult();
+                }
+
+                @Override
+                public Duration getDuration() {
+                    return result.getDuration();
+                }
+            };
+        }
     }
 }

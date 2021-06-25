@@ -1,9 +1,13 @@
 // tag::all[]
+// tag::use-plugin[]
 plugins {
+// end::use-plugin[]
     `java-library`
     `maven-publish`
+// tag::use-plugin[]
     signing
 }
+// end::use-plugin[]
 
 group = "com.example"
 version = "1.0"
@@ -70,8 +74,8 @@ publishing {
     repositories {
         maven {
             // change URLs to point to your repos, e.g. http://my.org/repo
-            val releasesRepoUrl = uri("$buildDir/repos/releases")
-            val snapshotsRepoUrl = uri("$buildDir/repos/snapshots")
+            val releasesRepoUrl = uri(layout.buildDirectory.dir("repos/releases"))
+            val snapshotsRepoUrl = uri(layout.buildDirectory.dir("repos/snapshots"))
             url = if (version.toString().endsWith("SNAPSHOT")) snapshotsRepoUrl else releasesRepoUrl
         }
     }

@@ -16,7 +16,6 @@
 
 package org.gradle.internal.logging.console.taskgrouping
 
-import org.gradle.integtests.fixtures.ToBeFixedForConfigurationCache
 import org.gradle.integtests.fixtures.console.AbstractConsoleGroupedTaskFunctionalTest
 
 abstract class AbstractConsoleGradleBuildGroupedTaskFunctionalTest extends AbstractConsoleGroupedTaskFunctionalTest {
@@ -26,14 +25,14 @@ abstract class AbstractConsoleGradleBuildGroupedTaskFunctionalTest extends Abstr
     private static final String BYE_WORLD_MESSAGE = 'Bye world'
     private static final String AGGREGATE_TASK_NAME = 'all'
 
-    @ToBeFixedForConfigurationCache(because = "GradleBuild")
     def "can group task output from external build invoked executed by GradleBuild in same directory"() {
         given:
         def externalBuildScriptPath = 'other.gradle'
-        buildFile << mainBuildScript(externalBuildScriptPath)
+        buildFile << mainBuildScript("buildFile = '$externalBuildScriptPath'")
         file(externalBuildScriptPath) << externalBuildScript()
 
         when:
+        executer.expectDocumentedDeprecationWarning("Specifying custom build file location has been deprecated. This is scheduled to be removed in Gradle 8.0. Consult the upgrading guide for further information: https://docs.gradle.org/current/userguide/upgrading_version_7.html#configuring_custom_build_layout")
         succeeds(AGGREGATE_TASK_NAME)
 
         then:
@@ -42,13 +41,12 @@ abstract class AbstractConsoleGradleBuildGroupedTaskFunctionalTest extends Abstr
         result.groupedOutput.task(':byeWorld').output == BYE_WORLD_MESSAGE
     }
 
-    @ToBeFixedForConfigurationCache(because = "GradleBuild")
     def "can group task output from external build invoked executed by GradleBuild in different directory"() {
         given:
-        def externalBuildScriptPath = 'external/other.gradle'
-        buildFile << mainBuildScript(externalBuildScriptPath)
-        file('external/settings.gradle') << "rootProject.name = 'external'"
-        file(externalBuildScriptPath) << externalBuildScript()
+        def externalBuildPath = 'external'
+        buildFile << mainBuildScript("dir = '$externalBuildPath'")
+        file(externalBuildPath).file('settings.gradle') << "rootProject.name = 'external'"
+        file(externalBuildPath).file('build.gradle') << externalBuildScript()
 
         when:
         succeeds(AGGREGATE_TASK_NAME)
@@ -59,7 +57,7 @@ abstract class AbstractConsoleGradleBuildGroupedTaskFunctionalTest extends Abstr
         result.groupedOutput.task(':byeWorld').output == BYE_WORLD_MESSAGE
     }
 
-    static String mainBuildScript(String externalBuildScript) {
+    static String mainBuildScript(String externalBuildConfig) {
         """
             task helloWorld {
                 doLast {
@@ -69,7 +67,7 @@ abstract class AbstractConsoleGradleBuildGroupedTaskFunctionalTest extends Abstr
 
             task otherBuild(type: GradleBuild) {
                 mustRunAfter helloWorld
-                buildFile = '$externalBuildScript'
+                $externalBuildConfig
                 tasks = ['important']
             }
 

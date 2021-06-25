@@ -21,9 +21,8 @@ import org.gradle.util.Requires
 
 import static org.gradle.util.TestPrecondition.HAS_DOCKER
 
-// Works on MacOS, but let's test on linux only where we know docker is available
 @Requires(HAS_DOCKER)
-class ArtifactoryAndDockerSmokeTest extends AbstractSmokeTest {
+class ArtifactoryAndDockerSmokeTest extends AbstractPluginValidatingSmokeTest {
 
     @ToBeFixedForConfigurationCache
     def 'artifactory with docker and plugin upload'() {
@@ -32,7 +31,7 @@ class ArtifactoryAndDockerSmokeTest extends AbstractSmokeTest {
             plugins {
                 id 'java-library'
                 id 'maven-publish'
-                id 'com.bmuschko.docker-remote-api' version '${TestedVersions.docker}'
+                id 'com.bmuschko.docker-remote-api' version '6.6.1'
                 id 'com.jfrog.artifactory' version '${TestedVersions.artifactoryPlugin}'
             }
 
@@ -116,4 +115,12 @@ class ArtifactoryAndDockerSmokeTest extends AbstractSmokeTest {
         then:
         runner('artifactoryPublish').build()
     }
+
+    @Override
+    Map<String, Versions> getPluginsToValidate() {
+        [
+            'com.jfrog.artifactory': Versions.of(TestedVersions.artifactoryPlugin)
+        ]
+    }
+
 }

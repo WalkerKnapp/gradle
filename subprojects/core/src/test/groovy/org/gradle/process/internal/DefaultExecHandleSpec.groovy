@@ -23,7 +23,7 @@ import org.gradle.internal.jvm.Jvm
 import org.gradle.process.ExecResult
 import org.gradle.test.fixtures.concurrent.ConcurrentSpec
 import org.gradle.test.fixtures.file.TestNameTestDirectoryProvider
-import org.gradle.util.GUtil
+import org.gradle.util.internal.GUtil
 import org.gradle.util.UsesNativeServices
 import org.junit.Rule
 import spock.lang.Ignore
@@ -480,7 +480,7 @@ class DefaultExecHandleSpec extends ConcurrentSpec {
             System.out.println("I'm the daemon")
             System.out.close()
             System.err.close()
-            int napTime = (args.length == 0) ? 10000L : Integer.valueOf(args[0])
+            int napTime = (args.length == 0) ? 10000L : Integer.parseInt(args[0])
             Thread.sleep(napTime)
         }
     }

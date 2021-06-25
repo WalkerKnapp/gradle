@@ -19,18 +19,22 @@ package org.gradle.internal.watch.registry.impl
 import net.rubygrapefruit.platform.file.FileWatcher
 import org.gradle.api.internal.cache.StringInterner
 import org.gradle.api.internal.file.TestFiles
+import org.gradle.api.internal.file.TestVirtualFileSystem
 import org.gradle.internal.file.FileMetadata.AccessType
 import org.gradle.internal.file.impl.DefaultFileMetadata
 import org.gradle.internal.snapshot.CaseSensitivity
-import org.gradle.internal.snapshot.CompleteDirectorySnapshot
-import org.gradle.internal.snapshot.CompleteFileSystemLocationSnapshot
+import org.gradle.internal.snapshot.DirectorySnapshot
+import org.gradle.internal.snapshot.FileSystemLocationSnapshot
 import org.gradle.internal.snapshot.RegularFileSnapshot
 import org.gradle.internal.snapshot.SnapshotHierarchy
 import org.gradle.internal.snapshot.impl.DirectorySnapshotter
-import org.gradle.internal.vfs.VirtualFileSystem
+import org.gradle.internal.snapshot.impl.DirectorySnapshotterStatistics
+import org.gradle.internal.vfs.impl.AbstractVirtualFileSystem
 import org.gradle.internal.vfs.impl.DefaultSnapshotHierarchy
 import org.gradle.internal.watch.registry.FileWatcherUpdater
 import org.gradle.internal.watch.registry.SnapshotCollectingDiffListener
+import org.gradle.internal.watch.vfs.WatchMode
+import org.gradle.internal.watch.vfs.WatchableFileSystemDetector
 import org.gradle.test.fixtures.file.CleanupTestDirectory
 import org.gradle.test.fixtures.file.TestFile
 import org.gradle.test.fixtures.file.TestNameTestDirectoryProvider
@@ -50,30 +54,27 @@ abstract class AbstractFileWatcherUpdaterTest extends Specification {
     def watcher = Mock(FileWatcher)
     def ignoredForWatching = [] as Set<String>
     Predicate<String> watchFilter = { path -> !ignoredForWatching.contains(path) }
-    def directorySnapshotter = new DirectorySnapshotter(TestFiles.fileHasher(), new StringInterner(), [])
+    def watchableFileSystemDetector = Stub(WatchableFileSystemDetector)
+    def watchableHiearchies = new WatchableHierarchies(watchableFileSystemDetector, watchFilter)
+    def directorySnapshotter = new DirectorySnapshotter(TestFiles.fileHasher(), new StringInterner(), [], Stub(DirectorySnapshotterStatistics.Collector))
     FileWatcherUpdater updater
-    def virtualFileSystem = new VirtualFileSystem() {
-        private SnapshotHierarchy root = DefaultSnapshotHierarchy.empty(CaseSensitivity.CASE_SENSITIVE)
+    def virtualFileSystem = new TestVirtualFileSystem(DefaultSnapshotHierarchy.empty(CaseSensitivity.CASE_SENSITIVE)) {
         @Override
-        SnapshotHierarchy getRoot() {
-            return root
-        }
-
-        @Override
-        void update(VirtualFileSystem.UpdateFunction updateFunction) {
+        protected SnapshotHierarchy updateNotifyingListeners(AbstractVirtualFileSystem.UpdateFunction updateFunction) {
             def diffListener = new SnapshotCollectingDiffListener()
-            root = updateFunction.update(root, diffListener)
+            def newRoot = updateFunction.update(diffListener)
             diffListener.publishSnapshotDiff {removed, added ->
-                updater.virtualFileSystemContentsChanged(removed, added, root)
+                updater.virtualFileSystemContentsChanged(removed, added, newRoot)
             }
+            return newRoot
         }
     }
 
     def setup() {
-        updater = createUpdater(watcher, watchFilter)
+        updater = createUpdater(watcher, watchableHiearchies)
     }
 
-    abstract FileWatcherUpdater createUpdater(FileWatcher watcher, Predicate<String> watchFilter)
+    abstract FileWatcherUpdater createUpdater(FileWatcher watcher, WatchableHierarchies watchableHierarchies)
 
     def "does not watch directories outside of hierarchies to watch"() {
         def watchableHierarchies = ["first", "second", "third"].collect { file(it).createDir() }
@@ -228,19 +229,19 @@ abstract class AbstractFileWatcherUpdaterTest extends Specification {
         temporaryFolder.testDirectory.file(path)
     }
 
-    CompleteDirectorySnapshot snapshotDirectory(File directory) {
-        directorySnapshotter.snapshot(directory.absolutePath, null, new AtomicBoolean(false)) as CompleteDirectorySnapshot
+    DirectorySnapshot snapshotDirectory(File directory) {
+        directorySnapshotter.snapshot(directory.absolutePath, null, new AtomicBoolean(false)) as DirectorySnapshot
     }
 
-    void addSnapshot(CompleteFileSystemLocationSnapshot snapshot) {
-        virtualFileSystem.update({ currentRoot, listener -> currentRoot.store(snapshot.absolutePath, snapshot, listener) })
+    void addSnapshot(FileSystemLocationSnapshot snapshot) {
+        virtualFileSystem.store(snapshot.absolutePath, snapshot)
     }
 
     void invalidate(String absolutePath) {
-        virtualFileSystem.update({ currentRoot, listener -> currentRoot.invalidate(absolutePath, listener) })
+        virtualFileSystem.invalidate([absolutePath])
     }
 
-    void invalidate(CompleteFileSystemLocationSnapshot snapshot) {
+    void invalidate(FileSystemLocationSnapshot snapshot) {
         invalidate(snapshot.absolutePath)
     }
 
@@ -278,17 +279,12 @@ abstract class AbstractFileWatcherUpdaterTest extends Specification {
 
     void registerWatchableHierarchies(Iterable<File> watchableHierarchies) {
         watchableHierarchies.each { watchableHierarchy ->
-            virtualFileSystem.update { root, diffListener ->
-                updater.registerWatchableHierarchy(watchableHierarchy, root)
-                return root
-            }
+            updater.registerWatchableHierarchy(watchableHierarchy, virtualFileSystem.root)
         }
     }
 
     void buildFinished(int maximumNumberOfWatchedHierarchies = Integer.MAX_VALUE) {
-        virtualFileSystem.update { root, diffListener ->
-            updater.buildFinished(root, maximumNumberOfWatchedHierarchies)
-        }
+        virtualFileSystem.root = updater.buildFinished(virtualFileSystem.root, WatchMode.DEFAULT, maximumNumberOfWatchedHierarchies)
     }
 
     private static class CheckIfNonEmptySnapshotVisitor implements SnapshotHierarchy.SnapshotVisitor {
@@ -296,7 +292,7 @@ abstract class AbstractFileWatcherUpdaterTest extends Specification {
         boolean empty = true
 
         @Override
-        void visitSnapshotRoot(CompleteFileSystemLocationSnapshot snapshot) {
+        void visitSnapshotRoot(FileSystemLocationSnapshot snapshot) {
             empty = false
         }
     }

@@ -34,6 +34,7 @@ import org.gradle.api.internal.file.collections.MinimalFileSet;
 import org.gradle.api.internal.file.collections.MinimalFileTree;
 import org.gradle.api.internal.file.collections.UnpackingVisitor;
 import org.gradle.api.internal.provider.PropertyHost;
+import org.gradle.api.internal.provider.ProviderResolutionStrategy;
 import org.gradle.api.internal.tasks.TaskDependencyFactory;
 import org.gradle.api.internal.tasks.TaskDependencyResolveContext;
 import org.gradle.api.tasks.TaskDependency;
@@ -41,11 +42,13 @@ import org.gradle.api.tasks.util.PatternFilterable;
 import org.gradle.api.tasks.util.PatternSet;
 import org.gradle.internal.Factory;
 import org.gradle.internal.file.PathToFileResolver;
+import org.gradle.internal.logging.text.TreeFormatter;
 import org.gradle.internal.nativeintegration.filesystem.FileSystem;
 
 import java.io.File;
 import java.io.OutputStream;
 import java.lang.reflect.Array;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
@@ -130,21 +133,39 @@ public class DefaultFileCollectionFactory implements FileCollectionFactory {
 
     @Override
     public FileCollectionInternal resolving(String displayName, Object sources) {
-        if (sources.getClass().isArray() && Array.getLength(sources) == 0) {
+        return resolving(displayName, ProviderResolutionStrategy.REQUIRE_PRESENT, sources);
+    }
+
+    @Override
+    public FileCollectionInternal resolvingLeniently(String displayName, Object sources) {
+        return resolving(displayName, ProviderResolutionStrategy.ALLOW_ABSENT, sources);
+    }
+
+    private FileCollectionInternal resolving(String displayName, ProviderResolutionStrategy providerResolutionStrategy, Object sources) {
+        if (isEmptyArray(sources)) {
             return empty(displayName);
         }
-        return new ResolvingFileCollection(displayName, fileResolver, patternSetFactory, sources);
+        return new ResolvingFileCollection(displayName, fileResolver, patternSetFactory, providerResolutionStrategy, sources);
     }
 
     @Override
     public FileCollectionInternal resolving(Object sources) {
+        return resolving(ProviderResolutionStrategy.REQUIRE_PRESENT, sources);
+    }
+
+    @Override
+    public FileCollectionInternal resolvingLeniently(Object sources) {
+        return resolving(ProviderResolutionStrategy.ALLOW_ABSENT, sources);
+    }
+
+    private FileCollectionInternal resolving(ProviderResolutionStrategy providerResolutionStrategy, Object sources) {
         if (sources instanceof FileCollectionInternal) {
             return (FileCollectionInternal) sources;
         }
-        if (sources.getClass().isArray() && Array.getLength(sources) == 0) {
+        if (isEmptyArray(sources)) {
             return empty();
         }
-        return resolving(DEFAULT_COLLECTION_DISPLAY_NAME, sources);
+        return resolving(DEFAULT_COLLECTION_DISPLAY_NAME, providerResolutionStrategy, sources);
     }
 
     @Override
@@ -291,12 +312,14 @@ public class DefaultFileCollectionFactory implements FileCollectionFactory {
         private final String displayName;
         private final PathToFileResolver resolver;
         private final Object source;
+        private final ProviderResolutionStrategy providerResolutionStrategy;
 
-        public ResolvingFileCollection(String displayName, PathToFileResolver resolver, Factory<PatternSet> patternSetFactory, Object source) {
+        public ResolvingFileCollection(String displayName, PathToFileResolver resolver, Factory<PatternSet> patternSetFactory, ProviderResolutionStrategy providerResolutionStrategy, Object source) {
             super(patternSetFactory);
             this.displayName = displayName;
             this.resolver = resolver;
             this.source = source;
+            this.providerResolutionStrategy = providerResolutionStrategy;
         }
 
         @Override
@@ -306,8 +329,32 @@ public class DefaultFileCollectionFactory implements FileCollectionFactory {
 
         @Override
         protected void visitChildren(Consumer<FileCollectionInternal> visitor) {
-            UnpackingVisitor nested = new UnpackingVisitor(visitor, resolver, patternSetFactory);
+            UnpackingVisitor nested = new UnpackingVisitor(visitor, resolver, patternSetFactory, providerResolutionStrategy, true);
             nested.add(source);
         }
+
+        @Override
+        protected void appendContents(TreeFormatter formatter) {
+            formatter.node("source");
+            formatter.startChildren();
+            appendItem(formatter, source);
+            formatter.endChildren();
+        }
+
+        private void appendItem(TreeFormatter formatter, Object item) {
+            if (item instanceof FileCollectionInternal) {
+                ((FileCollectionInternal) item).describeContents(formatter);
+            } else if (item instanceof ArrayList) {
+                for (Object child : (List) item) {
+                    appendItem(formatter, child);
+                }
+            } else {
+                formatter.node(item + " (class: " + item.getClass().getName() + ")");
+            }
+        }
+    }
+
+    private boolean isEmptyArray(Object sources) {
+        return sources.getClass().isArray() && Array.getLength(sources) == 0;
     }
 }

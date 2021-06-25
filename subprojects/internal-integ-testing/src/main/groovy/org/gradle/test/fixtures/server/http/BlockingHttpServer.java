@@ -33,6 +33,7 @@ import java.io.StringWriter;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -42,6 +43,9 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.logging.ConsoleHandler;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * An HTTP server that allows a test to synchronize and make assertions about concurrent activities that happen in another process.
@@ -52,9 +56,9 @@ public class BlockingHttpServer extends ExternalResource implements ResettableEx
     private static final ExecutorService EXECUTOR_SERVICE = Executors.newCachedThreadPool();
     private final Lock lock = new ReentrantLock();
     protected final HttpServer server;
-    private HttpContext context;
+    private final HttpContext context;
     private final ChainingHttpHandler handler;
-    private final int timeoutMs;
+    private final Duration timeout;
     private final int serverId;
     private final Scheme scheme;
     private boolean running;
@@ -80,7 +84,7 @@ public class BlockingHttpServer extends ExternalResource implements ResettableEx
         this.serverId = COUNTER.incrementAndGet();
         this.handler = new ChainingHttpHandler(lock, timeoutMs, COUNTER, new MustBeRunning());
         this.context = server.createContext("/", handler);
-        this.timeoutMs = timeoutMs;
+        this.timeout = Duration.ofMillis(timeoutMs);
         this.scheme = scheme;
     }
 
@@ -115,7 +119,7 @@ public class BlockingHttpServer extends ExternalResource implements ResettableEx
      */
     public String callFromBuild(String resource) {
         return callFromBuildUsingExpression("\"" + resource + "\"");
-     }
+    }
 
     /**
      * Returns Java statements to get the given resource, using the given expression to calculate the resource to get.
@@ -168,7 +172,7 @@ public class BlockingHttpServer extends ExternalResource implements ResettableEx
      * Expects the given requests to be made concurrently. Blocks each request until they have all been received then releases them all.
      */
     public void expectConcurrent(String... expectedRequests) {
-        List<ResourceExpectation> expectations = new ArrayList<ResourceExpectation>();
+        List<ResourceExpectation> expectations = new ArrayList<>();
         for (String request : expectedRequests) {
             expectations.add(doGet(request));
         }
@@ -179,7 +183,7 @@ public class BlockingHttpServer extends ExternalResource implements ResettableEx
      * Expects the given requests to be made concurrently. Blocks each request until they have all been received then releases them all.
      */
     public void expectConcurrent(Collection<String> expectedRequests) {
-        List<ResourceExpectation> expectations = new ArrayList<ResourceExpectation>();
+        List<ResourceExpectation> expectations = new ArrayList<>();
         for (String request : expectedRequests) {
             expectations.add(doGet(request));
         }
@@ -190,7 +194,7 @@ public class BlockingHttpServer extends ExternalResource implements ResettableEx
      * Expects the given requests to be made concurrently. Blocks each request until they have all been received then releases them all.
      */
     public void expectConcurrent(ExpectedRequest... expectedCalls) {
-        List<ResourceExpectation> expectations = new ArrayList<ResourceExpectation>();
+        List<ResourceExpectation> expectations = new ArrayList<>();
         for (ExpectedRequest call : expectedCalls) {
             expectations.add((ResourceExpectation) call);
         }
@@ -198,12 +202,19 @@ public class BlockingHttpServer extends ExternalResource implements ResettableEx
     }
 
     private void addNonBlockingHandler(final Collection<? extends ResourceExpectation> expectations) {
-        handler.addHandler(new ChainingHttpHandler.HandlerFactory<TrackingHttpHandler>() {
-            @Override
-            public TrackingHttpHandler create(WaitPrecondition previous) {
-                return new CyclicBarrierRequestHandler(lock, timeoutMs, previous, expectations);
-            }
-        });
+        handler.addHandler(previous -> new ExpectAllRequestsThenReleaseAll(lock, serverId, timeout, previous, expectations, EXECUTOR_SERVICE));
+    }
+
+    /**
+     * Expects the given requests to be made. Blocks until the given number of concurrent requests have been received, then releases the requests. Repeats
+     * until all of the requests have been received.
+     */
+    public void expectConcurrent(int concurrent, String... expectedRequests) {
+        List<ResourceExpectation> expectations = new ArrayList<>();
+        for (String request : expectedRequests) {
+            expectations.add(doGet(request));
+        }
+        handler.addHandler(previous -> new ExpectMaxNRequestsThenReleaseOne(lock, serverId, timeout, concurrent, previous, expectations, EXECUTOR_SERVICE));
     }
 
     /**
@@ -235,7 +246,7 @@ public class BlockingHttpServer extends ExternalResource implements ResettableEx
     }
 
     private ExpectMethod doGet(String path) {
-        return new ExpectMethod("GET", normalizePath(path), timeoutMs, lock);
+        return new ExpectMethod("GET", normalizePath(path), timeout, lock);
     }
 
     /**
@@ -264,7 +275,7 @@ public class BlockingHttpServer extends ExternalResource implements ResettableEx
      * Is not considered "complete" until all expected calls have been received.
      */
     public BlockingHandler expectConcurrentAndBlock(int concurrent, String... expectedCalls) {
-        List<ResourceExpectation> expectations = new ArrayList<ResourceExpectation>();
+        List<ResourceExpectation> expectations = new ArrayList<>();
         for (String call : expectedCalls) {
             expectations.add(doGet(call));
         }
@@ -276,7 +287,7 @@ public class BlockingHttpServer extends ExternalResource implements ResettableEx
      * Since the expectations are optional, they are still considered "complete" even if not all expected calls have been received.
      */
     public BlockingHandler expectOptionalAndBlock(int concurrent, String... optionalExpectedCalls) {
-        List<ResourceExpectation> expectations = new ArrayList<ResourceExpectation>();
+        List<ResourceExpectation> expectations = new ArrayList<>();
         for (String call : optionalExpectedCalls) {
             expectations.add(doGet(call));
         }
@@ -295,7 +306,7 @@ public class BlockingHttpServer extends ExternalResource implements ResettableEx
      * Is not considered "complete" until all expected calls have been received.
      */
     public BlockingHandler expectConcurrentAndBlock(int concurrent, ExpectedRequest... expectedRequests) {
-        List<ResourceExpectation> expectations = new ArrayList<ResourceExpectation>();
+        List<ResourceExpectation> expectations = new ArrayList<>();
         for (ExpectedRequest request : expectedRequests) {
             expectations.add((ResourceExpectation) request);
         }
@@ -303,21 +314,11 @@ public class BlockingHttpServer extends ExternalResource implements ResettableEx
     }
 
     private BlockingHandler addBlockingHandler(final int concurrent, final Collection<? extends ResourceExpectation> expectations) {
-        return handler.addHandler(new ChainingHttpHandler.HandlerFactory<CyclicBarrierAnyOfRequestHandler>() {
-            @Override
-            public CyclicBarrierAnyOfRequestHandler create(WaitPrecondition previous) {
-                return new CyclicBarrierAnyOfRequestHandler(lock, serverId, timeoutMs, concurrent, previous, expectations);
-            }
-        });
+        return handler.addHandler(previous -> new ExpectMaxNConcurrentRequests(lock, serverId, timeout, concurrent, previous, expectations));
     }
 
     private BlockingHandler addBlockingOptionalHandler(final int concurrent, final Collection<? extends ResourceExpectation> expectations) {
-        return handler.addHandler(new ChainingHttpHandler.HandlerFactory<CyclicBarrierAnyOfRequestHandler>() {
-            @Override
-            public CyclicBarrierAnyOfRequestHandler create(WaitPrecondition previous) {
-                return new CyclicBarrierAnyOfOptionalRequestHandler(lock, serverId, timeoutMs, concurrent, previous, expectations);
-            }
-        });
+        return handler.addHandler(previous -> new MaybeNConcurrentRequests(lock, serverId, timeout, concurrent, previous, expectations));
     }
 
     /**
@@ -387,6 +388,17 @@ public class BlockingHttpServer extends ExternalResource implements ResettableEx
             throw new IllegalStateException("Cannot get HTTP port as server is not running.");
         }
         return server.getAddress().getPort();
+    }
+
+    /**
+     * To help with debugging the underlying {@link com.sun.net.httpserver.HttpServer}.
+     */
+    public static void enableServerLogging() {
+        final ConsoleHandler handler = new ConsoleHandler();
+        handler.setLevel(Level.ALL);
+        final Logger logger = Logger.getLogger("com.sun.net.httpserver");
+        logger.setLevel(Level.ALL);
+        logger.addHandler(handler);
     }
 
     static String normalizePath(String path) {

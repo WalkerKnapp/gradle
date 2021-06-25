@@ -19,184 +19,10 @@ package org.gradle.api.publish.maven
 import org.gradle.api.attributes.Category
 import org.gradle.integtests.fixtures.publish.maven.AbstractMavenPublishIntegTest
 import org.gradle.test.fixtures.maven.MavenJavaModule
+import spock.lang.Issue
 import spock.lang.Unroll
 
-class MavenPublishResolvedVersionsJavaIntegTest extends AbstractMavenPublishIntegTest {
-    MavenJavaModule javaLibrary = javaLibrary(mavenRepo.module("org.gradle.test", "publishTest", "1.9"))
-
-    @Unroll("can publish java-library with dependencies (#apiMapping, #runtimeMapping)")
-    def "can publish java-library with dependencies (runtime last)"() {
-        given:
-        javaLibrary(mavenRepo.module("org.test", "foo", "1.0")).withModuleMetadata().publish()
-        javaLibrary(mavenRepo.module("org.test", "foo", "1.1")).withModuleMetadata().publish()
-        javaLibrary(mavenRepo.module("org.test", "bar", "1.0")).withModuleMetadata().publish()
-        javaLibrary(mavenRepo.module("org.test", "bar", "1.1")).withModuleMetadata().publish()
-
-        createBuildScripts("""
-            dependencies {
-                api "org.test:foo:[1.0,1.0]"
-                runtimeOnly "org.test:bar:+"
-                runtimeOnly "org.test:foo:+"
-            }
-            publishing {
-                publications {
-                    maven(MavenPublication) {
-                        from components.java
-                        versionMapping {
-                            $apiMapping
-                            $runtimeMapping
-                        }
-                    }
-                }
-            }
-""")
-
-        when:
-        run "publish"
-
-        then:
-        javaLibrary.mavenModule.removeGradleMetadataRedirection()
-        javaLibrary.assertPublished()
-        javaLibrary.parsedModuleMetadata.variant("apiElements") {
-            dependency("org.test:foo:1.0") {
-                exists()
-            }
-            noMoreDependencies()
-        }
-        javaLibrary.parsedModuleMetadata.variant("runtimeElements") {
-            dependency("org.test:foo:1.1") {
-                exists()
-            }
-            dependency("org.test:bar:1.1") {
-                exists()
-            }
-            noMoreDependencies()
-        }
-
-        and:
-        javaLibrary.parsedPom.scopes.compile.assertDependsOn('org.test:foo:1.0')
-        javaLibrary.parsedPom.scopes.runtime.assertDependsOn('org.test:bar:1.1')
-
-        and:
-        resolveArtifacts(javaLibrary) {
-            withModuleMetadata {
-                expectFiles "bar-1.1.jar", "foo-1.1.jar", "publishTest-1.9.jar"
-            }
-            withoutModuleMetadata {
-                // With Maven, can't have different versions for a dependency between compile and runtime
-                expectFiles "bar-1.1.jar", "foo-1.0.jar", "publishTest-1.9.jar"
-            }
-        }
-
-        and:
-        resolveApiArtifacts(javaLibrary) {
-            expectFiles "foo-1.0.jar", "publishTest-1.9.jar"
-        }
-
-        and:
-        resolveRuntimeArtifacts(javaLibrary) {
-            withModuleMetadata {
-                expectFiles "bar-1.1.jar", "foo-1.1.jar", "publishTest-1.9.jar"
-            }
-            withoutModuleMetadata {
-                expectFiles "bar-1.1.jar", "foo-1.0.jar", "publishTest-1.9.jar"
-            }
-        }
-
-        where:
-        [apiMapping, runtimeMapping] << ([
-            [apiUsingUsage(), apiUsingUsage("fromResolutionOf('compileClasspath')"), apiUsingUsage("fromResolutionOf(project.configurations.compileClasspath)")],
-            [runtimeUsingUsage(), runtimeUsingUsage("fromResolutionOf('runtimeClasspath')"), runtimeUsingUsage("fromResolutionOf(project.configurations.runtimeClasspath)")],
-        ].combinations() + [[allVariants(), noop()]])
-    }
-
-    @Unroll("can publish java-library with dependencies (#runtimeMapping, #apiMapping)")
-    def "can publish java-library with dependencies (runtime first)"() {
-        given:
-        javaLibrary(mavenRepo.module("org.test", "foo", "1.0")).withModuleMetadata().publish()
-        javaLibrary(mavenRepo.module("org.test", "foo", "1.1")).withModuleMetadata().publish()
-        javaLibrary(mavenRepo.module("org.test", "bar", "1.0")).withModuleMetadata().publish()
-        javaLibrary(mavenRepo.module("org.test", "bar", "1.1")).withModuleMetadata().publish()
-
-        createBuildScripts("""
-            dependencies {
-                api "org.test:foo:[1.0,1.0]"
-                runtimeOnly "org.test:bar:+"
-                runtimeOnly "org.test:foo:+"
-            }
-            publishing {
-                publications {
-                    maven(MavenPublication) {
-                        from components.java
-                        versionMapping {
-                            $runtimeMapping
-                            $apiMapping
-                        }
-                    }
-                }
-            }
-""")
-
-        when:
-        run "publish"
-
-        then:
-        javaLibrary.mavenModule.removeGradleMetadataRedirection()
-        javaLibrary.assertPublished()
-        javaLibrary.parsedModuleMetadata.variant("apiElements") {
-            dependency("org.test:foo:1.0") {
-                exists()
-            }
-            noMoreDependencies()
-        }
-        javaLibrary.parsedModuleMetadata.variant("runtimeElements") {
-            dependency("org.test:foo:1.1") {
-                exists()
-            }
-            dependency("org.test:bar:1.1") {
-                exists()
-            }
-            noMoreDependencies()
-        }
-
-        and:
-        javaLibrary.parsedPom.scopes.compile.assertDependsOn('org.test:foo:1.0')
-        javaLibrary.parsedPom.scopes.runtime.assertDependsOn('org.test:bar:1.1')
-
-        and:
-        resolveArtifacts(javaLibrary) {
-            withModuleMetadata {
-                expectFiles "bar-1.1.jar", "foo-1.1.jar", "publishTest-1.9.jar"
-            }
-            withoutModuleMetadata {
-                // With Maven, can't have different versions for a dependency between compile and runtime
-                expectFiles "bar-1.1.jar", "foo-1.0.jar", "publishTest-1.9.jar"
-            }
-        }
-
-        and:
-        resolveApiArtifacts(javaLibrary) {
-            expectFiles "foo-1.0.jar", "publishTest-1.9.jar"
-        }
-
-        and:
-        resolveRuntimeArtifacts(javaLibrary) {
-            withModuleMetadata {
-                expectFiles "bar-1.1.jar", "foo-1.1.jar", "publishTest-1.9.jar"
-            }
-            withoutModuleMetadata {
-                // With Maven, can't have different versions for a dependency between compile and runtime
-                expectFiles "bar-1.1.jar", "foo-1.0.jar", "publishTest-1.9.jar"
-            }
-        }
-
-        where:
-        [apiMapping, runtimeMapping] << ([
-            [apiUsingUsage(), apiUsingUsage("fromResolutionOf('compileClasspath')"), apiUsingUsage("fromResolutionOf(project.configurations.compileClasspath)")],
-            [runtimeUsingUsage(), runtimeUsingUsage("fromResolutionOf('runtimeClasspath')"), runtimeUsingUsage("fromResolutionOf(project.configurations.runtimeClasspath)")],
-        ].combinations() + [[allVariants(), noop()]])
-    }
-
+class MavenPublishResolvedVersionsJavaIntegTest extends MavenPublishResolvedVersionsJavaFixture {
     /**
      * This use case corresponds to the cases where the published versions should be different
      * from the versions published using the default configurations (compileClasspath, runtimeClasspath).
@@ -593,11 +419,79 @@ class MavenPublishResolvedVersionsJavaIntegTest extends AbstractMavenPublishInte
             """
             configurations.all {
                 resolutionStrategy.dependencySubstitution {
-                    substitute(module('org:foo')).with(module('org:baz:1.0'))
+                    substitute(module('org:foo')).using(module('org:baz:1.0'))
                 }
             }
             """
         ]
+    }
+
+    // This is a weird test case, because why would you have a substitution rule
+    // for a first level dependency? However it may be that you implicitly get a
+    // substitution rule (via a plugin for example) that you are not aware of.
+    // Ideally we should warn when such things happen (linting).
+    @Issue("https://github.com/gradle/gradle/issues/14039")
+    def "substituted project dependencies are also substituted in the generated POM file"() {
+        createBuildScripts("""
+            dependencies {
+                implementation project(":a")
+            }
+
+            configurations.all {
+                resolutionStrategy.dependencySubstitution {
+                    substitute(project(':a')).using(project(':b'))
+                }
+            }
+
+            publishing {
+                publications {
+                    maven(MavenPublication) {
+                        from components.java
+                        versionMapping {
+                            ${apiUsingUsage()}
+                            ${runtimeUsingUsage()}
+                        }
+                    }
+
+                }
+            }
+        """)
+        settingsFile << """
+            include 'a'
+            include 'b'
+        """
+        file("a/build.gradle") << """
+            plugins {
+                id 'java-library'
+            }
+            group = 'com.first'
+            version = '1.1'
+        """
+        file("b/build.gradle") << """
+            plugins {
+                id 'java-library'
+            }
+            group = 'com.second'
+            version = '1.2'
+        """
+
+        when:
+        run "publish"
+
+        then:
+        javaLibrary.mavenModule.removeGradleMetadataRedirection()
+        javaLibrary.assertPublished()
+        javaLibrary.parsedPom.scope("runtime") {
+            assert dependencies.size() == 1
+            def deps = dependencies.values()
+            assert deps[0].artifactId == 'b' // because of substitution
+            assert deps[0].groupId == 'com.second'
+            assert deps[0].version == '1.2'
+        }
+        javaLibrary.parsedModuleMetadata.variant("runtimeElements") {
+            dependency("com.second", "b", "1.2")
+            noMoreDependencies()
+        }
     }
 
     def "can substitute with a project dependency"() {
@@ -612,7 +506,7 @@ class MavenPublishResolvedVersionsJavaIntegTest extends AbstractMavenPublishInte
 
             configurations.all {
                 resolutionStrategy.dependencySubstitution {
-                    substitute(module('org:foo')) with(project(':lib'))
+                    substitute(module('org:foo')) using(project(':lib'))
                 }
             }
 
@@ -656,21 +550,203 @@ class MavenPublishResolvedVersionsJavaIntegTest extends AbstractMavenPublishInte
         }
     }
 
-    private static String allVariants() {
+}
+
+class MavenPublishJavaLibraryRuntimeLastResolvedVersionsJavaIntegTest extends MavenPublishResolvedVersionsJavaFixture {
+    @Unroll("can publish java-library with dependencies (#apiMapping, #runtimeMapping)")
+    def "can publish java-library with dependencies (runtime last)"() {
+        given:
+        javaLibrary(mavenRepo.module("org.test", "foo", "1.0")).withModuleMetadata().publish()
+        javaLibrary(mavenRepo.module("org.test", "foo", "1.1")).withModuleMetadata().publish()
+        javaLibrary(mavenRepo.module("org.test", "bar", "1.0")).withModuleMetadata().publish()
+        javaLibrary(mavenRepo.module("org.test", "bar", "1.1")).withModuleMetadata().publish()
+
+        createBuildScripts("""
+            dependencies {
+                api "org.test:foo:[1.0,1.0]"
+                runtimeOnly "org.test:bar:+"
+                runtimeOnly "org.test:foo:+"
+            }
+            publishing {
+                publications {
+                    maven(MavenPublication) {
+                        from components.java
+                        versionMapping {
+                            $apiMapping
+                            $runtimeMapping
+                        }
+                    }
+                }
+            }
+""")
+
+        when:
+        run "publish"
+
+        then:
+        javaLibrary.mavenModule.removeGradleMetadataRedirection()
+        javaLibrary.assertPublished()
+        javaLibrary.parsedModuleMetadata.variant("apiElements") {
+            dependency("org.test:foo:1.0") {
+                exists()
+            }
+            noMoreDependencies()
+        }
+        javaLibrary.parsedModuleMetadata.variant("runtimeElements") {
+            dependency("org.test:foo:1.1") {
+                exists()
+            }
+            dependency("org.test:bar:1.1") {
+                exists()
+            }
+            noMoreDependencies()
+        }
+
+        and:
+        javaLibrary.parsedPom.scopes.compile.assertDependsOn('org.test:foo:1.0')
+        javaLibrary.parsedPom.scopes.runtime.assertDependsOn('org.test:bar:1.1')
+
+        and:
+        resolveArtifacts(javaLibrary) {
+            withModuleMetadata {
+                expectFiles "bar-1.1.jar", "foo-1.1.jar", "publishTest-1.9.jar"
+            }
+            withoutModuleMetadata {
+                // With Maven, can't have different versions for a dependency between compile and runtime
+                expectFiles "bar-1.1.jar", "foo-1.0.jar", "publishTest-1.9.jar"
+            }
+        }
+
+        and:
+        resolveApiArtifacts(javaLibrary) {
+            expectFiles "foo-1.0.jar", "publishTest-1.9.jar"
+        }
+
+        and:
+        resolveRuntimeArtifacts(javaLibrary) {
+            withModuleMetadata {
+                expectFiles "bar-1.1.jar", "foo-1.1.jar", "publishTest-1.9.jar"
+            }
+            withoutModuleMetadata {
+                expectFiles "bar-1.1.jar", "foo-1.0.jar", "publishTest-1.9.jar"
+            }
+        }
+
+        where:
+        [apiMapping, runtimeMapping] << ([
+            [apiUsingUsage(), apiUsingUsage("fromResolutionOf('compileClasspath')"), apiUsingUsage("fromResolutionOf(project.configurations.compileClasspath)")],
+            [runtimeUsingUsage(), runtimeUsingUsage("fromResolutionOf('runtimeClasspath')"), runtimeUsingUsage("fromResolutionOf(project.configurations.runtimeClasspath)")],
+        ].combinations() + [[allVariants(), noop()]])
+    }
+}
+
+class MavenPublishJavaLibraryRuntimeFirstResolvedVersionsJavaIntegTest extends MavenPublishResolvedVersionsJavaFixture {
+    @Unroll("can publish java-library with dependencies (#runtimeMapping, #apiMapping)")
+    def "can publish java-library with dependencies (runtime first)"() {
+        given:
+        javaLibrary(mavenRepo.module("org.test", "foo", "1.0")).withModuleMetadata().publish()
+        javaLibrary(mavenRepo.module("org.test", "foo", "1.1")).withModuleMetadata().publish()
+        javaLibrary(mavenRepo.module("org.test", "bar", "1.0")).withModuleMetadata().publish()
+        javaLibrary(mavenRepo.module("org.test", "bar", "1.1")).withModuleMetadata().publish()
+
+        createBuildScripts("""
+            dependencies {
+                api "org.test:foo:[1.0,1.0]"
+                runtimeOnly "org.test:bar:+"
+                runtimeOnly "org.test:foo:+"
+            }
+            publishing {
+                publications {
+                    maven(MavenPublication) {
+                        from components.java
+                        versionMapping {
+                            $runtimeMapping
+                            $apiMapping
+                        }
+                    }
+                }
+            }
+""")
+
+        when:
+        run "publish"
+
+        then:
+        javaLibrary.mavenModule.removeGradleMetadataRedirection()
+        javaLibrary.assertPublished()
+        javaLibrary.parsedModuleMetadata.variant("apiElements") {
+            dependency("org.test:foo:1.0") {
+                exists()
+            }
+            noMoreDependencies()
+        }
+        javaLibrary.parsedModuleMetadata.variant("runtimeElements") {
+            dependency("org.test:foo:1.1") {
+                exists()
+            }
+            dependency("org.test:bar:1.1") {
+                exists()
+            }
+            noMoreDependencies()
+        }
+
+        and:
+        javaLibrary.parsedPom.scopes.compile.assertDependsOn('org.test:foo:1.0')
+        javaLibrary.parsedPom.scopes.runtime.assertDependsOn('org.test:bar:1.1')
+
+        and:
+        resolveArtifacts(javaLibrary) {
+            withModuleMetadata {
+                expectFiles "bar-1.1.jar", "foo-1.1.jar", "publishTest-1.9.jar"
+            }
+            withoutModuleMetadata {
+                // With Maven, can't have different versions for a dependency between compile and runtime
+                expectFiles "bar-1.1.jar", "foo-1.0.jar", "publishTest-1.9.jar"
+            }
+        }
+
+        and:
+        resolveApiArtifacts(javaLibrary) {
+            expectFiles "foo-1.0.jar", "publishTest-1.9.jar"
+        }
+
+        and:
+        resolveRuntimeArtifacts(javaLibrary) {
+            withModuleMetadata {
+                expectFiles "bar-1.1.jar", "foo-1.1.jar", "publishTest-1.9.jar"
+            }
+            withoutModuleMetadata {
+                // With Maven, can't have different versions for a dependency between compile and runtime
+                expectFiles "bar-1.1.jar", "foo-1.0.jar", "publishTest-1.9.jar"
+            }
+        }
+
+        where:
+        [apiMapping, runtimeMapping] << ([
+            [apiUsingUsage(), apiUsingUsage("fromResolutionOf('compileClasspath')"), apiUsingUsage("fromResolutionOf(project.configurations.compileClasspath)")],
+            [runtimeUsingUsage(), runtimeUsingUsage("fromResolutionOf('runtimeClasspath')"), runtimeUsingUsage("fromResolutionOf(project.configurations.runtimeClasspath)")],
+        ].combinations() + [[allVariants(), noop()]])
+    }
+}
+
+abstract class MavenPublishResolvedVersionsJavaFixture extends AbstractMavenPublishIntegTest {
+    MavenJavaModule javaLibrary = javaLibrary(mavenRepo.module("org.gradle.test", "publishTest", "1.9"))
+
+    protected static String allVariants() {
         " allVariants { fromResolutionResult() } "
     }
 
-    private static String noop() { "" }
+    protected static String noop() { "" }
 
-    private static String apiUsingUsage(String config = "fromResolutionResult()") {
+    protected static String apiUsingUsage(String config = "fromResolutionResult()") {
         """ usage("java-api") { $config } """
     }
 
-    private static String runtimeUsingUsage(String config = "fromResolutionResult()") {
+    protected static String runtimeUsingUsage(String config = "fromResolutionResult()") {
         """ usage("java-runtime") { $config } """
     }
 
-    private void createBuildScripts(def append) {
+    protected void createBuildScripts(def append) {
         settingsFile << "rootProject.name = 'publishTest' "
 
         buildFile << """
@@ -694,8 +770,5 @@ class MavenPublishResolvedVersionsJavaIntegTest extends AbstractMavenPublishInte
 
 $append
 """
-
     }
-
-
 }

@@ -42,7 +42,7 @@ import org.gradle.api.artifacts.ModuleVersionIdentifier;
 import org.gradle.api.internal.artifacts.ivyservice.ivyresolve.parser.MetaDataParser;
 import org.gradle.api.internal.attributes.ImmutableAttributes;
 import org.gradle.api.provider.Provider;
-import org.gradle.api.publication.maven.internal.VersionRangeMapper;
+import org.gradle.api.publish.maven.internal.dependencies.VersionRangeMapper;
 import org.gradle.api.publish.internal.versionmapping.VersionMappingStrategyInternal;
 import org.gradle.api.publish.maven.MavenDependency;
 import org.gradle.api.publish.maven.MavenPomCiManagement;
@@ -59,7 +59,7 @@ import org.gradle.api.publish.maven.internal.publication.MavenPomDistributionMan
 import org.gradle.api.publish.maven.internal.publication.MavenPomInternal;
 import org.gradle.api.publish.maven.internal.publisher.MavenProjectIdentity;
 import org.gradle.internal.xml.XmlTransformer;
-import org.gradle.util.GUtil;
+import org.gradle.util.internal.GUtil;
 
 import java.io.File;
 import java.io.IOException;
@@ -260,15 +260,15 @@ public class MavenPomFileGenerator {
     }
 
     public void addApiDependencyManagement(MavenDependency apiDependency) {
-        addDependencyManagement(apiDependency, "compile");
+        addDependencyManagement((MavenDependencyInternal) apiDependency, "compile");
     }
 
     public void addRuntimeDependencyManagement(MavenDependency dependency) {
-        addDependencyManagement(dependency, "runtime");
+        addDependencyManagement((MavenDependencyInternal) dependency, "runtime");
     }
 
     public void addImportDependencyManagement(MavenDependency dependency) {
-        addDependencyManagement(dependency, "import");
+        addDependencyManagement((MavenDependencyInternal) dependency, "import");
     }
 
     public void addRuntimeDependency(MavenDependencyInternal dependency) {
@@ -303,8 +303,9 @@ public class MavenPomFileGenerator {
         Dependency mavenDependency = new Dependency();
         String groupId = dependency.getGroupId();
         String dependencyVersion = dependency.getVersion();
+        String projectPath = dependency.getProjectPath();
         ImmutableAttributes attributes = attributesForScope(scope);
-        ModuleVersionIdentifier resolvedVersion = versionMappingStrategy.findStrategyForVariant(attributes).maybeResolveVersion(groupId, artifactId);
+        ModuleVersionIdentifier resolvedVersion = versionMappingStrategy.findStrategyForVariant(attributes).maybeResolveVersion(groupId, artifactId, projectPath);
         mavenDependency.setGroupId(resolvedVersion != null ? resolvedVersion.getGroup() : groupId);
         mavenDependency.setArtifactId(resolvedVersion != null ? resolvedVersion.getName() : artifactId);
         mavenDependency.setVersion(resolvedVersion != null ? resolvedVersion.getVersion() : mapToMavenSyntax(dependencyVersion));
@@ -335,12 +336,13 @@ public class MavenPomFileGenerator {
         throw new IllegalStateException("Unexpected scope : " + scope);
     }
 
-    private void addDependencyManagement(MavenDependency dependency, String scope) {
+    private void addDependencyManagement(MavenDependencyInternal dependency, String scope) {
         Dependency mavenDependency = new Dependency();
         String groupId = dependency.getGroupId();
         String artifactId = dependency.getArtifactId();
+        String projectPath = dependency.getProjectPath();
         ImmutableAttributes attributes = attributesForScope(scope);
-        ModuleVersionIdentifier resolvedVersion = versionMappingStrategy.findStrategyForVariant(attributes).maybeResolveVersion(groupId, artifactId);
+        ModuleVersionIdentifier resolvedVersion = versionMappingStrategy.findStrategyForVariant(attributes).maybeResolveVersion(groupId, artifactId, projectPath);
         mavenDependency.setGroupId(resolvedVersion != null ? resolvedVersion.getGroup() : groupId);
         mavenDependency.setArtifactId(resolvedVersion != null ? resolvedVersion.getName() : artifactId);
         mavenDependency.setVersion(resolvedVersion == null ? mapToMavenSyntax(dependency.getVersion()) : resolvedVersion.getVersion());

@@ -18,7 +18,6 @@ package org.gradle.api.internal.artifacts.ivyservice.modulecache
 
 import com.google.common.collect.Maps
 import org.apache.commons.io.output.ByteArrayOutputStream
-import org.gradle.api.internal.FeaturePreviews
 import org.gradle.api.internal.artifacts.DefaultImmutableModuleIdentifierFactory
 import org.gradle.api.internal.artifacts.DefaultModuleIdentifier
 import org.gradle.api.internal.artifacts.DependencyManagementTestUtil
@@ -42,7 +41,7 @@ import org.gradle.internal.component.external.model.MutableModuleComponentResolv
 import org.gradle.internal.component.external.model.ivy.MutableIvyModuleResolveMetadata
 import org.gradle.internal.component.external.model.maven.MutableMavenModuleResolveMetadata
 import org.gradle.internal.component.model.MutableModuleSources
-import org.gradle.internal.hash.HashUtil
+import org.gradle.internal.hash.Hashing
 import org.gradle.internal.resource.local.FileResourceRepository
 import org.gradle.internal.resource.local.LocalFileStandInExternalResource
 import org.gradle.internal.resource.local.LocallyAvailableExternalResource
@@ -68,12 +67,12 @@ class ModuleMetadataSerializerTest extends Specification {
         def metadata = sampleFiles().collectEntries { [it.name, parse(it)] }
 
         when:
-        def serializedMetadata = metadata.collectEntries { [it.key, HashUtil.sha1(serialize(it.value))] }
+        def serializedMetadata = metadata.collectEntries { [it.key, Hashing.sha1().hashBytes(serialize(it.value))] }
 
         then:
         println "Checking that all ${metadata.size()} samples are different"
         serializedMetadata.each { key, value ->
-            println "$key : ${value.asHexString() }"
+            println "$key : ${value.toString() }"
         }
         def unique = serializedMetadata.values() as Set
         unique.size() == metadata.size()
@@ -167,7 +166,7 @@ class ModuleMetadataSerializerTest extends Specification {
 
     private GradlePomModuleDescriptorParser pomParser() {
         new GradlePomModuleDescriptorParser(
-            new MavenVersionSelectorScheme(new DefaultVersionSelectorScheme(new DefaultVersionComparator(new FeaturePreviews()), new VersionParser())),
+            new MavenVersionSelectorScheme(new DefaultVersionSelectorScheme(new DefaultVersionComparator(), new VersionParser())),
             moduleIdentifierFactory,
             Stub(FileResourceRepository),
             mavenMetadataFactory

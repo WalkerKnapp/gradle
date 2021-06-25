@@ -18,6 +18,7 @@ package org.gradle.internal.service.scopes;
 
 import org.gradle.api.file.ArchiveOperations;
 import org.gradle.api.file.FileSystemOperations;
+import org.gradle.api.internal.DocumentationRegistry;
 import org.gradle.api.internal.collections.DomainObjectCollectionFactory;
 import org.gradle.api.internal.file.DefaultArchiveOperations;
 import org.gradle.api.internal.file.DefaultFileCollectionFactory;
@@ -31,8 +32,8 @@ import org.gradle.api.internal.file.FileLookup;
 import org.gradle.api.internal.file.FileOperations;
 import org.gradle.api.internal.file.FilePropertyFactory;
 import org.gradle.api.internal.file.FileResolver;
-import org.gradle.api.internal.file.TemporaryFileProvider;
 import org.gradle.api.internal.file.collections.DirectoryFileTreeFactory;
+import org.gradle.api.internal.file.temp.TemporaryFileProvider;
 import org.gradle.api.internal.model.DefaultObjectFactory;
 import org.gradle.api.internal.model.NamedObjectInstantiator;
 import org.gradle.api.internal.provider.DefaultPropertyFactory;
@@ -41,6 +42,7 @@ import org.gradle.api.internal.provider.PropertyHost;
 import org.gradle.api.internal.resources.DefaultResourceHandler;
 import org.gradle.api.internal.tasks.TaskDependencyFactory;
 import org.gradle.api.model.ObjectFactory;
+import org.gradle.api.provider.ProviderFactory;
 import org.gradle.api.tasks.util.PatternSet;
 import org.gradle.internal.Factory;
 import org.gradle.internal.file.Deleter;
@@ -88,7 +90,9 @@ public class WorkerSharedProjectScopeServices {
             FileCollectionFactory fileCollectionFactory,
             FileSystem fileSystem,
             Factory<PatternSet> patternSetFactory,
-            Deleter deleter
+            Deleter deleter,
+            DocumentationRegistry documentationRegistry,
+            ProviderFactory providers
     ) {
         return new DefaultFileOperations(
                 fileResolver,
@@ -101,8 +105,9 @@ public class WorkerSharedProjectScopeServices {
                 fileCollectionFactory,
                 fileSystem,
                 patternSetFactory,
-                deleter
-        );
+                deleter,
+                documentationRegistry,
+                providers);
     }
 
     protected FileSystemOperations createFileSystemOperations(Instantiator instantiator, FileOperations fileOperations) {

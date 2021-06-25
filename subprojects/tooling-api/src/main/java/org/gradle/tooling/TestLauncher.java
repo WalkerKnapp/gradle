@@ -16,12 +16,17 @@
 
 package org.gradle.tooling;
 
-import org.gradle.api.Incubating;
 import org.gradle.tooling.events.test.TestOperationDescriptor;
 
 /**
  *
- * A {@code TestLauncher} allows you to execute tests in a Gradle build.
+ * <p>A {@code TestLauncher} allows you to execute tests in a Gradle build.</p>
+ *
+ * <p>If the target Gradle version is &gt;=6.8 then you can use {@code TestLauncher} to execute tests from included builds. Test operation descriptors from included builds work out-of-the-box. You can
+ * target tasks from included builds by specifying the task identity path (i.e. {@code ':included-build-name:subproject-name:taskName'}).</p>
+ *
+ * <p>However, you cannot use the methods with included builds that don't specify the target test tasks (e.g. {@code withJvmTestClasses()} and {@code withJvmTestMethods()}). Those methods configure
+ * all test tasks in the root build only.</p>
  *
  * @since 2.6
  */
@@ -46,7 +51,9 @@ public interface TestLauncher extends ConfigurableLauncher<TestLauncher> {
     TestLauncher withTests(Iterable<? extends TestOperationDescriptor> descriptors);
 
     /**
-     * Adds tests to be executed declared by class name.
+     * <p>Adds tests to be executed declared by class name.</p>
+     *
+     * <p>This method ignores tests defined in included builds.</p>
      *
      * @param testClasses The class names of the tests to be executed.
      * @return this
@@ -56,7 +63,9 @@ public interface TestLauncher extends ConfigurableLauncher<TestLauncher> {
 
 
     /**
-     * Adds tests to be executed declared by class name.
+     * <p>Adds tests to be executed declared by class name.</p>
+     *
+     * <p>This method ignores tests defined in included builds.</p>
      *
      * @param testClasses The class names of the tests to be executed.
      * @return this
@@ -65,7 +74,9 @@ public interface TestLauncher extends ConfigurableLauncher<TestLauncher> {
     TestLauncher withJvmTestClasses(Iterable<String> testClasses);
 
     /**
-     * Adds tests to be executed declared by class and method name.
+     * <p>Adds tests to be executed declared by class and method name.</p>
+     *
+     * <p>This method ignores tests defined in included builds.</p>
      *
      * @param testClass The name of the class containing the methods to execute.
      * @param methods The names of the test methods to be executed.
@@ -75,7 +86,9 @@ public interface TestLauncher extends ConfigurableLauncher<TestLauncher> {
     TestLauncher withJvmTestMethods(String testClass, String... methods);
 
     /**
-     * Adds tests to be executed declared by class and methods name.
+     * <p>Adds tests to be executed declared by class and methods name.</p>
+     *
+     * <p>This method ignores tests defined in included builds.</p>
      *
      * @param testClass The name of the class containing the methods to execute.
      * @param methods The names of the test methods to be executed.
@@ -94,7 +107,6 @@ public interface TestLauncher extends ConfigurableLauncher<TestLauncher> {
      * @return this
      * @since 6.1
      */
-    @Incubating
     TestLauncher withTaskAndTestClasses(String task, Iterable<String> testClasses);
 
     /**
@@ -107,7 +119,6 @@ public interface TestLauncher extends ConfigurableLauncher<TestLauncher> {
      * @return this
      * @since 6.1
      */
-    @Incubating
     TestLauncher withTaskAndTestMethods(String task, String testClass, Iterable<String> methods);
 
     /**
@@ -127,7 +138,6 @@ public interface TestLauncher extends ConfigurableLauncher<TestLauncher> {
      *
      * @since 5.6
      */
-    @Incubating
     TestLauncher debugTestsOn(int port);
 
     /**

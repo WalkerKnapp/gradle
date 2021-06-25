@@ -19,12 +19,15 @@ package org.gradle.test.fixtures.server.http;
 import com.google.common.base.Charsets;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
+import org.apache.commons.lang3.exception.ExceptionUtils;
+import org.gradle.integtests.fixtures.timeout.JavaProcessStackTracesMonitor;
 import org.gradle.internal.UncheckedException;
 import org.gradle.internal.exceptions.DefaultMultiCauseException;
 import org.gradle.internal.time.Clock;
 import org.gradle.internal.time.Time;
 import org.gradle.test.fixtures.ResettableExpectations;
 
+import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -126,20 +129,24 @@ class ChainingHttpHandler implements HttpHandler, ResettableExpectations {
             int id = counter.incrementAndGet();
 
             RequestOutcome outcome = requestStarted(httpExchange);
-            System.out.println(String.format("[%d] handling %s", id, outcome.getDisplayName()));
+            System.out.printf("[%d] handling %s%n", id, outcome.getDisplayName());
 
             try {
                 ResponseProducer responseProducer = selectProducer(id, httpExchange);
-                System.out.println(String.format("[%d] sending response for %s", id, outcome.getDisplayName()));
+                System.out.printf("[%d] sending response for %s%n", id, outcome.getDisplayName());
                 if (!responseProducer.isFailure()) {
                     responseProducer.writeTo(id, httpExchange);
                 } else {
                     Throwable failure = responseProducer.getFailure();
                     requestFailed(outcome, failure);
+                    String stacktrace = ExceptionUtils.getStackTrace(failure);
+                    // We observed jstack hanging on windows
+//                    dumpThreadsUponTimeout(stacktrace);
+                    System.out.printf("[%d] handling failed with exception %s%n", id, stacktrace);
                     sendFailure(httpExchange, 400, outcome);
                 }
             } catch (Throwable t) {
-                System.out.println(String.format("[%d] handling %s failed with exception", id, outcome.getDisplayName()));
+                System.out.printf("[%d] handling %s failed with exception%n", id, outcome.getDisplayName());
                 try {
                     sendFailure(httpExchange, 500, outcome);
                 } catch (IOException e) {
@@ -151,6 +158,13 @@ class ChainingHttpHandler implements HttpHandler, ResettableExpectations {
             }
         } finally {
             httpExchange.close();
+        }
+    }
+
+    // Dump all JVMs' threads on the machine to troubleshoot deadlock issues
+    private void dumpThreadsUponTimeout(String stacktrace) {
+        if (stacktrace.contains("due to a timeout waiting for other requests")) {
+            JavaProcessStackTracesMonitor.printAllStackTracesByJstack(new File("."));
         }
     }
 

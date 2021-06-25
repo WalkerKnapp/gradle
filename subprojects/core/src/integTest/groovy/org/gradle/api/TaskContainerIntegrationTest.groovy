@@ -16,16 +16,15 @@
 
 package org.gradle.api
 
-
+import groovy.transform.SelfType
 import spock.lang.Issue
 
-class TaskContainerIntegrationTest extends AbstractDomainObjectContainerIntegrationTest {
-    @Override
+@SelfType(AbstractDomainObjectContainerIntegrationTest)
+trait AbstractTaskContainerIntegrationTest {
     String makeContainer() {
         return "tasks"
     }
 
-    @Override
     String getContainerStringRepresentation() {
         return "task set"
     }
@@ -33,13 +32,28 @@ class TaskContainerIntegrationTest extends AbstractDomainObjectContainerIntegrat
     static String getContainerType() {
         return "DefaultTaskContainer"
     }
+}
+
+class QueryAndMutationTaskContainerIntegrationTest extends AbstractQueryAndMutationDomainObjectContainerIntegrationTest implements AbstractTaskContainerIntegrationTest {
+}
+
+class QueryTaskContainerIntegrationTest extends AbstractQueryDomainObjectContainerIntegrationTest implements AbstractTaskContainerIntegrationTest {
+}
+
+class MutationFailureTaskContainerIntegrationTest extends AbstractMutationFailureDomainObjectContainerIntegrationTest implements AbstractTaskContainerIntegrationTest {
+}
+
+class MutatingTaskContainerInHookIntegrationTest extends AbstractMutatingDomainObjectContainerInHookIntegrationTest implements AbstractTaskContainerIntegrationTest {
+}
+
+class TaskContainerIntegrationTest extends AbstractDomainObjectContainerIntegrationTest implements AbstractTaskContainerIntegrationTest {
 
     def "chained lookup of tasks.withType.matching"() {
-        buildFile << """
+        buildFile """
             tasks.withType(Copy).matching({ it.name.endsWith("foo") }).all { task ->
                 assert task.path in [':foo']
             }
-            
+
             tasks.register("foo", Copy)
             tasks.register("bar", Copy)
             tasks.register("foobar", Delete)
@@ -51,11 +65,11 @@ class TaskContainerIntegrationTest extends AbstractDomainObjectContainerIntegrat
 
     @Issue("https://github.com/gradle/gradle/issues/9446")
     def "chained lookup of tasks.matching.withType"() {
-        buildFile << """
+        buildFile """
             tasks.matching({ it.name.endsWith("foo") }).withType(Copy).all { task ->
                 assert task.path in [':foo']
             }
-            
+
             tasks.register("foo", Copy)
             tasks.register("bar", Copy)
             tasks.register("foobar", Delete)

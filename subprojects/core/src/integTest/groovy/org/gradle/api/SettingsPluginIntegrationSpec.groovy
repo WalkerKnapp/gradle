@@ -17,11 +17,16 @@
 package org.gradle.api
 
 import org.gradle.integtests.fixtures.AbstractIntegrationSpec
+import org.gradle.internal.os.OperatingSystem
 import org.gradle.test.fixtures.file.TestFile
 import org.gradle.test.fixtures.plugin.PluginBuilder
 import org.gradle.test.fixtures.server.http.MavenHttpPluginRepository
 import org.junit.Rule
+import spock.lang.IgnoreIf
+import spock.lang.Issue
 
+@Issue("https://github.com/gradle/gradle-private/issues/3247")
+@IgnoreIf({ OperatingSystem.current().macOsX && JavaVersion.current() == JavaVersion.VERSION_1_8})
 class SettingsPluginIntegrationSpec extends AbstractIntegrationSpec {
 
     @Rule
@@ -31,13 +36,16 @@ class SettingsPluginIntegrationSpec extends AbstractIntegrationSpec {
     MavenHttpPluginRepository mavenHttpRepo = new MavenHttpPluginRepository(mavenRepo)
 
     def setup(){
-        executer.usingSettingsFile(settingsFile)
-        settingsFile << "rootProject.projectDir = file('..')\n"
+        // Stop traversing to parent directory; otherwise embedded test execution will
+        // find and load the `gradle.properties` file in the root of the source repository
+        settingsFile.createFile()
+        executer.inDirectory(file("settings"))
+        relocatedSettingsFile << "rootProject.projectDir = file('..')\n"
     }
 
     def "can apply plugin class from settings.gradle"() {
         when:
-        settingsFile << """
+        relocatedSettingsFile << """
         apply plugin: SimpleSettingsPlugin
 
         class SimpleSettingsPlugin implements Plugin<Settings> {
@@ -57,7 +65,7 @@ class SettingsPluginIntegrationSpec extends AbstractIntegrationSpec {
         testDirectory.createFile("settings/somePath/path2/settings.gradle") << "include 'moduleA'";
 
         when:
-        settingsFile << "apply from: 'somePath/settingsPlugin.gradle'"
+        relocatedSettingsFile << "apply from: 'somePath/settingsPlugin.gradle'"
 
         then:
         succeeds(':moduleA:help')
@@ -71,12 +79,12 @@ class SettingsPluginIntegrationSpec extends AbstractIntegrationSpec {
         pluginBuilder.publishAs("g", "a", "1.0", pluginPortal, createExecuter()).allowAll()
 
         when:
-        settingsFile.text = """
+        relocatedSettingsFile.text = """
             plugins {
                 id "test-settings-plugin" version "1.0"
             }
 
-            $settingsFile.text
+            $relocatedSettingsFile.text
         """
 
         then:
@@ -94,7 +102,7 @@ class SettingsPluginIntegrationSpec extends AbstractIntegrationSpec {
         pluginBuilder.publishAs("g", "a", "1.0", mavenHttpRepo, createExecuter()).allowAll()
 
         when:
-        settingsFile.text = """
+        relocatedSettingsFile.text = """
             pluginManagement {
                 repositories {
                     maven { url "$mavenHttpRepo.uri" }
@@ -104,7 +112,7 @@ class SettingsPluginIntegrationSpec extends AbstractIntegrationSpec {
                 id "test-settings-plugin" version "1.0"
             }
 
-            $settingsFile.text
+            $relocatedSettingsFile.text
         """
 
         then:
@@ -114,7 +122,7 @@ class SettingsPluginIntegrationSpec extends AbstractIntegrationSpec {
         outputContains(message)
     }
 
-    protected TestFile getSettingsFile() {
+    protected TestFile getRelocatedSettingsFile() {
         testDirectory.file('settings/settings.gradle')
     }
 }

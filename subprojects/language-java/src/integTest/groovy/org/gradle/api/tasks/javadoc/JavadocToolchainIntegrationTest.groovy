@@ -27,55 +27,40 @@ class JavadocToolchainIntegrationTest extends AbstractIntegrationSpec {
 
     @Unroll
     @IgnoreIf({ AvailableJavaHomes.getJdk(JavaVersion.VERSION_11) == null })
-    def "can manually set javadoc tool via  #type toolchain on javadoc task #jdk"() {
+    def "can manually set javadoc tool via  #type toolchain on javadoc task #type : #jdk"() {
         buildFile << """
-            import org.gradle.jvm.toolchain.internal.JavaToolchainQueryService
-            import org.gradle.jvm.toolchain.internal.DefaultToolchainSpec
-
             plugins {
                 id 'java'
             }
 
-            abstract class ApplyTestToolchain implements Plugin<Project> {
-                @javax.inject.Inject
-                abstract JavaToolchainQueryService getQueryService()
-
-                void apply(Project project) {
-                    def filter = project.objects.newInstance(DefaultToolchainSpec)
-                    filter.languageVersion = JavaVersion.${jdk.javaVersion.name()}
-                    def toolchain = getQueryService().findMatchingToolchain(filter)
-
-                    project.tasks.withType(JavaCompile) {
-                        javaCompiler = toolchain.map({it.javaCompiler})
-                    }
-                    project.tasks.withType(Javadoc) {
-                        javadocTool = toolchain.map({it.javadocTool})
-                    }
+            // need to do as separate task as -version stop javadoc generation
+            task javadocVersionOutput(type: Javadoc) {
+                source = tasks.javadoc.source
+                options.jFlags("-version")
+                javadocTool = javaToolchains.javadocToolFor {
+                    languageVersion = JavaLanguageVersion.of(${jdk.javaVersion.majorVersion})
                 }
             }
 
-            apply plugin: ApplyTestToolchain
-
-            // need to do as separate task as -version stop javadoc generation
-            task javadocVersionOutput(type: Javadoc) {
-                options.jFlags("-version")
+            javadoc {
+                javadocTool = javaToolchains.javadocToolFor {
+                    languageVersion = JavaLanguageVersion.of(${jdk.javaVersion.majorVersion})
+                }
+                dependsOn "javadocVersionOutput"
             }
-
         """
 
         file('src/main/java/Lib.java') << testLib()
 
         when:
         result = executer
-            .withArgument("-Porg.gradle.java.installations.auto-detect=false")
             .withArgument("-Porg.gradle.java.installations.paths=" + jdk.javaHome.absolutePath)
-            .withArgument("--info")
-            .withTasks("javadoc", "javadocVersionOutput")
+            .withTasks("javadoc")
             .run()
         then:
 
         file("build/docs/javadoc/Lib.html").text.contains("Some API documentation.")
-        outputContains(jdk.javaVersion.majorVersion)
+        errorOutput.contains(jdk.javaVersion.majorVersion)
         noExceptionThrown()
 
         where:
@@ -84,23 +69,24 @@ class JavadocToolchainIntegrationTest extends AbstractIntegrationSpec {
         'current'      | Jvm.current()
     }
 
-    @IgnoreIf({ AvailableJavaHomes.differentJdk == null })
-    def "JavaExec task is configured using default toolchain"() {
-        def someJdk = AvailableJavaHomes.getDifferentJdk()
+    @IgnoreIf({ AvailableJavaHomes.differentVersion == null })
+    def "javadoc task is configured using default toolchain"() {
+        def someJdk = AvailableJavaHomes.getDifferentVersion()
         buildFile << """
             plugins {
                 id 'java'
             }
 
-            java {
-                toolchain {
-                    languageVersion = JavaVersion.toVersion(${someJdk.javaVersion.majorVersion})
-                }
-            }
-
             // need to do as separate task as -version stop javadoc generation
             task javadocVersionOutput(type: Javadoc) {
+                source = tasks.javadoc.source
                 options.jFlags("-version")
+            }
+
+            java {
+                toolchain {
+                    languageVersion = JavaLanguageVersion.of(${someJdk.javaVersion.majorVersion})
+                }
             }
         """
 
@@ -108,15 +94,58 @@ class JavadocToolchainIntegrationTest extends AbstractIntegrationSpec {
 
         when:
         result = executer
-            .withArgument("-Porg.gradle.java.installations.auto-detect=false")
             .withArgument("-Porg.gradle.java.installations.paths=" + someJdk.javaHome.absolutePath)
+            .withTasks("javadocVersionOutput")
+            .run()
+
+        then:
+        errorOutput.contains(someJdk.javaVersion.majorVersion)
+        noExceptionThrown()
+    }
+
+    @IgnoreIf({ AvailableJavaHomes.differentVersion == null })
+    def 'changing toolchain invalidates task'() {
+        def currentJdk = Jvm.current()
+        def someJdk = AvailableJavaHomes.differentVersion
+
+        buildFile << """
+            plugins {
+                id 'java'
+            }
+
+            // need to do as separate task as -version stop javadoc generation
+            javadoc {
+                javadocTool = javaToolchains.javadocToolFor {
+                    def version = ${currentJdk.javaVersion.majorVersion}
+                    version = providers.gradleProperty('test.javadoc.version').forUseAtConfigurationTime().getOrElse(version)
+                    languageVersion = JavaLanguageVersion.of(version)
+                }
+            }
+
+        """
+        file('src/main/java/Lib.java') << testLib()
+
+        when:
+        result = executer
+            .withArgument("-Porg.gradle.java.installations.paths=" + currentJdk.javaHome.absolutePath)
             .withArgument("--info")
-            .withTasks("javadoc", "javadocVersionOutput")
+            .withTasks("javadoc")
             .run()
 
         then:
         file("build/docs/javadoc/Lib.html").text.contains("Some API documentation.")
-        outputContains(someJdk.javaVersion.majorVersion)
+        noExceptionThrown()
+
+        when:
+        result = executer
+            .withArgument("-Porg.gradle.java.installations.paths=" + someJdk.javaHome.absolutePath)
+            .withArgument("-Ptest.javadoc.version=${someJdk.javaVersion.majorVersion}")
+            .withArgument("--info")
+            .withTasks("javadoc")
+            .run()
+
+        then:
+        result.assertTaskNotSkipped(':javadoc')
         noExceptionThrown()
     }
 

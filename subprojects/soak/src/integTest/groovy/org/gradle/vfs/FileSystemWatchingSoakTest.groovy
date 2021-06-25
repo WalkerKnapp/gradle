@@ -17,20 +17,26 @@
 package org.gradle.vfs
 
 import org.gradle.integtests.fixtures.FileSystemWatchingFixture
+import org.gradle.integtests.fixtures.daemon.DaemonFixture
 import org.gradle.integtests.fixtures.daemon.DaemonIntegrationSpec
 import org.gradle.internal.os.OperatingSystem
+import org.gradle.internal.watch.registry.FileWatcherRegistry
 import org.gradle.test.fixtures.file.TestFile
+import org.junit.Assert
 
 class FileSystemWatchingSoakTest extends DaemonIntegrationSpec implements FileSystemWatchingFixture {
 
     private static final int NUMBER_OF_SUBPROJECTS = 50
     private static final int NUMBER_OF_SOURCES_PER_SUBPROJECT = 100
+    private static final int NUMBER_OF_FILES_IN_VFS = NUMBER_OF_SOURCES_PER_SUBPROJECT * NUMBER_OF_SUBPROJECTS * 2
     private static final double LOST_EVENTS_RATIO_MAC_OS = 0.6
     private static final double LOST_EVENTS_RATIO_WINDOWS = 0.1
 
     List<TestFile> sourceFiles
+    VerboseVfsLogAccessor vfsLogs
 
     def setup() {
+        buildTestFixture.withBuildInSubDir()
         def subprojects = (1..NUMBER_OF_SUBPROJECTS).collect { "project$it" }
         def rootProject = multiProjectBuild("javaProject", subprojects) {
             buildFile << """
@@ -55,23 +61,31 @@ class FileSystemWatchingSoakTest extends DaemonIntegrationSpec implements FileSy
             withWatchFs()
             // running in parallel, so the soak test doesn't take this long.
             withArgument("--parallel")
+            vfsLogs = enableVerboseVfsLogs()
+            inDirectory(rootProject)
         }
     }
 
     def "file watching works with multiple builds on the same daemon"() {
         def numberOfChangesBetweenBuilds = maxFileChangesWithoutOverflow
+        int numberOfRuns = 50
+
+        int numberOfOverflows = 0
 
         when:
         succeeds("assemble")
         // Assemble twice, so everything is up-to-date and nothing is invalidated
         succeeds("assemble")
         def daemon = daemons.daemon
+        def retainedFilesInLastBuild = vfsLogs.retainedFilesInCurrentBuild
         then:
         daemon.assertIdle()
 
         expect:
-        50.times { iteration ->
+        long endOfDaemonLog = daemon.logLineCount
+        numberOfRuns.times { iteration ->
             // when:
+            println("Running iteration ${iteration + 1}")
             changeSourceFiles(iteration, numberOfChangesBetweenBuilds)
             waitForChangesToBePickedUp()
             succeeds("assemble")
@@ -80,7 +94,24 @@ class FileSystemWatchingSoakTest extends DaemonIntegrationSpec implements FileSy
             assert daemons.daemon.logFile == daemon.logFile
             daemon.assertIdle()
             assertWatchingSucceeded()
+            boolean overflowBetweenBuildsDetected = detectOverflow(daemon, endOfDaemonLog)
+            boolean overflowDuringLastBuild = retainedFilesInLastBuild < NUMBER_OF_FILES_IN_VFS
+            if (overflowDuringLastBuild) {
+                println "Overflow during last build detected"
+            }
+            if (overflowBetweenBuildsDetected || overflowDuringLastBuild) {
+                numberOfOverflows++
+            } else {
+                int expectedNumberOfRetainedFiles = retainedFilesInLastBuild - numberOfChangesBetweenBuilds
+                int retainedFilesAtTheBeginningOfTheCurrentBuild = vfsLogs.retainedFilesSinceLastBuild
+                assert retainedFilesAtTheBeginningOfTheCurrentBuild <= expectedNumberOfRetainedFiles
+                assert expectedNumberOfRetainedFiles - 100 <= retainedFilesAtTheBeginningOfTheCurrentBuild
+            }
+            assert vfsLogs.receivedFileSystemEventsSinceLastBuild >= minimumExpectedFileSystemEvents(numberOfChangesBetweenBuilds, 1)
+            retainedFilesInLastBuild = vfsLogs.retainedFilesInCurrentBuild
+            endOfDaemonLog = daemon.logLineCount
         }
+        numberOfOverflows <= numberOfRuns / 10
     }
 
     def "file watching works with many changes between two builds"() {
@@ -102,11 +133,18 @@ class FileSystemWatchingSoakTest extends DaemonIntegrationSpec implements FileSy
             changeSourceFiles(iteration, numberOfChangedSourcesFilesPerBatch)
             waitBetweenChangesToAvoidOverflow()
         }
+        boolean overflowDetected = detectOverflow(daemon, 0)
+        // This needs to happen here, since retainedFilesInCurrentBuild looks at the log of the last executed build.
+        int expectedNumberOfRetainedFiles = vfsLogs.retainedFilesInCurrentBuild - numberOfChangedSourcesFilesPerBatch
         then:
         succeeds("assemble")
         daemons.daemon.logFile == daemon.logFile
         daemon.assertIdle()
         assertWatchingSucceeded()
+        vfsLogs.receivedFileSystemEventsSinceLastBuild >= minimumExpectedFileSystemEvents(numberOfChangedSourcesFilesPerBatch, numberOfChangeBatches)
+        if (!overflowDetected) {
+            assert vfsLogs.retainedFilesSinceLastBuild == expectedNumberOfRetainedFiles
+        }
     }
 
     private static getMaxFileChangesWithoutOverflow() {
@@ -115,8 +153,30 @@ class FileSystemWatchingSoakTest extends DaemonIntegrationSpec implements FileSy
             : 1000
     }
 
+    private static boolean detectOverflow(DaemonFixture daemon, long fromLine) {
+        boolean overflowDetected = daemon.logContains(fromLine, FileWatcherRegistry.Type.OVERFLOW.toString())
+        if (overflowDetected) {
+            println "Detected overflow in watcher, no files will be retained for the next build"
+        }
+        overflowDetected
+    }
+
     private static void waitBetweenChangesToAvoidOverflow() {
             Thread.sleep(150)
+    }
+
+    private static int minimumExpectedFileSystemEvents(int numberOfChangedFiles, int numberOfChangesPerFile) {
+        def currentOs = OperatingSystem.current()
+        if (currentOs.macOsX) {
+            // macOS coalesces the changes if the are in short succession
+            return numberOfChangedFiles * numberOfChangesPerFile * LOST_EVENTS_RATIO_MAC_OS
+        } else if (currentOs.linux) {
+            // the JDK watchers only capture one event per watched path
+            return numberOfChangedFiles
+        } else if (currentOs.windows) {
+            return numberOfChangedFiles * numberOfChangesPerFile * LOST_EVENTS_RATIO_WINDOWS
+        }
+        Assert.fail("Test not supported on OS ${currentOs}")
     }
 
     private void changeSourceFiles(int iteration, int number) {

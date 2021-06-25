@@ -22,36 +22,30 @@ import com.nhaarman.mockito_kotlin.mock
 import com.nhaarman.mockito_kotlin.verify
 import com.nhaarman.mockito_kotlin.verifyNoMoreInteractions
 import org.gradle.api.internal.file.pattern.PatternMatcher
-
-import org.gradle.internal.hash.HashUtil
-
+import org.gradle.api.internal.file.temp.DefaultTemporaryFileProvider
+import org.gradle.internal.hash.Hashing
 import org.gradle.kotlin.dsl.accessors.TestWithClassPath
-
 import org.gradle.kotlin.dsl.fixtures.codegen.ClassAndGroovyNamedArguments
 import org.gradle.kotlin.dsl.fixtures.codegen.ClassToKClass
 import org.gradle.kotlin.dsl.fixtures.codegen.ClassToKClassParameterizedType
 import org.gradle.kotlin.dsl.fixtures.codegen.GroovyNamedArguments
-import org.gradle.kotlin.dsl.support.normaliseLineSeparators
-
+import org.gradle.test.fixtures.file.LeaksFileHandles
 import org.hamcrest.CoreMatchers.containsString
 import org.hamcrest.CoreMatchers.equalTo
 import org.hamcrest.MatcherAssert.assertThat
 import org.junit.Test
-
 import org.slf4j.Logger
-
 import java.io.File
-
 import java.util.Properties
 import java.util.function.Consumer
 import java.util.jar.Attributes
 import java.util.jar.JarEntry
 import java.util.jar.JarOutputStream
 import java.util.jar.Manifest
-
 import kotlin.reflect.KClass
 
 
+@LeaksFileHandles("embedded Kotlin compiler environment keepalive")
 class GradleApiExtensionsTest : TestWithClassPath() {
 
     @Test
@@ -64,7 +58,7 @@ class GradleApiExtensionsTest : TestWithClassPath() {
             ClassAndGroovyNamedArguments::class
         ) {
 
-            assertGeneratedJarHash("b429469f8feb02fe9435b6bf7de2f7a5")
+            assertGeneratedJarHash("d038e8033616f91e9e26c3373043e2d5")
         }
     }
 
@@ -329,7 +323,7 @@ class GradleApiExtensionsTest : TestWithClassPath() {
         println(generatedSourceCode)
 
         expectedExtensions.forEach { expectedExtension ->
-            assertThat(generatedSourceCode, containsString(expectedExtension.normaliseLineSeparators().trimIndent()))
+            assertThat(generatedSourceCode, containsString(expectedExtension.trimIndent()))
         }
     }
 
@@ -339,12 +333,14 @@ class GradleApiExtensionsTest : TestWithClassPath() {
         val useDir = file("use").also { it.mkdirs() }
         val usageFiles = extensionsUsages.mapIndexed { idx, usage ->
             useDir.resolve("usage$idx.kt").also {
-                it.writeText("""
-                import org.gradle.kotlin.dsl.fixtures.codegen.*
-                import org.gradle.kotlin.dsl.*
+                it.writeText(
+                    """
+                    import org.gradle.kotlin.dsl.fixtures.codegen.*
+                    import org.gradle.kotlin.dsl.*
 
-                $usage
-                """.trimIndent())
+                    $usage
+                    """.trimIndent()
+                )
             }
         }
 
@@ -367,9 +363,14 @@ class GradleApiExtensionsTest : TestWithClassPath() {
     private
     fun GradleApiExtensionsTest.ApiKotlinExtensionsGeneration.assertGeneratedJarHash(hash: String) =
         file("api-extensions.jar").let { generatedJar ->
-            generateApiExtensionsJar(generatedJar, apiJars, apiMetadataJar) {}
+            generateApiExtensionsJar(
+                DefaultTemporaryFileProvider { newFolder("tmp") },
+                generatedJar,
+                apiJars,
+                apiMetadataJar
+            ) {}
             assertThat(
-                HashUtil.createHash(generatedJar, "MD5").asZeroPaddedHexString(32),
+                Hashing.md5().hashFile(generatedJar).toZeroPaddedString(32),
                 equalTo(hash)
             )
         }

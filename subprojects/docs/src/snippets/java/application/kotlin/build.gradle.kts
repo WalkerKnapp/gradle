@@ -6,12 +6,6 @@ plugins {
 
 version = "1.0.2"
 
-// tag::inferModulePath[]
-java {
-    modularity.inferModulePath.set(true)
-}
-// end::inferModulePath[]
-
 // tag::applicationName-conf[]
 application.applicationName = "my-app"
 // end::applicationName-conf[]
@@ -43,11 +37,11 @@ application {
 
 // tag::distribution-spec[]
 val createDocs by tasks.registering {
-    val docs = file("$buildDir/docs")
+    val docs = layout.buildDirectory.dir("docs")
     outputs.dir(docs)
     doLast {
-        docs.mkdirs()
-        File(docs, "readme.txt").writeText("Read me!")
+        docs.get().asFile.mkdirs()
+        docs.get().file("readme.txt").asFile.writeText("Read me!")
     }
 }
 

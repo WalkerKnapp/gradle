@@ -29,11 +29,8 @@ import org.gradle.caching.internal.origin.OriginMetadataFactory;
 import org.gradle.caching.internal.packaging.BuildCacheEntryPacker;
 import org.gradle.internal.file.FileMetadata.AccessType;
 import org.gradle.internal.file.FileType;
-import org.gradle.internal.fingerprint.CurrentFileCollectionFingerprint;
-import org.gradle.internal.fingerprint.FingerprintingStrategy;
-import org.gradle.internal.fingerprint.impl.AbsolutePathFingerprintingStrategy;
-import org.gradle.internal.fingerprint.impl.DefaultCurrentFileCollectionFingerprint;
-import org.gradle.internal.snapshot.CompleteFileSystemLocationSnapshot;
+import org.gradle.internal.file.TreeType;
+import org.gradle.internal.snapshot.FileSystemLocationSnapshot;
 import org.gradle.internal.snapshot.FileSystemSnapshot;
 import org.gradle.internal.snapshot.MissingFileSnapshot;
 import org.gradle.internal.vfs.FileSystemAccess;
@@ -41,8 +38,7 @@ import org.gradle.internal.vfs.FileSystemAccess;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.util.ArrayList;
-import java.util.List;
+import java.time.Duration;
 import java.util.Map;
 
 public class DefaultBuildCacheCommandFactory implements BuildCacheCommandFactory {
@@ -65,7 +61,7 @@ public class DefaultBuildCacheCommandFactory implements BuildCacheCommandFactory
     }
 
     @Override
-    public BuildCacheStoreCommand createStore(BuildCacheKey cacheKey, CacheableEntity entity, Map<String, ? extends FileSystemSnapshot> snapshots, long executionTime) {
+    public BuildCacheStoreCommand createStore(BuildCacheKey cacheKey, CacheableEntity entity, Map<String, ? extends FileSystemSnapshot> snapshots, Duration executionTime) {
         return new StoreCommand(cacheKey, entity, snapshots, executionTime);
     }
 
@@ -89,10 +85,11 @@ public class DefaultBuildCacheCommandFactory implements BuildCacheCommandFactory
             ImmutableList.Builder<String> roots = ImmutableList.builder();
             entity.visitOutputTrees((name, type, root) -> roots.add(root.getAbsolutePath()));
             // TODO: Actually unpack the roots inside of the action
-            fileSystemAccess.write(roots.build(), () -> {});
+            fileSystemAccess.write(roots.build(), () -> {
+            });
             BuildCacheEntryPacker.UnpackResult unpackResult = packer.unpack(entity, input, originMetadataFactory.createReader(entity));
             // TODO: Update the snapshots from the action
-            ImmutableSortedMap<String, CurrentFileCollectionFingerprint> snapshots = snapshotUnpackedData(unpackResult.getSnapshots());
+            ImmutableSortedMap<String, FileSystemSnapshot> snapshots = snapshotUnpackedData(unpackResult.getSnapshots());
             return new Result<LoadMetadata>() {
                 @Override
                 public long getArtifactEntryCount() {
@@ -108,7 +105,7 @@ public class DefaultBuildCacheCommandFactory implements BuildCacheCommandFactory
                         }
 
                         @Override
-                        public ImmutableSortedMap<String, CurrentFileCollectionFingerprint> getResultingSnapshots() {
+                        public ImmutableSortedMap<String, FileSystemSnapshot> getResultingSnapshots() {
                             return snapshots;
                         }
                     };
@@ -116,37 +113,22 @@ public class DefaultBuildCacheCommandFactory implements BuildCacheCommandFactory
             };
         }
 
-        private ImmutableSortedMap<String, CurrentFileCollectionFingerprint> snapshotUnpackedData(Map<String, ? extends CompleteFileSystemLocationSnapshot> treeSnapshots) {
-            ImmutableSortedMap.Builder<String, CurrentFileCollectionFingerprint> builder = ImmutableSortedMap.naturalOrder();
-            FingerprintingStrategy fingerprintingStrategy = AbsolutePathFingerprintingStrategy.IGNORE_MISSING;
+        private ImmutableSortedMap<String, FileSystemSnapshot> snapshotUnpackedData(Map<String, ? extends FileSystemLocationSnapshot> treeSnapshots) {
+            ImmutableSortedMap.Builder<String, FileSystemSnapshot> builder = ImmutableSortedMap.naturalOrder();
             entity.visitOutputTrees((treeName, type, root) -> {
-                CompleteFileSystemLocationSnapshot treeSnapshot = treeSnapshots.get(treeName);
-                String internedAbsolutePath = stringInterner.intern(root.getAbsolutePath());
-                List<FileSystemSnapshot> roots = new ArrayList<>();
-
+                FileSystemLocationSnapshot treeSnapshot = treeSnapshots.get(treeName);
+                FileSystemLocationSnapshot resultingSnapshot;
                 if (treeSnapshot == null) {
-                    MissingFileSnapshot missingFileSnapshot = new MissingFileSnapshot(internedAbsolutePath, AccessType.DIRECT);
-                    fileSystemAccess.record(missingFileSnapshot);
-                    builder.put(treeName, fingerprintingStrategy.getEmptyFingerprint());
-                    return;
+                    String internedAbsolutePath = stringInterner.intern(root.getAbsolutePath());
+                    resultingSnapshot = new MissingFileSnapshot(internedAbsolutePath, AccessType.DIRECT);
+                } else {
+                    if (type == TreeType.FILE && treeSnapshot.getType() != FileType.RegularFile) {
+                        throw new IllegalStateException(String.format("Only a regular file should be produced by unpacking tree '%s', but saw a %s", treeName, treeSnapshot.getType()));
+                    }
+                    resultingSnapshot = treeSnapshot;
                 }
-
-                switch (type) {
-                    case FILE:
-                        if (treeSnapshot.getType() != FileType.RegularFile) {
-                            throw new IllegalStateException(String.format("Only a regular file should be produced by unpacking tree '%s', but saw a %s", treeName, treeSnapshot.getType()));
-                        }
-                        roots.add(treeSnapshot);
-                        fileSystemAccess.record(treeSnapshot);
-                        break;
-                    case DIRECTORY:
-                        roots.add(treeSnapshot);
-                        fileSystemAccess.record(treeSnapshot);
-                        break;
-                    default:
-                        throw new AssertionError();
-                }
-                builder.put(treeName, DefaultCurrentFileCollectionFingerprint.from(roots, fingerprintingStrategy));
+                fileSystemAccess.record(resultingSnapshot);
+                builder.put(treeName, resultingSnapshot);
             });
             return builder.build();
         }
@@ -156,13 +138,13 @@ public class DefaultBuildCacheCommandFactory implements BuildCacheCommandFactory
 
         private final BuildCacheKey cacheKey;
         private final CacheableEntity entity;
-        private final Map<String, ? extends FileSystemSnapshot> fingerprints;
-        private final long executionTime;
+        private final Map<String, ? extends FileSystemSnapshot> snapshots;
+        private final Duration executionTime;
 
-        private StoreCommand(BuildCacheKey cacheKey, CacheableEntity entity, Map<String, ? extends FileSystemSnapshot> fingerprints, long executionTime) {
+        private StoreCommand(BuildCacheKey cacheKey, CacheableEntity entity, Map<String, ? extends FileSystemSnapshot> snapshots, Duration executionTime) {
             this.cacheKey = cacheKey;
             this.entity = entity;
-            this.fingerprints = fingerprints;
+            this.snapshots = snapshots;
             this.executionTime = executionTime;
         }
 
@@ -173,7 +155,7 @@ public class DefaultBuildCacheCommandFactory implements BuildCacheCommandFactory
 
         @Override
         public BuildCacheStoreCommand.Result store(OutputStream output) throws IOException {
-            final BuildCacheEntryPacker.PackResult packResult = packer.pack(entity, fingerprints, output, originMetadataFactory.createWriter(entity, executionTime));
+            final BuildCacheEntryPacker.PackResult packResult = packer.pack(entity, snapshots, output, originMetadataFactory.createWriter(entity, executionTime));
             return packResult::getEntries;
         }
     }

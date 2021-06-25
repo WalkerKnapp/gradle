@@ -27,6 +27,7 @@ import org.gradle.api.internal.tasks.DefaultTaskDependency
 import org.gradle.api.internal.tasks.TaskDependencyFactory
 import org.gradle.api.internal.tasks.TaskDependencyResolveContext
 import org.gradle.api.internal.tasks.TaskResolver
+import spock.lang.Unroll
 
 import java.util.concurrent.Callable
 import java.util.function.Consumer
@@ -50,7 +51,7 @@ class DefaultConfigurableFileCollectionSpec extends FileCollectionSpec {
         return new DefaultConfigurableFileCollection("<display>", resolver, taskDependencyFactory, patternSetFactory, host).from(files)
     }
 
-    def resolvesSpecifiedFilesUsingFileResolver() {
+    def "resolves specified files using file resolver"() {
         given:
         def file1 = new File("1")
         def file2 = new File("2")
@@ -67,14 +68,14 @@ class DefaultConfigurableFileCollectionSpec extends FileCollectionSpec {
         files as List == [file1, file2]
     }
 
-    def canAddPathsToTheCollection() {
+    def "can add paths to the collection"() {
         when:
         collection.from("src1", "src2")
         then:
         collection.from as List == ["src1", "src2"]
     }
 
-    def canSetThePathsOfTheCollection() {
+    def "can set the paths of the collection"() {
         given:
         collection.from("ignore-me")
 
@@ -89,7 +90,7 @@ class DefaultConfigurableFileCollectionSpec extends FileCollectionSpec {
         collection.from as List == [["a", "b"]]
     }
 
-    def canMutateTheFromCollection() {
+    def "can mutate the from collection"() {
         collection.from("src1", "src2")
         def from = collection.from
 
@@ -127,7 +128,7 @@ class DefaultConfigurableFileCollectionSpec extends FileCollectionSpec {
         collection.from as List == ['b']
     }
 
-    def resolvesSpecifiedPathsUsingFileResolver() {
+    def "resolves specified paths using file resolver"() {
         given:
         def file1 = new File("1")
         def file2 = new File("2")
@@ -142,7 +143,7 @@ class DefaultConfigurableFileCollectionSpec extends FileCollectionSpec {
         files as List == [file1, file2]
     }
 
-    def canUseAClosureToSpecifyTheContentsOfTheCollection() {
+    def "can use a closure to specify the contents of the collection"() {
         given:
         def file1 = new File("1")
         def file2 = new File("2")
@@ -166,7 +167,7 @@ class DefaultConfigurableFileCollectionSpec extends FileCollectionSpec {
         files as List == [file1, file2]
     }
 
-    def canUseAClosureToSpecifyASingleFile() {
+    def "can use a closure to specify a single file"() {
         given:
         def file = new File("1")
 
@@ -179,7 +180,7 @@ class DefaultConfigurableFileCollectionSpec extends FileCollectionSpec {
         files as List == [file]
     }
 
-    def closureCanReturnNull() {
+    def "closure can return null"() {
         when:
         collection.from({ null })
 
@@ -187,7 +188,7 @@ class DefaultConfigurableFileCollectionSpec extends FileCollectionSpec {
         collection.files.empty
     }
 
-    def canUseACollectionToSpecifyTheContentsOfTheCollection() {
+    def "can use a collection to specify the contents of the collection"() {
         given:
         def file1 = new File("1")
         def file2 = new File("2")
@@ -211,7 +212,7 @@ class DefaultConfigurableFileCollectionSpec extends FileCollectionSpec {
         files as List == [file1, file2]
     }
 
-    def canUseAnArrayToSpecifyTheContentsOfTheCollection() {
+    def "can use an array to specify the contents of the collection"() {
         given:
         def file1 = new File("1")
         def file2 = new File("2")
@@ -226,7 +227,7 @@ class DefaultConfigurableFileCollectionSpec extends FileCollectionSpec {
         files as List == [file1, file2]
     }
 
-    def canUseNestedObjectsToSpecifyTheContentsOfTheCollection() {
+    def "can use nested objects to specify the contents of the collection"() {
         given:
         def file1 = new File("1")
         def file2 = new File("2")
@@ -241,7 +242,7 @@ class DefaultConfigurableFileCollectionSpec extends FileCollectionSpec {
         files as List == [file1, file2]
     }
 
-    def canUseAFileCollectionWithChangingContentsToSpecifyTheContentsOfTheCollection() {
+    def "can use a file collection with changing contents to specify the contents of the collection"() {
         given:
         def file1 = new File("1")
         def file2 = new File("2")
@@ -264,7 +265,7 @@ class DefaultConfigurableFileCollectionSpec extends FileCollectionSpec {
         files == [file1, file2] as LinkedHashSet
     }
 
-    def canUseACallableToSpecifyTheContentsOfTheCollection() {
+    def "can use a callable to specify the contents of the collection"() {
         given:
         def file1 = new File("1")
         def file2 = new File("2")
@@ -281,7 +282,7 @@ class DefaultConfigurableFileCollectionSpec extends FileCollectionSpec {
         files as List == [file1, file2]
     }
 
-    def callableCanReturnNull() {
+    def "callable can return null"() {
         given:
         def callable = Mock(Callable)
 
@@ -295,7 +296,7 @@ class DefaultConfigurableFileCollectionSpec extends FileCollectionSpec {
         files.empty
     }
 
-    def canAppendContentsToEmptyCollectionUsingPlusOperator() {
+    def "can append contents to empty collection using plus operator"() {
         given:
         def file1 = new File("1")
         def file2 = new File("2")
@@ -309,7 +310,7 @@ class DefaultConfigurableFileCollectionSpec extends FileCollectionSpec {
         files as List == [file1, file2]
     }
 
-    def canAppendContentsToCollectionUsingPlusOperator() {
+    def "can append contents to collection using plus operator"() {
         given:
         def file1 = new File("1")
         def file2 = new File("2")
@@ -325,7 +326,7 @@ class DefaultConfigurableFileCollectionSpec extends FileCollectionSpec {
         files as List == [file1, file2]
     }
 
-    def canPrependContentsToEmptyCollectionUsingPlusOperator() {
+    def "can prepend contents to empty collection using plus operator"() {
         given:
         def file1 = new File("1")
         def file2 = new File("2")
@@ -339,7 +340,7 @@ class DefaultConfigurableFileCollectionSpec extends FileCollectionSpec {
         files as List == [file1, file2]
     }
 
-    def canPrependContentsToCollectionUsingPlusOperator() {
+    def "can prepend contents to collection using plus operator"() {
         given:
         def file1 = new File("1")
         def file2 = new File("2")
@@ -355,7 +356,7 @@ class DefaultConfigurableFileCollectionSpec extends FileCollectionSpec {
         files as List == [file1, file2]
     }
 
-    def elementsProviderTracksChangesToContent() {
+    def "elements provider tracks changes to content"() {
         given:
         def file1 = new File("1")
         def file2 = new File("2")
@@ -388,7 +389,7 @@ class DefaultConfigurableFileCollectionSpec extends FileCollectionSpec {
         0 * _
     }
 
-    def canGetAndSetTaskDependencies() {
+    def "can get and set task dependencies"() {
         given:
         def task = Mock(Task)
 
@@ -418,7 +419,7 @@ class DefaultConfigurableFileCollectionSpec extends FileCollectionSpec {
         0 * _
     }
 
-    def taskDependenciesContainsUnionOfDependenciesOfNestedFileCollectionsPlusOwnDependencies() {
+    def "task dependencies contains union of dependencies of nested file collections plus own dependencies"() {
         given:
         def fileCollectionMock = Mock(FileCollectionInternal)
         def taskA = Mock(Task)
@@ -437,7 +438,7 @@ class DefaultConfigurableFileCollectionSpec extends FileCollectionSpec {
         0 * _
     }
 
-    def hasSpecifiedDependenciesWhenEmpty() {
+    def "has specified dependencies when empty"() {
         given:
         def task = Stub(Task)
         collection.builtBy("task")
@@ -513,7 +514,7 @@ class DefaultConfigurableFileCollectionSpec extends FileCollectionSpec {
         0 * visitor._
     }
 
-    def resolvesPathToFileWhenFinalized() {
+    def "resolves path to file when finalized"() {
         given:
         def file = new File('one')
         collection.from('a')
@@ -535,7 +536,7 @@ class DefaultConfigurableFileCollectionSpec extends FileCollectionSpec {
         0 * fileResolver._
     }
 
-    def resolvesClosureToFilesWhenFinalized() {
+    def "resolves closure to files when finalized"() {
         given:
         def file1 = new File('one')
         def file2 = new File('two')
@@ -562,7 +563,7 @@ class DefaultConfigurableFileCollectionSpec extends FileCollectionSpec {
         0 * fileResolver._
     }
 
-    def resolvesCollectionToFilesWhenFinalized() {
+    def "resolves collection to files when finalized"() {
         given:
         def file1 = new File('one')
         def file2 = new File('two')
@@ -589,7 +590,7 @@ class DefaultConfigurableFileCollectionSpec extends FileCollectionSpec {
         0 * fileResolver._
     }
 
-    def cannotSpecifyPathsWhenFinalized() {
+    def "cannot specify paths when finalized"() {
         given:
         collection.from('a')
         _ * fileResolver.resolve('a') >> new File('a')
@@ -618,7 +619,7 @@ class DefaultConfigurableFileCollectionSpec extends FileCollectionSpec {
         e3.message == 'The value for <display> is final and cannot be changed.'
     }
 
-    def cannotMutateFromSetWhenFinalized() {
+    def "cannot mutate from set when finalized"() {
         given:
         collection.from('a')
         _ * fileResolver.resolve('a') >> new File('a')
@@ -654,7 +655,7 @@ class DefaultConfigurableFileCollectionSpec extends FileCollectionSpec {
         e4.message == 'The value for <display> is final and cannot be changed.'
     }
 
-    def cannotAddPathsWhenFinalized() {
+    def "cannot add paths when finalized"() {
         given:
         collection.from('a')
         _ * fileResolver.resolve('a') >> new File('a')
@@ -669,7 +670,7 @@ class DefaultConfigurableFileCollectionSpec extends FileCollectionSpec {
         e.message == 'The value for <display> is final and cannot be changed.'
     }
 
-    def resolvesPathToFileWhenQueriedAfterImplicitlyFinalized() {
+    def "resolves path to file when queried after implicitly finalized"() {
         given:
         def file = new File('one')
         collection.from('a')
@@ -700,7 +701,7 @@ class DefaultConfigurableFileCollectionSpec extends FileCollectionSpec {
         0 * fileResolver._
     }
 
-    def resolvesClosureToFilesWhenQueriedAfterImplicitlyFinalized() {
+    def "resolves closure to files when queried after implicitly finalized"() {
         given:
         def file1 = new File('one')
         def file2 = new File('two')
@@ -737,7 +738,7 @@ class DefaultConfigurableFileCollectionSpec extends FileCollectionSpec {
         0 * fileResolver._
     }
 
-    def resolvesCollectionToFilesWhenQueriedAfterImplicitlyFinalized() {
+    def "resolves collection to files when queried after implicitly finalized"() {
         given:
         def file1 = new File('one')
         def file2 = new File('two')
@@ -774,7 +775,7 @@ class DefaultConfigurableFileCollectionSpec extends FileCollectionSpec {
         0 * fileResolver._
     }
 
-    def ignoresChangesToPathsAfterQueriedWhenImplicitlyFinalized() {
+    def "throws exception when changes to paths after queried when implicitly finalized"() {
         given:
         def file1 = new File('a')
         def file2 = new File('b')
@@ -793,16 +794,16 @@ class DefaultConfigurableFileCollectionSpec extends FileCollectionSpec {
         collection.setFrom('some', 'more')
 
         then:
-        collection.files as List == [file1, file2]
+        thrown IllegalStateException
 
         when:
         collection.setFrom(['some', 'more'])
 
         then:
-        collection.files as List == [file1, file2]
+        thrown IllegalStateException
     }
 
-    def ignoresAdditionsToPathsAfterQueriedWhenImplicitlyFinalized() {
+    def "throws exception when additions to paths after queried when implicitly finalized"() {
         given:
         def file1 = new File('a')
         def file2 = new File('b')
@@ -821,10 +822,10 @@ class DefaultConfigurableFileCollectionSpec extends FileCollectionSpec {
         collection.from('some', 'more')
 
         then:
-        collection.files as List == [file1, file2]
+        thrown IllegalStateException
     }
 
-    def ignoresMutationsOfFromSetAfterQueriedWhenImplicitlyFinalized() {
+    def "throws exception when mutations of from set after queried when implicitly finalized"() {
         given:
         def file1 = new File('a')
         def file2 = new File('b')
@@ -843,28 +844,28 @@ class DefaultConfigurableFileCollectionSpec extends FileCollectionSpec {
         collection.from.clear()
 
         then:
-        collection.files as List == [file1, file2]
+        thrown IllegalStateException
 
         when:
         collection.from.add('c')
 
         then:
-        collection.files as List == [file1, file2]
+        thrown IllegalStateException
 
         when:
         collection.from.remove('a')
 
         then:
-        collection.files as List == [file1, file2]
+        thrown IllegalStateException
 
         when:
         collection.from.iterator().remove()
 
         then:
-        collection.files as List == [file1, file2]
+        thrown IllegalStateException
     }
 
-    def resolvesPathToFileWhenQueriedAfterFinalizeOnRead() {
+    def "resolves path to file when queried after finalize on read"() {
         given:
         def file = new File('one')
         collection.from('a')
@@ -895,7 +896,7 @@ class DefaultConfigurableFileCollectionSpec extends FileCollectionSpec {
         0 * fileResolver._
     }
 
-    def resolvesClosureToFilesWhenQueriedAfterFinalizeOnRead() {
+    def "resolves closure to files when queried after finalize on read"() {
         given:
         def file1 = new File('one')
         def file2 = new File('two')
@@ -932,7 +933,7 @@ class DefaultConfigurableFileCollectionSpec extends FileCollectionSpec {
         0 * fileResolver._
     }
 
-    def resolvesCollectionToFilesWhenQueriedAfterFinalizeOnRead() {
+    def "resolves collection to files when queried after finalize on read"() {
         given:
         def file1 = new File('one')
         def file2 = new File('two')
@@ -969,7 +970,7 @@ class DefaultConfigurableFileCollectionSpec extends FileCollectionSpec {
         0 * fileResolver._
     }
 
-    def canSpecifyPathsBeforeQueriedAndFinalizeOnRead() {
+    def "can specify paths before queried and finalize on read"() {
         given:
         def file = new File('one')
         collection.finalizeValueOnRead()
@@ -991,7 +992,7 @@ class DefaultConfigurableFileCollectionSpec extends FileCollectionSpec {
         files as List == [file]
     }
 
-    def canAddPathsBeforeQueriedAndFinalizeOnRead() {
+    def "can add paths before queried and finalize on read"() {
         given:
         def file = new File('one')
         collection.finalizeValueOnRead()
@@ -1013,7 +1014,7 @@ class DefaultConfigurableFileCollectionSpec extends FileCollectionSpec {
         files as List == [file]
     }
 
-    def canMutateFromSetBeforeQueriedAndFinalizeOnRead() {
+    def "can mutate from set before queried and finalize on read"() {
         given:
         def file = new File('one')
         collection.finalizeValueOnRead()
@@ -1102,7 +1103,7 @@ class DefaultConfigurableFileCollectionSpec extends FileCollectionSpec {
         0 * childVisitor._
     }
 
-    def cannotSpecifyPathsWhenQueriedAfterFinalizeOnRead() {
+    def "cannot specify paths when queried after finalize on read"() {
         given:
         collection.from('a')
         _ * fileResolver.resolve('a') >> new File('a')
@@ -1125,7 +1126,7 @@ class DefaultConfigurableFileCollectionSpec extends FileCollectionSpec {
         e2.message == 'The value for <display> is final and cannot be changed.'
     }
 
-    def cannotAddPathsWhenQueriedAfterFinalizeOnRead() {
+    def "cannot add paths when queried after finalize on read"() {
         given:
         collection.from('a')
         _ * fileResolver.resolve('a') >> new File('a')
@@ -1148,7 +1149,7 @@ class DefaultConfigurableFileCollectionSpec extends FileCollectionSpec {
         e2.message == 'The value for <display> is final and cannot be changed.'
     }
 
-    def cannotMutateFromSetWhenQueriedAfterFinalizeOnRead() {
+    def "cannot mutate from set when queried after finalize on read"() {
         given:
         collection.from('a')
         _ * fileResolver.resolve('a') >> new File('a')
@@ -1185,7 +1186,7 @@ class DefaultConfigurableFileCollectionSpec extends FileCollectionSpec {
         e4.message == 'The value for <display> is final and cannot be changed.'
     }
 
-    def cannotSpecifyPathsWhenChangesDisallowed() {
+    def "cannot specify paths when changes disallowed"() {
         given:
         collection.from('a')
 
@@ -1206,7 +1207,7 @@ class DefaultConfigurableFileCollectionSpec extends FileCollectionSpec {
         e2.message == 'The value for <display> cannot be changed.'
     }
 
-    def cannotMutateFromSetWhenChangesDisallowed() {
+    def "cannot mutate from set when changes disallowed"() {
         given:
         collection.from('a')
 
@@ -1241,7 +1242,7 @@ class DefaultConfigurableFileCollectionSpec extends FileCollectionSpec {
         e4.message == 'The value for <display> cannot be changed.'
     }
 
-    def cannotAddPathsWhenChangesDisallowed() {
+    def "cannot add paths when changes disallowed"() {
         given:
         collection.from('a')
 
@@ -1255,7 +1256,7 @@ class DefaultConfigurableFileCollectionSpec extends FileCollectionSpec {
         e.message == 'The value for <display> cannot be changed.'
     }
 
-    def cannotSpecifyPathsWhenChangesDisallowedAndImplicitlyFinalized() {
+    def "cannot specify paths when changes disallowed and implicitly finalized"() {
         given:
         collection.from('a')
 
@@ -1277,7 +1278,7 @@ class DefaultConfigurableFileCollectionSpec extends FileCollectionSpec {
         e2.message == 'The value for <display> cannot be changed.'
     }
 
-    def resolvesClosureToFilesWhenChangesDisallowed() {
+    def "resolves closure to files when changes disallowed"() {
         given:
         def file1 = new File('one')
         def file2 = new File('two')
@@ -1305,7 +1306,7 @@ class DefaultConfigurableFileCollectionSpec extends FileCollectionSpec {
         0 * fileResolver._
     }
 
-    def canFinalizeWhenAlreadyFinalized() {
+    def "can finalize when already finalized"() {
         given:
         def file = new File('one')
         collection.from('a')
@@ -1324,7 +1325,7 @@ class DefaultConfigurableFileCollectionSpec extends FileCollectionSpec {
         0 * fileResolver._
     }
 
-    def canImplicitlyFinalizeWhenAlreadyFinalized() {
+    def "can implicitly finalize when already finalized"() {
         given:
         def file = new File('one')
         collection.from('a')
@@ -1343,7 +1344,7 @@ class DefaultConfigurableFileCollectionSpec extends FileCollectionSpec {
         0 * fileResolver._
     }
 
-    def canFinalizeWhenAlreadyImplicitlyFinalizedButNotQueried() {
+    def "can finalize when already implicitly finalized but not queried"() {
         given:
         def file = new File('one')
         collection.from('a')
@@ -1362,7 +1363,7 @@ class DefaultConfigurableFileCollectionSpec extends FileCollectionSpec {
         0 * fileResolver._
     }
 
-    def canFinalizeWhenAlreadyImplicitlyFinalized() {
+    def "can finalize when already implicitly finalized"() {
         given:
         def file = new File('one')
         collection.from('a')
@@ -1387,7 +1388,7 @@ class DefaultConfigurableFileCollectionSpec extends FileCollectionSpec {
         0 * fileResolver._
     }
 
-    def cannotQueryFilesWhenUnsafeReadsDisallowedAndHostIsNotReady() {
+    def "cannot query files when unsafe reads disallowed and host is not ready"() {
         given:
         def file = new File('one')
         collection.from('a')
@@ -1416,7 +1417,7 @@ class DefaultConfigurableFileCollectionSpec extends FileCollectionSpec {
         0 * _
     }
 
-    def cannotQueryElementsWhenUnsafeReadsDisallowedAndHostIsNotReady() {
+    def "cannot query elements when unsafe reads disallowed and host is not ready"() {
         given:
         def file = new File('one')
         collection.from('a')
@@ -1451,7 +1452,7 @@ class DefaultConfigurableFileCollectionSpec extends FileCollectionSpec {
         0 * _
     }
 
-    def cannotFinalizeValueWhenUnsafeReadsDisallowedAndHostIsNotReady() {
+    def "cannot finalize value when unsafe reads disallowed and host is not ready"() {
         given:
         def file = new File('one')
         collection.from('a')
@@ -1486,7 +1487,7 @@ class DefaultConfigurableFileCollectionSpec extends FileCollectionSpec {
         0 * _
     }
 
-    def canFinalizeOnNextReadWhenUnsafeReadsDisallowedAndHostIsNotReady() {
+    def "can finalize on next read when unsafe reads disallowed and host is not ready"() {
         given:
         def file = new File('one')
         collection.from('a')
@@ -1510,7 +1511,7 @@ class DefaultConfigurableFileCollectionSpec extends FileCollectionSpec {
         result == [file] as Set
     }
 
-    def canDisallowChangesWhenUnsafeReadsDisallowedAndHostIsNotReady() {
+    def "can disallow changes when unsafe reads disallowed and host is not ready"() {
         given:
         def file = new File('one')
         collection.from('a')
@@ -1570,5 +1571,27 @@ class DefaultConfigurableFileCollectionSpec extends FileCollectionSpec {
         expect:
         def replaced = collection.replace(collection1, {})
         replaced.is(collection)
+    }
+
+    @Unroll
+    def "can clear the collection via #action"() {
+        given:
+        collection.setFrom('file')
+
+        when:
+        actOn(collection)
+        def result = collection.files
+
+        then:
+        result == [] as Set
+
+        and:
+        0 * fileResolver.resolve('file')
+
+        where:
+        action         | actOn
+        'setFrom()'    | { it.setFrom() }
+        'setFrom([])'  | { it.setFrom([]) }
+        'setFrom(*[])' | { it.setFrom(*[]) }
     }
 }

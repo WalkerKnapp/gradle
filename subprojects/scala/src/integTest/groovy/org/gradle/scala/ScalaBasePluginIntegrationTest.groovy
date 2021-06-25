@@ -15,7 +15,6 @@
  */
 package org.gradle.scala
 
-import org.gradle.integtests.fixtures.ToBeFixedForConfigurationCache
 import org.gradle.integtests.fixtures.ZincScalaCompileFixture
 import org.gradle.integtests.fixtures.MultiVersionIntegrationSpec
 import org.gradle.integtests.fixtures.TargetCoverage
@@ -78,8 +77,8 @@ task scaladoc(type: ScalaDoc) {
 
 task verify {
     doLast {
-        assert configurations.customCompile.state.toString() == "UNRESOLVED"
-        assert configurations.customRuntime.state.toString() == "UNRESOLVED"
+        assert configurations.customCompileClasspath.state.toString() == "UNRESOLVED"
+        assert configurations.customRuntimeClasspath.state.toString() == "UNRESOLVED"
     }
 }
         """
@@ -88,7 +87,6 @@ task verify {
         succeeds("verify")
     }
 
-    @ToBeFixedForConfigurationCache
     def "not specifying a scala runtime produces decent error message"() {
         given:
         buildFile << """

@@ -18,17 +18,23 @@ package org.gradle.api.tasks
 
 import org.gradle.api.file.DirectoryProperty
 import org.gradle.api.file.RegularFileProperty
-import org.gradle.initialization.StartParameterBuildOptions.BuildCacheDebugLoggingOption
 import org.gradle.integtests.fixtures.AbstractIntegrationSpec
 import org.gradle.integtests.fixtures.DirectoryBuildCacheFixture
 import org.gradle.integtests.fixtures.ToBeFixedForConfigurationCache
 import org.gradle.integtests.fixtures.UnsupportedWithConfigurationCache
+import org.gradle.internal.reflect.problems.ValidationProblemId
+import org.gradle.internal.reflect.validation.ValidationMessageChecker
+import org.gradle.internal.reflect.validation.ValidationTestFor
 import org.gradle.test.fixtures.file.TestFile
-import org.gradle.util.ToBeImplemented
+import org.gradle.util.internal.ToBeImplemented
 import spock.lang.Issue
 import spock.lang.Unroll
 
-class NestedInputIntegrationTest extends AbstractIntegrationSpec implements DirectoryBuildCacheFixture {
+class NestedInputIntegrationTest extends AbstractIntegrationSpec implements DirectoryBuildCacheFixture, ValidationMessageChecker {
+
+    def setup() {
+        expectReindentedValidationMessage()
+    }
 
     @Unroll
     def "nested #type.simpleName input adds a task dependency"() {
@@ -41,7 +47,11 @@ class NestedInputIntegrationTest extends AbstractIntegrationSpec implements Dire
             class NestedBeanWithInput {
                 @Input${kind}
                 @PathSensitive(PathSensitivity.NONE)
-                ${type.name} input
+                final ${type.name} input
+
+                NestedBeanWithInput(${type.name} input) {
+                    this.input = input
+                }
             }
 
             class GeneratorTask extends DefaultTask {
@@ -59,7 +69,7 @@ class NestedInputIntegrationTest extends AbstractIntegrationSpec implements Dire
             }
 
             task consumer(type: TaskWithNestedProperty) {
-                bean = new NestedBeanWithInput(input: project.objects.${factory}())
+                bean = new NestedBeanWithInput(project.objects.${factory}())
                 bean.input.set(generator.output)
             }
         """
@@ -122,7 +132,11 @@ class NestedInputIntegrationTest extends AbstractIntegrationSpec implements Dire
 
             class NestedBeanWithInput {
                 @InputFile
-                RegularFileProperty file
+                final RegularFileProperty file
+
+                NestedBeanWithInput(RegularFileProperty file) {
+                    this.file = file
+                }
             }
 
             class GeneratorTask extends DefaultTask {
@@ -140,7 +154,7 @@ class NestedInputIntegrationTest extends AbstractIntegrationSpec implements Dire
             }
 
             task consumer(type: TaskWithNestedProperty) {
-                bean = new NestedBeanWithInput(file: generator.outputFile)
+                bean = new NestedBeanWithInput(generator.outputFile)
             }
         """
 
@@ -449,6 +463,9 @@ class NestedInputIntegrationTest extends AbstractIntegrationSpec implements Dire
         failure.assertHasCause("BOOM")
     }
 
+    @ValidationTestFor(
+        ValidationProblemId.VALUE_NOT_SET
+    )
     def "null on nested bean is validated"() {
         buildFile << """
             class TaskWithAbsentNestedInput extends DefaultTask {
@@ -475,7 +492,7 @@ class NestedInputIntegrationTest extends AbstractIntegrationSpec implements Dire
         expect:
         fails "myTask"
         failure.assertHasDescription("A problem was found with the configuration of task ':myTask' (type 'TaskWithAbsentNestedInput').")
-        failure.assertHasCause("No value has been specified for property 'nested'.")
+        failureDescriptionContains(missingValueMessage { type('TaskWithAbsentNestedInput').property('nested') })
     }
 
     def "null on optional nested bean is allowed"() {
@@ -760,32 +777,33 @@ class NestedInputIntegrationTest extends AbstractIntegrationSpec implements Dire
         """
     }
 
-    def "task with nested bean loaded with custom classloader is not cached"() {
-        file("input.txt").text = "data"
-        buildFile << taskWithNestedBeanFromCustomClassLoader()
-
-        when:
-        withBuildCache().run "customTask", "--info", "-D${BuildCacheDebugLoggingOption.GRADLE_PROPERTY}=true"
-        then:
-        output.contains "Caching disabled for task ':customTask' because:\n" +
-            "  Non-cacheable inputs: property 'bean' was loaded with an unknown classloader (class 'NestedBean')."
-    }
-
+    @ValidationTestFor(
+        ValidationProblemId.UNKNOWN_IMPLEMENTATION
+    )
     @ToBeFixedForConfigurationCache(because = "uses custom GroovyClassLoader")
-    def "task with nested bean loaded with custom classloader is never up-to-date"() {
+    def "task with nested bean loaded with custom classloader disables execution optimizations"() {
         file("input.txt").text = "data"
         buildFile << taskWithNestedBeanFromCustomClassLoader()
 
         when:
+        expectThatExecutionOptimizationDisabledWarningIsDisplayed(executer, implementationUnknown {
+            nestedProperty('bean')
+            unknownClassloader('NestedBean')
+            includeLink()
+        })
         run "customTask"
         then:
         executedAndNotSkipped ":customTask"
 
         when:
-        run "customTask", "--info"
+        expectThatExecutionOptimizationDisabledWarningIsDisplayed(executer, implementationUnknown {
+            nestedProperty('bean')
+            unknownClassloader('NestedBean')
+            includeLink()
+        })
+        run "customTask"
         then:
         executedAndNotSkipped ":customTask"
-        output.contains "Implementation of input property 'bean' has changed for task ':customTask'"
     }
 
     def "changes to nested domain object container are tracked"() {

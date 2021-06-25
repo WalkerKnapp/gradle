@@ -17,25 +17,28 @@
 package org.gradle.configurationcache.fingerprint
 
 import org.gradle.api.execution.internal.TaskInputsListeners
-import org.gradle.api.internal.TaskInternal
+import org.gradle.api.internal.file.FileCollectionFactory
 import org.gradle.api.internal.file.FileCollectionInternal
+import org.gradle.api.internal.file.collections.DirectoryFileTreeFactory
 import org.gradle.api.internal.provider.DefaultValueSourceProviderFactory
 import org.gradle.api.internal.provider.ValueSourceProviderFactory
 import org.gradle.configurationcache.BuildTreeListenerManager
 import org.gradle.configurationcache.extensions.hashCodeOf
-import org.gradle.configurationcache.extensions.serviceOf
 import org.gradle.configurationcache.initialization.ConfigurationCacheStartParameter
 import org.gradle.configurationcache.serialization.DefaultWriteContext
 import org.gradle.configurationcache.serialization.ReadContext
 import org.gradle.internal.concurrent.Stoppable
 import org.gradle.internal.event.ListenerManager
-import org.gradle.internal.fingerprint.impl.AbsolutePathFileCollectionFingerprinter
+import org.gradle.internal.execution.fingerprint.FileCollectionFingerprinterRegistry
+import org.gradle.internal.execution.fingerprint.impl.DefaultFileNormalizationSpec
+import org.gradle.internal.fingerprint.AbsolutePathInputNormalizer
+import org.gradle.internal.fingerprint.DirectorySensitivity
 import org.gradle.internal.hash.HashCode
 import org.gradle.internal.service.scopes.Scopes
 import org.gradle.internal.service.scopes.ServiceScope
 import org.gradle.internal.vfs.FileSystemAccess
-import org.gradle.util.BuildCommencedTimeProvider
-import org.gradle.util.GFileUtils
+import org.gradle.util.internal.BuildCommencedTimeProvider
+import org.gradle.util.internal.GFileUtils
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.OutputStream
@@ -51,11 +54,16 @@ class ConfigurationCacheFingerprintController internal constructor(
     private val taskInputsListeners: TaskInputsListeners,
     private val valueSourceProviderFactory: ValueSourceProviderFactory,
     private val fileSystemAccess: FileSystemAccess,
-    private val fileCollectionFingerprinter: AbsolutePathFileCollectionFingerprinter,
+    private val fingerprinterRegistry: FileCollectionFingerprinterRegistry,
     private val buildCommencedTimeProvider: BuildCommencedTimeProvider,
     private val listenerManager: ListenerManager,
-    private val buildTreeListenerManager: BuildTreeListenerManager
+    private val buildTreeListenerManager: BuildTreeListenerManager,
+    private val fileCollectionFactory: FileCollectionFactory,
+    private val directoryFileTreeFactory: DirectoryFileTreeFactory
 ) : Stoppable {
+
+    private
+    val fileCollectionFingerprinter = fingerprinterRegistry.getFingerprinter(DefaultFileNormalizationSpec.from(AbsolutePathInputNormalizer::class.java, DirectorySensitivity.DEFAULT))
 
     private
     abstract class WritingState {
@@ -66,7 +74,7 @@ class ConfigurationCacheFingerprintController internal constructor(
         open fun stop(): WritingState =
             illegalStateFor("stop")
 
-        open fun commit(fingerprintFile: File): WritingState =
+        open fun commit(outputStream: OutputStream): WritingState =
             illegalStateFor("commit")
 
         abstract fun dispose(): WritingState
@@ -83,7 +91,9 @@ class ConfigurationCacheFingerprintController internal constructor(
             val outputStream = ByteArrayOutputStream()
             val fingerprintWriter = ConfigurationCacheFingerprintWriter(
                 CacheFingerprintComponentHost(),
-                writeContextForOutputStream(outputStream)
+                writeContextForOutputStream(outputStream),
+                fileCollectionFactory,
+                directoryFileTreeFactory
             )
             addListener(fingerprintWriter)
             return Writing(fingerprintWriter, outputStream)
@@ -113,11 +123,9 @@ class ConfigurationCacheFingerprintController internal constructor(
         private val fingerprintWriter: ConfigurationCacheFingerprintWriter,
         private val outputStream: ByteArrayOutputStream
     ) : WritingState() {
-        override fun commit(fingerprintFile: File): WritingState {
+        override fun commit(outputStream: OutputStream): WritingState {
             dispose()
-            fingerprintFile
-                .outputStream()
-                .use(outputStream::writeTo)
+            this.outputStream.writeTo(outputStream)
             return Idle()
         }
 
@@ -139,8 +147,8 @@ class ConfigurationCacheFingerprintController internal constructor(
         writingState = writingState.stop()
     }
 
-    fun commitFingerprintTo(fingerprintFile: File) {
-        writingState = writingState.commit(fingerprintFile)
+    fun commitFingerprintTo(outputStream: OutputStream) {
+        writingState = writingState.commit(outputStream)
     }
 
     override fun stop() {
@@ -182,15 +190,7 @@ class ConfigurationCacheFingerprintController internal constructor(
         override fun hashCodeOf(file: File) =
             fileSystemAccess.hashCodeOf(file)
 
-        override fun fingerprintOf(
-            fileCollection: FileCollectionInternal,
-            owner: TaskInternal
-        ): HashCode =
-            fileCollectionFingerprinterFor(owner).fingerprint(fileCollection).hash
-
-        override fun fingerprintOf(
-            fileCollection: FileCollectionInternal
-        ): HashCode =
+        override fun fingerprintOf(fileCollection: FileCollectionInternal): HashCode =
             fileCollectionFingerprinter.fingerprint(fileCollection).hash
 
         override fun displayNameOf(fileOrDirectory: File): String =
@@ -202,10 +202,6 @@ class ConfigurationCacheFingerprintController internal constructor(
                 obtainedValue.valueSourceParametersType,
                 obtainedValue.valueSourceParameters
             )
-
-        private
-        fun fileCollectionFingerprinterFor(task: TaskInternal) =
-            task.serviceOf<AbsolutePathFileCollectionFingerprinter>()
 
         private
         val rootDirectory

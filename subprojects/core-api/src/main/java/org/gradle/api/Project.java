@@ -709,6 +709,7 @@ public interface Project extends Comparable<Project>, ExtensionAware, PluginAwar
      *
      * @param path The path to convert to a relative path.
      * @return The relative path. Never returns null.
+     * @throws IllegalArgumentException If the given path cannot be relativized against the project directory.
      */
     String relativePath(Object path);
 
@@ -1245,7 +1246,10 @@ public interface Project extends Comparable<Project>, ExtensionAware, PluginAwar
      * as if they were properties and methods of this project. See <a href="#properties">here</a> for more details</p>
      *
      * @return The <code>Convention</code>. Never returns null.
+     * @deprecated The concept of conventions is deprecated. Use extensions if possible.
+     * @see ExtensionAware#getExtensions()
      */
+    @Deprecated
     Convention getConvention();
 
     /**

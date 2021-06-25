@@ -24,17 +24,20 @@ import org.gradle.internal.file.impl.DefaultFileMetadata
 import org.gradle.internal.fingerprint.impl.PatternSetSnapshottingFilter
 import org.gradle.internal.hash.HashCode
 import org.gradle.internal.nativeintegration.filesystem.FileSystem
-import org.gradle.internal.snapshot.CompleteDirectorySnapshot
-import org.gradle.internal.snapshot.CompleteFileSystemLocationSnapshot
+import org.gradle.internal.snapshot.DirectorySnapshot
+import org.gradle.internal.snapshot.FileSystemLocationSnapshot
 import org.gradle.internal.snapshot.FileSystemSnapshot
-import org.gradle.internal.snapshot.FileSystemSnapshotVisitor
+import org.gradle.internal.snapshot.FileSystemSnapshotHierarchyVisitor
 import org.gradle.internal.snapshot.RegularFileSnapshot
+import org.gradle.internal.snapshot.SnapshotVisitResult
 import org.gradle.internal.snapshot.SnapshottingFilter
 import org.gradle.internal.vfs.FileSystemAccess
 import org.gradle.test.fixtures.file.CleanupTestDirectory
 import org.gradle.test.fixtures.file.TestNameTestDirectoryProvider
 import org.junit.Rule
 import spock.lang.Specification
+
+import static org.gradle.internal.snapshot.SnapshotVisitResult.CONTINUE
 
 @CleanupTestDirectory
 class FileSystemSnapshotFilterTest extends Specification {
@@ -55,7 +58,7 @@ class FileSystemSnapshotFilterTest extends Specification {
         def subdir = dir1.createDir("subdir")
         def subdirFile1 = subdir.createFile("subdirFile1")
 
-        MutableReference<CompleteFileSystemLocationSnapshot> result = MutableReference.empty()
+        MutableReference<FileSystemLocationSnapshot> result = MutableReference.empty()
         fileSystemAccess.read(root.getAbsolutePath(), snapshottingFilter(new PatternSet()), result.&set)
         def unfiltered = result.get()
 
@@ -73,9 +76,10 @@ class FileSystemSnapshotFilterTest extends Specification {
 
     def "root directory is always matched"() {
         def root = temporaryFolder.createFile("root")
+        def unfiltered = new DirectorySnapshot(root.absolutePath, root.name, AccessType.DIRECT, HashCode.fromInt(789), [])
 
         expect:
-        filteredPaths(new CompleteDirectorySnapshot(root.absolutePath, root.name, [], HashCode.fromInt(789), AccessType.DIRECT), include("different")) == [root] as Set
+        filteredPaths(unfiltered, include("different")) == [root] as Set
     }
 
     def "root file can be filtered"() {
@@ -94,30 +98,24 @@ class FileSystemSnapshotFilterTest extends Specification {
         dir1.createFile("dirFile1")
         dir1.createFile("dirFile2")
 
-        MutableReference<CompleteFileSystemLocationSnapshot> result = MutableReference.empty()
+        MutableReference<FileSystemLocationSnapshot> result = MutableReference.empty()
         fileSystemAccess.read(root.getAbsolutePath(), snapshottingFilter(new PatternSet()), result.&set)
         def unfiltered = result.get()
 
-        expect:
-        FileSystemSnapshotFilter.filterSnapshot(snapshottingFilter(include("**/*File*")).asSnapshotPredicate, unfiltered).is(unfiltered)
+        when:
+        def filtered = FileSystemSnapshotFilter.filterSnapshot(snapshottingFilter(include("**/*File*")).asSnapshotPredicate, unfiltered)
+
+        then:
+        filtered.is(unfiltered)
     }
 
     private Set<File> filteredPaths(FileSystemSnapshot unfiltered, PatternSet patterns) {
         def result = [] as Set
-        FileSystemSnapshotFilter.filterSnapshot(snapshottingFilter(patterns).asSnapshotPredicate, unfiltered).accept(new FileSystemSnapshotVisitor() {
-            @Override
-            boolean preVisitDirectory(CompleteDirectorySnapshot directorySnapshot) {
-                result << new File(directorySnapshot.absolutePath)
-                return true
-            }
-
-            @Override
-            void visitFile(CompleteFileSystemLocationSnapshot fileSnapshot) {
-                result << new File(fileSnapshot.absolutePath)
-            }
-
-            @Override
-            void postVisitDirectory(CompleteDirectorySnapshot directorySnapshot) {
+        def filtered = FileSystemSnapshotFilter.filterSnapshot(snapshottingFilter(patterns).asSnapshotPredicate, unfiltered)
+        filtered.accept(new FileSystemSnapshotHierarchyVisitor() {
+            SnapshotVisitResult visitEntry(FileSystemLocationSnapshot snapshot) {
+                result << new File(snapshot.absolutePath)
+                return CONTINUE
             }
         })
         return result

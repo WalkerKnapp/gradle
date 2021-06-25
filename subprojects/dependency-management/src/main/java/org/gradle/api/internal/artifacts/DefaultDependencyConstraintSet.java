@@ -43,16 +43,21 @@ public class DefaultDependencyConstraintSet extends DelegatingDomainObjectSet<De
     }
 
     @Override
-    public boolean add(final DependencyConstraint dependencyConstraints) {
+    public boolean add(final DependencyConstraint dependencyConstraint) {
         warnIfConfigurationIsDeprecated();
-        return super.add(dependencyConstraints);
+        return addInternalDependencyConstraint(dependencyConstraint);
+    }
+
+    // For internal use only, allows adding a dependency constraint without issuing a deprecation warning
+    public boolean addInternalDependencyConstraint(DependencyConstraint dependencyConstraint) {
+        return super.add(dependencyConstraint);
     }
 
     private void warnIfConfigurationIsDeprecated() {
         List<String> alternatives = ((DeprecatableConfiguration) clientConfiguration).getDeclarationAlternatives();
         if (alternatives != null) {
             DeprecationLogger.deprecateConfiguration(clientConfiguration.getName()).forDependencyDeclaration().replaceWith(alternatives)
-                .willBecomeAnErrorInGradle7()
+                .willBecomeAnErrorInGradle8()
                 .withUpgradeGuideSection(5, "dependencies_should_no_longer_be_declared_using_the_compile_and_runtime_configurations")
                 .nagUser();
         }

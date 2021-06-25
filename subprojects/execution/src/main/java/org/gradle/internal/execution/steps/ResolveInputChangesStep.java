@@ -16,37 +16,38 @@
 
 package org.gradle.internal.execution.steps;
 
-import org.gradle.internal.execution.IncrementalChangesContext;
-import org.gradle.internal.execution.InputChangesContext;
-import org.gradle.internal.execution.Result;
-import org.gradle.internal.execution.Step;
+import com.google.common.collect.ImmutableSortedMap;
 import org.gradle.internal.execution.UnitOfWork;
+import org.gradle.internal.execution.WorkValidationContext;
 import org.gradle.internal.execution.history.AfterPreviousExecutionState;
 import org.gradle.internal.execution.history.BeforeExecutionState;
+import org.gradle.internal.execution.history.ExecutionHistoryStore;
 import org.gradle.internal.execution.history.changes.ExecutionStateChanges;
 import org.gradle.internal.execution.history.changes.InputChangesInternal;
+import org.gradle.internal.fingerprint.CurrentFileCollectionFingerprint;
+import org.gradle.internal.snapshot.ValueSnapshot;
 import org.gradle.work.InputChanges;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.File;
 import java.util.Optional;
 
-public class ResolveInputChangesStep<C extends IncrementalChangesContext> implements Step<C, Result> {
+public class ResolveInputChangesStep<C extends IncrementalChangesContext, R extends Result> implements Step<C, R> {
     private static final Logger LOGGER = LoggerFactory.getLogger(ResolveInputChangesStep.class);
 
-    private final Step<? super InputChangesContext, ? extends Result> delegate;
+    private final Step<? super InputChangesContext, ? extends R> delegate;
 
-    public ResolveInputChangesStep(Step<? super InputChangesContext, ? extends Result> delegate) {
+    public ResolveInputChangesStep(Step<? super InputChangesContext, ? extends R> delegate) {
         this.delegate = delegate;
     }
 
     @Override
-    public Result execute(C context) {
-        UnitOfWork work = context.getWork();
+    public R execute(UnitOfWork work, C context) {
         Optional<InputChangesInternal> inputChanges = work.getInputChangeTrackingStrategy().requiresInputChanges()
             ? Optional.of(determineInputChanges(work, context))
             : Optional.empty();
-        return delegate.execute(new InputChangesContext() {
+        return delegate.execute(work, new InputChangesContext() {
             @Override
             public Optional<InputChangesInternal> getInputChanges() {
                 return inputChanges;
@@ -63,18 +64,48 @@ public class ResolveInputChangesStep<C extends IncrementalChangesContext> implem
             }
 
             @Override
+            public WorkValidationContext getValidationContext() {
+                return context.getValidationContext();
+            }
+
+            @Override
+            public ImmutableSortedMap<String, ValueSnapshot> getInputProperties() {
+                return context.getInputProperties();
+            }
+
+            @Override
+            public ImmutableSortedMap<String, CurrentFileCollectionFingerprint> getInputFileProperties() {
+                return context.getInputFileProperties();
+            }
+
+            @Override
+            public UnitOfWork.Identity getIdentity() {
+                return context.getIdentity();
+            }
+
+            @Override
+            public File getWorkspace() {
+                return context.getWorkspace();
+            }
+
+            @Override
+            public Optional<ExecutionHistoryStore> getHistory() {
+                return context.getHistory();
+            }
+
+            @Override
             public Optional<AfterPreviousExecutionState> getAfterPreviousExecutionState() {
                 return context.getAfterPreviousExecutionState();
             }
 
             @Override
-            public Optional<BeforeExecutionState> getBeforeExecutionState() {
-                return context.getBeforeExecutionState();
+            public Optional<ValidationResult> getValidationProblems() {
+                return context.getValidationProblems();
             }
 
             @Override
-            public UnitOfWork getWork() {
-                return work;
+            public Optional<BeforeExecutionState> getBeforeExecutionState() {
+                return context.getBeforeExecutionState();
             }
         });
     }

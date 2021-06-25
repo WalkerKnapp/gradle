@@ -63,6 +63,19 @@ empty=c
         !lockDir.exists()
     }
 
+    def 'deletes an unique lock file on empty lock state'() {
+        def uniqueLockfile = tmpDir.file(LockFileReaderWriter.UNIQUE_LOCKFILE_NAME)
+
+        given:
+        uniqueLockfile << 'Some file content'
+
+        when:
+        lockFileReaderWriter.writeUniqueLockfile(Collections.emptyMap());
+
+        then:
+        !uniqueLockfile.exists()
+    }
+
     def 'writes dependencies and configurations sorted in the unique lock file'() {
         when:
         lockFileReaderWriter.writeUniqueLockfile([b: ['foo', 'bar'], d: ['bar', 'foobar'],a: ['foo'], e: [], f: [], c: []])
@@ -77,32 +90,21 @@ empty=c,e,f
     }
 
     def 'writes a unique lock file to a custom location'() {
-        def lockFile = tmpDir.file('different', 'lock.file')
+        def testLockFile = tmpDir.file('different', 'lock.file')
         lockDir.deleteDir()
         given:
-        this.lockFile.set(lockFile)
+        lockFile.set(testLockFile)
 
         when:
         lockFileReaderWriter.writeUniqueLockfile([a: ['foo', 'bar'], b: ['foo'], c: []])
 
         then:
-        lockFile.text == """${LockFileReaderWriter.LOCKFILE_HEADER_LIST.join('\n')}
+        testLockFile.text == """${LockFileReaderWriter.LOCKFILE_HEADER_LIST.join('\n')}
 bar=a
 foo=a,b
 empty=c
 """.denormalize()
         !lockDir.exists()
-    }
-
-    def 'writes a legacy lock file on persist'() {
-        when:
-        lockFileReaderWriter.writeLockFile('conf', ['line1', 'line2'])
-
-        then:
-        lockDir.file('conf.lockfile').text == """${LockFileReaderWriter.LOCKFILE_HEADER_LIST.join('\n')}
-line1
-line2
-""".denormalize()
     }
 
     def 'reads a legacy lock file'() {
@@ -171,19 +173,6 @@ foo=a,b
 empty=c
 """.denormalize()
 
-    }
-
-    def 'writes a legacy lock file with prefix on persist'() {
-        when:
-        context.isScript() >> true
-        lockFileReaderWriter = new LockFileReaderWriter(resolver, context, lockFile, listener)
-        lockFileReaderWriter.writeLockFile('conf', ['line1', 'line2'])
-
-        then:
-        lockDir.file('buildscript-conf.lockfile').text == """${LockFileReaderWriter.LOCKFILE_HEADER_LIST.join('\n')}
-line1
-line2
-""".denormalize()
     }
 
     def 'reads a legacy lock file with prefix'() {
@@ -262,21 +251,6 @@ empty=d
         def ex = thrown(IllegalStateException)
         1 * context.getProjectPath() >> Path.path('foo')
         ex.getMessage().contains('Dependency locking cannot be used for project')
-        ex.getMessage().contains('foo')
-    }
-
-    def 'fails to write a legacy lockfile if root could not be determined'() {
-        FileResolver resolver = Mock()
-        resolver.canResolveRelativePath() >> false
-        lockFileReaderWriter = new LockFileReaderWriter(resolver, context, lockFile, listener)
-
-        when:
-        lockFileReaderWriter.writeLockFile('foo', [])
-
-        then:
-        def ex = thrown(IllegalStateException)
-        1 * context.identityPath('foo') >> Path.path('foo')
-        ex.getMessage().contains('Dependency locking cannot be used for configuration')
         ex.getMessage().contains('foo')
     }
 }

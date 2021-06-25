@@ -16,10 +16,12 @@ import org.gradle.api.artifacts.Configuration
 import org.gradle.api.artifacts.Dependency
 import org.gradle.api.artifacts.DependencyConstraint
 import org.gradle.api.artifacts.ExternalModuleDependency
+import org.gradle.api.artifacts.MinimalExternalModuleDependency
 import org.gradle.api.artifacts.ProjectDependency
 import org.gradle.api.artifacts.dsl.DependencyConstraintHandler
 import org.gradle.api.artifacts.dsl.DependencyHandler
 import org.gradle.api.plugins.ExtensionAware
+import org.gradle.api.provider.Provider
 import org.hamcrest.CoreMatchers.equalTo
 import org.hamcrest.CoreMatchers.sameInstance
 import org.hamcrest.MatcherAssert.assertThat
@@ -37,7 +39,8 @@ class DependencyHandlerExtensionsTest {
             "version" to "v",
             "configuration" to "cfg",
             "classifier" to "cls",
-            "ext" to "x")
+            "ext" to "x"
+        )
 
         val dependencies = newDependencyHandlerMock()
         val dependency: ExternalModuleDependency = mock()
@@ -50,8 +53,10 @@ class DependencyHandlerExtensionsTest {
                 version = "v",
                 configuration = "cfg",
                 classifier = "cls",
-                ext = "x"),
-            sameInstance(dependency))
+                ext = "x"
+            ),
+            sameInstance(dependency)
+        )
     }
 
     @Test
@@ -81,13 +86,15 @@ class DependencyHandlerExtensionsTest {
                     exclude(group = "g", module = "m")
                 assertThat(
                     configuredDependency,
-                    sameInstance(dependency))
+                    sameInstance(dependency)
+                )
             }
         }
 
         assertThat(
             events,
-            equalTo(listOf("created", "configured", "added")))
+            equalTo(listOf("created", "configured", "added"))
+        )
     }
 
     @Test
@@ -115,13 +122,15 @@ class DependencyHandlerExtensionsTest {
                 events.add("configured")
                 assertThat(
                     dependencyProject,
-                    sameInstance(project))
+                    sameInstance(project)
+                )
             }
         }
 
         assertThat(
             events,
-            equalTo(listOf("created", "configured", "added")))
+            equalTo(listOf("created", "configured", "added"))
+        )
     }
 
     @Test
@@ -198,7 +207,8 @@ class DependencyHandlerExtensionsTest {
                     // Configures the inner module dependencies
                     dependencies(
                         "org.apache.ant:ant-launcher:1.9.6@jar",
-                        "org.apache.ant:ant-junit:1.9.6")
+                        "org.apache.ant:ant-junit:1.9.6"
+                    )
                 }
             }
             add("runtime", groovy)
@@ -273,7 +283,7 @@ class DependencyHandlerExtensionsTest {
             constraints {
                 add("api", "some:thing:1.0")
                 add("api", "other:thing") {
-                    it.version { it.strictly("1.0") }
+                    version { strictly("1.0") }
                 }
             }
         }
@@ -289,7 +299,7 @@ class DependencyHandlerExtensionsTest {
             constraints {
                 api("some:thing:1.0")
                 api("other:thing") {
-                    version { it.strictly("1.0") }
+                    version { strictly("1.0") }
                 }
             }
         }
@@ -299,7 +309,7 @@ class DependencyHandlerExtensionsTest {
             (constraints) {
                 "api"("some:thing:1.0")
                 "api"("other:thing") {
-                    version { it.strictly("1.0") }
+                    version { strictly("1.0") }
                 }
             }
         }
@@ -311,6 +321,84 @@ class DependencyHandlerExtensionsTest {
             }
             verifyNoMoreInteractions()
         }
+    }
+
+    @Test
+    fun `can use a Provider as a dependency notation using String invoke`() {
+
+        val dependencyHandler = newDependencyHandlerMock {
+            on { add(any(), any()) }.thenReturn(null)
+        }
+
+        val notation = mock<Provider<MinimalExternalModuleDependency>>()
+
+        val dependencies = DependencyHandlerScope.of(dependencyHandler)
+        dependencies {
+            "configuration"(notation)
+        }
+
+        verify(dependencyHandler).addProvider("configuration", notation)
+    }
+
+    @Test
+    fun `can use a Provider as a dependency notation using String invoke with configuration`() {
+
+        val dependencyHandler = newDependencyHandlerMock {
+            on { add(any(), any()) }.thenReturn(null)
+        }
+
+        val notation = mock<Provider<MinimalExternalModuleDependency>>()
+
+        val dependencies = DependencyHandlerScope.of(dependencyHandler)
+        dependencies {
+            "configuration"(notation) {
+                because("Hello, Kotlin!")
+            }
+        }
+
+        verify(dependencyHandler).addProvider(eq("configuration"), eq(notation), any<Action<ExternalModuleDependency>>())
+    }
+
+    @Test
+    fun `can use a Provider as a dependency notation using Configuration invoke`() {
+
+        val dependencyHandler = newDependencyHandlerMock {
+            on { add(any(), any()) }.thenReturn(null)
+        }
+
+        val notation = mock<Provider<MinimalExternalModuleDependency>>()
+        val config = mock<Configuration> {
+            on { getName() } doReturn "config"
+        }
+
+        val dependencies = DependencyHandlerScope.of(dependencyHandler)
+        dependencies {
+            config(notation)
+        }
+
+        verify(dependencyHandler).addProvider(eq("config"), eq(notation))
+    }
+
+    @Test
+    fun `can use a Provider as a dependency notation using Configuration invoke with configuration`() {
+
+        val dependencyHandler = newDependencyHandlerMock {
+            on { add(any(), any()) }.thenReturn(null)
+        }
+
+        val notation = mock<Provider<MinimalExternalModuleDependency>>()
+        val config = mock<Configuration> {
+            on { getName() } doReturn "config"
+        }
+
+        val dependencies = DependencyHandlerScope.of(dependencyHandler)
+        dependencies {
+            config(notation) {
+                because("Hello, Kotlin!")
+            }
+        }
+
+        verify(dependencyHandler).addProvider(eq("config"), eq(notation), any<Action<ExternalModuleDependency>>())
     }
 }
 

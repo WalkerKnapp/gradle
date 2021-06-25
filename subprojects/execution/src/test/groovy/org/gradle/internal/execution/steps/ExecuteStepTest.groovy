@@ -16,14 +16,22 @@
 
 package org.gradle.internal.execution.steps
 
+import com.google.common.collect.ImmutableSortedMap
 import org.gradle.internal.execution.ExecutionOutcome
-import org.gradle.internal.execution.InputChangesContext
 import org.gradle.internal.execution.UnitOfWork
+import org.gradle.internal.execution.history.AfterPreviousExecutionState
 import org.gradle.internal.execution.history.changes.InputChangesInternal
+import org.gradle.internal.operations.TestBuildOperationExecutor
 import spock.lang.Unroll
 
 class ExecuteStepTest extends StepSpec<InputChangesContext> {
-    def step = new ExecuteStep<>()
+    def workspace = Mock(File)
+    def previousOutputs = ImmutableSortedMap.of()
+    def afterPreviousExecutionState = Stub(AfterPreviousExecutionState) {
+        getOutputFilesProducedByWork() >> previousOutputs
+    }
+
+    def step = new ExecuteStep<>(new TestBuildOperationExecutor())
     def inputChanges = Mock(InputChangesInternal)
 
     @Override
@@ -31,16 +39,30 @@ class ExecuteStepTest extends StepSpec<InputChangesContext> {
         Stub(InputChangesContext)
     }
 
+    def setup() {
+        _ * context.getWorkspace() >> workspace
+        _ * context.getAfterPreviousExecutionState() >> Optional.of(afterPreviousExecutionState)
+    }
+
     @Unroll
     def "result #workResult yields outcome #expectedOutcome (incremental false)"() {
         when:
-        def result = step.execute(context)
+        def result = step.execute(work, context)
 
         then:
-        result.outcome.get() == expectedOutcome
+        result.executionResult.get().outcome == expectedOutcome
+        // Check
+        result.duration.toMillis() >= 100
 
         _ * context.inputChanges >> Optional.empty()
-        _ * work.execute(null, context) >> workResult
+        _ * work.execute({ UnitOfWork.ExecutionRequest executionRequest ->
+            executionRequest.workspace == workspace && !executionRequest.inputChanges.present && executionRequest.previouslyProducedOutputs.get() == previousOutputs
+        }) >> {
+            sleep 200
+            Stub(UnitOfWork.WorkOutput) {
+                getDidWork() >> workResult
+            }
+        }
         0 * _
 
         where:
@@ -50,16 +72,22 @@ class ExecuteStepTest extends StepSpec<InputChangesContext> {
     }
 
     @Unroll
-    def "failure #failure.class.simpleName is not caught"() {
+    def "failure #failure.class.simpleName is handled"() {
         when:
-        step.execute(context)
+        def result = step.execute(work, context)
 
         then:
-        def ex = thrown Throwable
-        ex == failure
+        !result.executionResult.successful
+        result.executionResult.failure.get() == failure
+        result.duration.toMillis() >= 100
 
         _ * context.inputChanges >> Optional.empty()
-        _ * work.execute(null, context) >> { throw failure }
+        _ * work.execute({ UnitOfWork.ExecutionRequest executionRequest ->
+            executionRequest.workspace == workspace && !executionRequest.inputChanges.present && executionRequest.previouslyProducedOutputs.get() == previousOutputs
+        }) >> {
+            sleep 200
+            throw failure
+        }
         0 * _
 
         where:
@@ -67,16 +95,20 @@ class ExecuteStepTest extends StepSpec<InputChangesContext> {
     }
 
     @Unroll
-    def "incremental work with result #workResult yields outcome #outcome (executed incrementally: #incrementalExecution)"() {
+    def "incremental work with result #workResult yields outcome #expectedOutcome (executed incrementally: #incrementalExecution)"() {
         when:
-        def result = step.execute(context)
+        def result = step.execute(work, context)
 
         then:
-        result.outcome.get() == expectedOutcome
+        result.executionResult.get().outcome == expectedOutcome
 
         _ * context.inputChanges >> Optional.of(inputChanges)
-        1 * inputChanges.incremental >> incrementalExecution
-        _ * work.execute(inputChanges, context) >> workResult
+        _ * inputChanges.incremental >> incrementalExecution
+        _ * work.execute({ UnitOfWork.ExecutionRequest executionRequest ->
+            executionRequest.workspace == workspace && executionRequest.inputChanges.get() == inputChanges && executionRequest.previouslyProducedOutputs.get() == previousOutputs
+        }) >> Stub(UnitOfWork.WorkOutput) {
+            getDidWork() >> workResult
+        }
         0 * _
 
         where:

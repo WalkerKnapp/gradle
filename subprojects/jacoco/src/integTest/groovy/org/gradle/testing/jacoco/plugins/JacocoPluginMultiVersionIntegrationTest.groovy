@@ -18,8 +18,8 @@ package org.gradle.testing.jacoco.plugins
 
 import org.gradle.api.Project
 import org.gradle.api.reporting.ReportingExtension
-import org.gradle.integtests.fixtures.ToBeFixedForConfigurationCache
 import org.gradle.integtests.fixtures.TargetCoverage
+import org.gradle.integtests.fixtures.ToBeFixedForConfigurationCache
 import org.gradle.testing.jacoco.plugins.fixtures.JacocoCoverage
 import org.gradle.testing.jacoco.plugins.fixtures.JacocoReportFixture
 import spock.lang.Issue
@@ -36,8 +36,7 @@ class JacocoPluginMultiVersionIntegrationTest extends JacocoMultiVersionIntegrat
         javaProjectUnderTest.writeSourceFiles()
     }
 
-    @ToBeFixedForConfigurationCache
-    void generatesHtmlReportOnlyAsDefault() {
+    def "generates html report only as default"() {
         when:
         succeeds('test', 'jacocoTestReport')
 
@@ -49,15 +48,14 @@ class JacocoPluginMultiVersionIntegrationTest extends JacocoMultiVersionIntegrat
         htmlReport().totalCoverage() == 100
     }
 
-    @ToBeFixedForConfigurationCache
-    void canConfigureReportsInJacocoTestReport() {
+    def "can configure reports in jacoco test report"() {
         given:
         buildFile << """
             jacocoTestReport {
                 reports {
-                    xml.enabled true
-                    csv.enabled true
-                    html.destination file("\${buildDir}/jacocoHtml")
+                    xml.required = true
+                    csv.required = true
+                    html.outputLocation.set(file("\${buildDir}/jacocoHtml"))
                 }
             }
             """
@@ -71,13 +69,12 @@ class JacocoPluginMultiVersionIntegrationTest extends JacocoMultiVersionIntegrat
         file(REPORT_CSV_DEFAULT_REPORT).exists()
     }
 
-    @ToBeFixedForConfigurationCache
-    void respectsReportingBaseDir() {
+    def "respects reporting base dir"() {
         given:
         buildFile << """
             jacocoTestReport {
-                reports.xml.enabled = true
-                reports.csv.enabled = true
+                reports.xml.required = true
+                reports.csv.required = true
             }
             reporting{
                 baseDir = "\$buildDir/customReports"
@@ -92,17 +89,16 @@ class JacocoPluginMultiVersionIntegrationTest extends JacocoMultiVersionIntegrat
         file("build/customReports/jacoco/test/jacocoTestReport.csv").exists()
     }
 
-    @ToBeFixedForConfigurationCache
-    void canConfigureReportDirectory() {
+    def "can configure report directory"() {
         given:
         def customReportDirectory = "customJacocoReportDir"
         buildFile << """
             jacocoTestReport {
-                reports.xml.enabled = true
-                reports.csv.enabled = true
+                reports.xml.required = true
+                reports.csv.required = true
             }
             jacoco {
-                reportsDir = new File(buildDir, "$customReportDirectory")
+                reportsDirectory = new File(buildDir, "$customReportDirectory")
             }
             """
 
@@ -115,16 +111,14 @@ class JacocoPluginMultiVersionIntegrationTest extends JacocoMultiVersionIntegrat
         file("build/${customReportDirectory}/test/jacocoTestReport.csv").exists()
     }
 
-    @ToBeFixedForConfigurationCache
-    void jacocoTestReportIsSkippedIfNoCoverageDataAvailable() {
+    def "jacoco test report is skipped if no coverage data available"() {
         when:
         def executionResult = succeeds('jacocoTestReport')
         then:
         executionResult.assertTaskSkipped(':jacocoTestReport')
     }
 
-    @ToBeFixedForConfigurationCache
-    void canUseCoverageDataFromPreviousRunForCoverageReport() {
+    def "can use coverage data from previous run for coverage report"() {
         when:
         succeeds('jacocoTestReport')
 
@@ -143,8 +137,7 @@ class JacocoPluginMultiVersionIntegrationTest extends JacocoMultiVersionIntegrat
         htmlReport().totalCoverage() == 100
     }
 
-    @ToBeFixedForConfigurationCache
-    void canMergeCoverageData() {
+    def "can merge coverage data"() {
         given:
         file("src/otherMain/java/Thing.java") << """
 public class Thing {
@@ -171,7 +164,7 @@ public class ThingTest {
             sourceSets.otherTest.runtimeClasspath = sourceSets.otherTest.compileClasspath + sourceSets.otherTest.output
 
             task otherTests(type: Test) {
-                binResultsDir file("bin")
+                binaryResultsDirectory = file("bin")
                 testClassesDirs = sourceSets.otherTest.output.classesDirs
                 classpath = sourceSets.otherTest.runtimeClasspath
             }
@@ -190,6 +183,7 @@ public class ThingTest {
             }
         """
         when:
+        executer.expectDocumentedDeprecationWarning("The task type org.gradle.testing.jacoco.tasks.JacocoMerge (used by the :jacocoMerge task) has been deprecated. This is scheduled to be removed in Gradle 8.0. Please use the org.gradle.testing.jacoco.tasks.JacocoReport type instead. Consult the upgrading guide for further information: https://docs.gradle.org/current/userguide/upgrading_version_7.html#jacoco_merge")
         succeeds 'mergedReport'
 
         then:
@@ -201,16 +195,15 @@ public class ThingTest {
     }
 
     @Issue("GRADLE-2917")
-    @ToBeFixedForConfigurationCache
-    void "configures default jacoco dependencies even if the configuration was resolved before"() {
+    @ToBeFixedForConfigurationCache(because = ":dependencies")
+    def "configures default jacoco dependencies even if the configuration was resolved before"() {
         expect:
         //dependencies task forces resolution of the configurations
         succeeds "dependencies", "test", "jacocoTestReport"
     }
 
     @Issue("GRADLE-3498")
-    @ToBeFixedForConfigurationCache
-    void "can use different execution data"() {
+    def "can use different execution data"() {
         setup:
         buildFile << """
         test {
@@ -222,9 +215,9 @@ public class ThingTest {
 
         jacocoTestReport {
             reports {
-                xml.enabled false
-                csv.enabled false
-                html.destination file("\${buildDir}/reports/jacoco/integ")
+                xml.required = false
+                csv.required = false
+                html.outputLocation.set(file("\${buildDir}/reports/jacoco/integ"))
             }
             executionData test
         }
@@ -237,7 +230,6 @@ public class ThingTest {
         executedAndNotSkipped ':jacocoTestReport'
     }
 
-    @ToBeFixedForConfigurationCache
     def "skips report task if all of the execution data files do not exist"() {
         given:
         buildFile << """
@@ -254,7 +246,6 @@ public class ThingTest {
         skipped ':jacocoTestReport'
     }
 
-    @ToBeFixedForConfigurationCache
     def "fails report task if only some of the execution data files do not exist"() {
         given:
         def execFileName = 'unknown.exec'
@@ -273,7 +264,6 @@ public class ThingTest {
         failure.assertHasCause("Unable to read execution data file ${new File(testDirectory, execFileName)}")
     }
 
-    @ToBeFixedForConfigurationCache
     def "coverage data is aggregated from many tests"() {
         javaProjectUnderTest.writeSourceFiles(2000)
 

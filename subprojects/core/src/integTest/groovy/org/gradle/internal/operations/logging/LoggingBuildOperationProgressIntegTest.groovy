@@ -38,11 +38,11 @@ import org.gradle.launcher.exec.RunBuildBuildOperationType
 import org.gradle.test.fixtures.server.http.MavenHttpRepository
 import org.gradle.test.fixtures.server.http.RepositoryHttpServer
 import org.junit.Rule
-import spock.lang.IgnoreIf
+import spock.lang.Ignore
 
 import java.util.regex.Pattern
 
-import static org.gradle.util.TextUtil.getPlatformLineSeparator
+import static org.gradle.util.internal.TextUtil.getPlatformLineSeparator
 
 class LoggingBuildOperationProgressIntegTest extends AbstractIntegrationSpec {
 
@@ -245,7 +245,6 @@ class LoggingBuildOperationProgressIntegTest extends AbstractIntegrationSpec {
         assertNestedTaskOutputTracked(':buildSrc')
     }
 
-    @ToBeFixedForConfigurationCache(because = "composite builds")
     def "captures output from composite builds"() {
         given:
         configureNestedBuild()
@@ -263,7 +262,6 @@ class LoggingBuildOperationProgressIntegTest extends AbstractIntegrationSpec {
         assertNestedTaskOutputTracked()
     }
 
-    @ToBeFixedForConfigurationCache(because = "GradleBuild task")
     def "captures output from GradleBuild task builds"() {
         given:
         configureNestedBuild()
@@ -282,7 +280,7 @@ class LoggingBuildOperationProgressIntegTest extends AbstractIntegrationSpec {
         assertNestedTaskOutputTracked()
     }
 
-    @IgnoreIf({ GradleContextualExecuter.watchFs })
+    @Ignore("https://github.com/gradle/gradle-private/issues/3393")
     def "supports debug level logging"() {
         when:
         buildFile << """
@@ -414,9 +412,7 @@ class LoggingBuildOperationProgressIntegTest extends AbstractIntegrationSpec {
         file("build.gradle") << """
             apply plugin: 'java'
 
-            repositories {
-                ${jcenterRepository()}
-            }
+            ${mavenCentralRepository()}
             dependencies {
                 testImplementation 'junit:junit:4.10'
             }
@@ -432,10 +428,12 @@ class LoggingBuildOperationProgressIntegTest extends AbstractIntegrationSpec {
             .flatten()
             .with { it as List<BuildOperationRecord.Progress> }
             .findAll { OutputEvent.isAssignableFrom(it.detailsType) }
-        // Watching the file system is an incubating feature.
-        def watchFsExtraEvents = GradleContextualExecuter.watchFs ? 1 : 0
-        assert progressOutputEvents
-            .size() == 14 + watchFsExtraEvents // 11 tasks + "\n" + "BUILD SUCCESSFUL" + "2 actionable tasks: 2 executed" +
+
+        // 11 tasks + "\n" + "BUILD SUCCESSFUL" + "2 actionable tasks: 2 executed"
+        // when configuration cache is enabled also "Configuration cache entry reused."
+        def expectedEvents = GradleContextualExecuter.configCache ? 15 : 14
+
+        assert progressOutputEvents.size() == expectedEvents
     }
 
     private void assertNestedTaskOutputTracked(String projectPath = ':nested') {

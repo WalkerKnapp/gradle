@@ -325,6 +325,104 @@ class DefaultWorkerLeaseServiceProjectLockTest extends ConcurrentSpec {
         workerLeaseService.projectLockStatistics.totalWaitTimeMillis > -1
     }
 
+    def "fails when attempting to acquire a project lock and changes are disallowed"() {
+        def projectLock = workerLeaseService.getProjectLock(path("root"), path(":project"))
+
+        when:
+        workerLeaseService.whileDisallowingProjectLockChanges {
+            workerLeaseService.withLocks([projectLock]) {
+            }
+        }
+
+        then:
+        def e = thrown(IllegalStateException)
+        e.message == "This thread may not acquire more locks."
+
+        when:
+        workerLeaseService.whileDisallowingProjectLockChanges {
+            workerLeaseService.whileDisallowingProjectLockChanges {}
+            workerLeaseService.withLocks([projectLock]) {
+            }
+        }
+
+        then:
+        def e2 = thrown(IllegalStateException)
+        e2.message == "This thread may not acquire more locks."
+    }
+
+    def "fails when attempting to release a project lock and changes are disallowed"() {
+        def projectLock = workerLeaseService.getProjectLock(path("root"), path(":project"))
+
+        when:
+        workerLeaseService.withLocks([projectLock]) {
+            workerLeaseService.whileDisallowingProjectLockChanges {
+                workerLeaseService.withoutProjectLock {}
+            }
+        }
+
+        then:
+        def e = thrown(IllegalStateException)
+        e.message == "This thread may not release any locks."
+    }
+
+    def "does not release project locks in blocking action when changes to locks are disallowed"() {
+        def projectLock = workerLeaseService.getProjectLock(path("root"), path(":project"))
+
+        expect:
+        workerLeaseService.withLocks([projectLock]) {
+            workerLeaseService.whileDisallowingProjectLockChanges {
+                assert lockIsHeld(projectLock)
+                workerLeaseService.blocking {
+                    assert lockIsHeld(projectLock)
+                }
+                assert lockIsHeld(projectLock)
+            }
+        }
+    }
+
+    def "releases and reacquires project locks in blocking action when changes to locks are allowed"() {
+        def projectLock = workerLeaseService.getProjectLock(path("root"), path(":project"))
+
+        expect:
+        workerLeaseService.withLocks([projectLock]) {
+            assert lockIsHeld(projectLock)
+            workerLeaseService.blocking {
+                assert !lockIsHeld(projectLock)
+            }
+            assert lockIsHeld(projectLock)
+        }
+    }
+
+    def "thread can be granted uncontrolled access to any project"() {
+        expect:
+        !workerLeaseService.isAllowedUncontrolledAccessToAnyProject()
+        def result = workerLeaseService.allowUncontrolledAccessToAnyProject {
+            assert workerLeaseService.isAllowedUncontrolledAccessToAnyProject()
+            workerLeaseService.allowUncontrolledAccessToAnyProject {
+                assert workerLeaseService.isAllowedUncontrolledAccessToAnyProject()
+            }
+            assert workerLeaseService.isAllowedUncontrolledAccessToAnyProject()
+            "result"
+        }
+        result == "result"
+        !workerLeaseService.isAllowedUncontrolledAccessToAnyProject()
+    }
+
+    def "does not release project locks in blocking action when thread has uncontrolled access to any project"() {
+        def projectLock = workerLeaseService.getProjectLock(path("root"), path(":project"))
+
+        expect:
+        workerLeaseService.withLocks([projectLock]) {
+            workerLeaseService.allowUncontrolledAccessToAnyProject {
+                assert lockIsHeld(projectLock)
+                workerLeaseService.blocking {
+                    assert lockIsHeld(projectLock)
+                }
+                assert lockIsHeld(projectLock)
+            }
+        }
+    }
+
     def "does not gather statistics when statistics flag is not set"() {
         def projectLock = workerLeaseService.getProjectLock(path("root"), path(":project"))
 

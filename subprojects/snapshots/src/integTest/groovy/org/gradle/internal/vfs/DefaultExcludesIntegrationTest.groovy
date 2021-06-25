@@ -18,6 +18,7 @@ package org.gradle.internal.vfs
 
 import org.apache.tools.ant.DirectoryScanner
 import org.gradle.integtests.fixtures.AbstractIntegrationSpec
+import org.gradle.integtests.fixtures.UnsupportedWithConfigurationCache
 
 class DefaultExcludesIntegrationTest extends AbstractIntegrationSpec{
 
@@ -75,6 +76,7 @@ class DefaultExcludesIntegrationTest extends AbstractIntegrationSpec{
         """
     }
 
+    @UnsupportedWithConfigurationCache(because = "DirectoryScanner.addDefaultExclude")
     def "default excludes defined in settings.gradle are used"() {
         settingsFile << addDefaultExclude(EXCLUDED_FILE_NAME)
 
@@ -97,6 +99,7 @@ class DefaultExcludesIntegrationTest extends AbstractIntegrationSpec{
         skipped(":copyTask")
     }
 
+    @UnsupportedWithConfigurationCache(because = "DirectoryScanner.addDefaultExclude")
     def "default excludes are reset if nothing is defined in settings"() {
         settingsFile << addDefaultExclude(EXCLUDED_FILE_NAME)
 
@@ -121,7 +124,7 @@ class DefaultExcludesIntegrationTest extends AbstractIntegrationSpec{
         copyOfExcludedFile.exists()
     }
 
-    def "emits deprecation warning when default excludes are changed during the build"() {
+    def "fails when default excludes are changed during the build"() {
         settingsFile << addDefaultExclude(EXCLUDED_FILE_NAME)
 
         buildFile << """
@@ -136,15 +139,10 @@ class DefaultExcludesIntegrationTest extends AbstractIntegrationSpec{
         List<String> defaultExcludesInTask = DEFAULT_EXCLUDES.toSorted()
 
         when:
-        executer.expectDocumentedDeprecationWarning("Changing default excludes during the build has been deprecated. " +
-            "This is scheduled to be removed in Gradle 7.0. " +
-            "Default excludes changed from ${defaultExcludesFromSettings} to ${defaultExcludesInTask}. " +
-            "Configure default excludes in the settings script instead. " +
-            "See https://docs.gradle.org/current/userguide/working_with_files.html#sec:change_ant_excludes for more details.")
-        run "copyTask"
+        fails "copyTask"
+
         then:
-        executedAndNotSkipped(":copyTask")
-        copyOfExcludedFile.exists()
+        failure.assertHasCause "Cannot change default excludes during the build. They were changed from ${defaultExcludesFromSettings} to ${defaultExcludesInTask}. Configure default excludes in the settings script instead."
     }
 
     private static String addDefaultExclude(String excludedFileName = EXCLUDED_FILE_NAME) {

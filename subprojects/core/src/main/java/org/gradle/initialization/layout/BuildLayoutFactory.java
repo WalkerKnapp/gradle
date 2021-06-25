@@ -67,17 +67,11 @@ public class BuildLayoutFactory {
 
     BuildLayout getLayoutFor(File currentDir, File stopAt) {
         File settingsFile = findExistingSettingsFileIn(currentDir);
-        if (settingsFile == null) {
-            settingsFile = findExistingSettingsFileIn(new File(currentDir, "master"));
-        }
         if (settingsFile != null) {
             return layout(currentDir, settingsFile);
         }
         for (File candidate = currentDir.getParentFile(); candidate != null && !candidate.equals(stopAt); candidate = candidate.getParentFile()) {
             settingsFile = findExistingSettingsFileIn(candidate);
-            if (settingsFile == null) {
-                settingsFile = findExistingSettingsFileIn(new File(candidate, "master"));
-            }
             if (settingsFile != null) {
                 return layout(candidate, settingsFile);
             }

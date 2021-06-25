@@ -18,11 +18,18 @@ package org.gradle.api.file
 
 import org.gradle.api.tasks.TasksWithInputsAndOutputs
 import org.gradle.integtests.fixtures.AbstractIntegrationSpec
+import org.gradle.internal.reflect.problems.ValidationProblemId
+import org.gradle.internal.reflect.validation.ValidationMessageChecker
+import org.gradle.internal.reflect.validation.ValidationTestFor
 import spock.lang.Unroll
 
-class FilePropertyIntegrationTest extends AbstractIntegrationSpec implements TasksWithInputsAndOutputs {
+class FilePropertyIntegrationTest extends AbstractIntegrationSpec implements TasksWithInputsAndOutputs, ValidationMessageChecker {
+    def setup() {
+        expectReindentedValidationMessage()
+    }
+
     def "can attach a calculated directory to task property"() {
-        buildFile << """
+        buildFile """
             class SomeTask extends DefaultTask {
                 @OutputDirectory
                 final DirectoryProperty outputDir = project.objects.directoryProperty()
@@ -50,7 +57,7 @@ class FilePropertyIntegrationTest extends AbstractIntegrationSpec implements Tas
     }
 
     def "can attach a calculated file to task property"() {
-        buildFile << """
+        buildFile """
             class SomeTask extends DefaultTask {
                 @OutputFile
                 final RegularFileProperty outputFile = project.objects.fileProperty()
@@ -79,7 +86,7 @@ class FilePropertyIntegrationTest extends AbstractIntegrationSpec implements Tas
 
     def "can set directory property value from DSL using a value or a provider"() {
         given:
-        buildFile << """
+        buildFile """
 class SomeExtension {
     final DirectoryProperty prop
 
@@ -121,7 +128,7 @@ assert custom.prop.getOrNull() == null
 
     def "can set regular file property value from DSL using a value or a provider"() {
         given:
-        buildFile << """
+        buildFile """
 class SomeExtension {
     final RegularFileProperty prop
 
@@ -162,7 +169,7 @@ assert custom.prop.getOrNull() == null
 
     def "reports failure to set directory property value using incompatible type"() {
         given:
-        buildFile << """
+        buildFile """
 class SomeExtension {
     final Property<Directory> prop
 
@@ -243,7 +250,7 @@ task useFileProviderApi {
 
     def "reports failure to set regular file property value using incompatible type"() {
         given:
-        buildFile << """
+        buildFile """
 class SomeExtension {
     final Property<RegularFile> prop
 
@@ -323,7 +330,7 @@ task useDirProviderApi {
     }
 
     def "can wire the output file of a task as input to another task using property"() {
-        buildFile << """
+        buildFile """
             class FileOutputTask extends DefaultTask {
                 @InputFile
                 final RegularFileProperty inputFile = project.objects.fileProperty()
@@ -374,7 +381,7 @@ task useDirProviderApi {
     }
 
     def "can wire an output file from unmanaged nested property of a task as input to another task using property"() {
-        buildFile << """
+        buildFile """
             interface Params {
                 @OutputFile
                 RegularFileProperty getOutputFile()
@@ -431,7 +438,7 @@ task useDirProviderApi {
     }
 
     def "can wire an output file from managed nested property of a task as input to another task using property"() {
-        buildFile << """
+        buildFile """
             interface Params {
                 @OutputFile
                 RegularFileProperty getOutputFile()
@@ -486,7 +493,7 @@ task useDirProviderApi {
     }
 
     def "can wire the output file of an ad hoc task as input to another task using property"() {
-        buildFile << """
+        buildFile """
             class MergeTask extends DefaultTask {
                 @InputFile
                 final RegularFileProperty inputFile = project.objects.fileProperty()
@@ -534,7 +541,7 @@ task useDirProviderApi {
     }
 
     def "can wire the output directory of a task as input to another task using property"() {
-        buildFile << """
+        buildFile """
             class DirOutputTask extends DefaultTask {
                 @InputFile
                 final RegularFileProperty inputFile = project.objects.fileProperty()
@@ -599,7 +606,7 @@ task useDirProviderApi {
     }
 
     def "can wire the output directory of an ad hoc task as input to another task using property"() {
-        buildFile << """
+        buildFile """
             class MergeTask extends DefaultTask {
                 @InputDirectory
                 final DirectoryProperty inputDir = project.objects.directoryProperty()
@@ -706,7 +713,7 @@ task useDirProviderApi {
 
     def "can use @Optional on properties with type Property"() {
         given:
-        buildFile << """
+        buildFile """
 class SomeTask extends DefaultTask {
     @Optional @InputFile
     final RegularFileProperty inFile = project.objects.fileProperty()
@@ -740,9 +747,12 @@ class SomeTask extends DefaultTask {
         result.assertTasksSkipped(":doNothing")
     }
 
+    @ValidationTestFor(
+        ValidationProblemId.VALUE_NOT_SET
+    )
     def "optional output consumed as non-optional input yields a reasonable error message"() {
         given:
-        buildFile << """
+        buildFile """
             class ProducerTask extends DefaultTask {
                 @Optional @OutputFile
                 final Property<RegularFile> outFile = project.objects.fileProperty()
@@ -784,7 +794,7 @@ class SomeTask extends DefaultTask {
 
         then:
         failure.assertHasDescription("A problem was found with the configuration of task ':consumer' (type 'ConsumerTask').")
-        failure.assertHasCause("No value has been specified for property 'bean.inputFile'.")
-        failure.assertTasksExecuted(':consumer')
+        failureDescriptionContains(missingValueMessage { type('ConsumerTask').property('bean.inputFile') })
+        failure.assertTasksExecuted(':producer', ':consumer')
     }
 }

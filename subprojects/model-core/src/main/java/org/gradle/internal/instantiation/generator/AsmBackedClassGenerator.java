@@ -30,7 +30,6 @@ import org.gradle.api.Transformer;
 import org.gradle.api.internal.ConventionMapping;
 import org.gradle.api.internal.DynamicObjectAware;
 import org.gradle.api.internal.GeneratedSubclass;
-import org.gradle.api.internal.HasConvention;
 import org.gradle.api.internal.IConventionAware;
 import org.gradle.api.internal.provider.PropertyInternal;
 import org.gradle.api.plugins.Convention;
@@ -58,8 +57,8 @@ import org.gradle.internal.state.ModelObject;
 import org.gradle.internal.state.OwnerAware;
 import org.gradle.model.internal.asm.AsmClassGenerator;
 import org.gradle.model.internal.asm.ClassGeneratorSuffixRegistry;
-import org.gradle.util.CollectionUtils;
-import org.gradle.util.ConfigureUtil;
+import org.gradle.util.internal.CollectionUtils;
+import org.gradle.util.internal.ConfigureUtil;
 import org.objectweb.asm.AnnotationVisitor;
 import org.objectweb.asm.ClassWriter;
 import org.objectweb.asm.Label;
@@ -68,6 +67,7 @@ import org.objectweb.asm.Type;
 import sun.reflect.ReflectionFactory;
 
 import javax.annotation.Nullable;
+import javax.inject.Inject;
 import java.lang.annotation.Annotation;
 import java.lang.annotation.Inherited;
 import java.lang.annotation.Retention;
@@ -266,6 +266,7 @@ public class AsmBackedClassGenerator extends AbstractClassGenerator {
         private boolean providesOwnToStringImplementation;
         private boolean requiresFactory;
         private final List<Pair<PropertyMetadata, Boolean>> propertiesToAttach = new ArrayList<>();
+        private final List<PropertyMetadata> ineligibleProperties = new ArrayList<>();
 
         public ClassInspectionVisitorImpl(Class<?> type, boolean decorate, String suffix, int factoryId) {
             this.type = type;
@@ -327,6 +328,11 @@ public class AsmBackedClassGenerator extends AbstractClassGenerator {
         }
 
         @Override
+        public void markPropertyAsIneligibleForConventionMapping(PropertyMetadata property) {
+            ineligibleProperties.add(property);
+        }
+
+        @Override
         public ClassGenerationVisitor builder() {
             if (!decorate && !serviceInjection && !Modifier.isAbstract(type.getModifiers())) {
                 // Don't need to generate a subclass
@@ -348,7 +354,7 @@ public class AsmBackedClassGenerator extends AbstractClassGenerator {
             }
             boolean requiresServicesMethod = (extensible || serviceInjection) && !providesOwnServicesImplementation;
             boolean requiresToString = !providesOwnToStringImplementation;
-            ClassBuilderImpl builder = new ClassBuilderImpl(type, decorate, suffix, factoryId, extensible, conventionAware, managed, providesOwnDynamicObjectImplementation, requiresToString, requiresServicesMethod, requiresFactory, propertiesToAttach);
+            ClassBuilderImpl builder = new ClassBuilderImpl(type, decorate, suffix, factoryId, extensible, conventionAware, managed, providesOwnDynamicObjectImplementation, requiresToString, requiresServicesMethod, requiresFactory, propertiesToAttach, ineligibleProperties);
             builder.startClass();
             return builder;
         }
@@ -361,6 +367,7 @@ public class AsmBackedClassGenerator extends AbstractClassGenerator {
         private static final String MAPPING_FIELD = "_gr_map_";
         private static final String META_CLASS_FIELD = "_gr_mc_";
         private static final String SERVICES_FIELD = "_gr_svcs_";
+        private static final String NAME_FIELD = "_gr_n_";
         private static final String DISPLAY_NAME_FIELD = "_gr_dn_";
         private static final String OWNER_FIELD = "_gr_owner_";
         private static final String FACTORY_ID_FIELD = "_gr_fid_";
@@ -378,7 +385,8 @@ public class AsmBackedClassGenerator extends AbstractClassGenerator {
         private final static Type CONVENTION_AWARE_HELPER_TYPE = Type.getType(ConventionAwareHelper.class);
         private final static Type DYNAMIC_OBJECT_AWARE_TYPE = Type.getType(DynamicObjectAware.class);
         private final static Type EXTENSION_AWARE_TYPE = Type.getType(ExtensionAware.class);
-        private final static Type HAS_CONVENTION_TYPE = Type.getType(HasConvention.class);
+        @SuppressWarnings("deprecation")
+        private final static Type HAS_CONVENTION_TYPE = Type.getType(org.gradle.api.internal.HasConvention.class);
         private final static Type DYNAMIC_OBJECT_TYPE = Type.getType(DynamicObject.class);
         private final static Type CONVENTION_MAPPING_TYPE = Type.getType(ConventionMapping.class);
         private final static Type GROOVY_OBJECT_TYPE = Type.getType(GroovyObject.class);
@@ -409,6 +417,7 @@ public class AsmBackedClassGenerator extends AbstractClassGenerator {
         private static final Type EXTENSION_CONTAINER_TYPE = Type.getType(ExtensionContainer.class);
         private static final Type DESCRIBABLE_TYPE = Type.getType(Describable.class);
         private static final Type DISPLAY_NAME_TYPE = Type.getType(DisplayName.class);
+        private static final Type INJECT_TYPE = Type.getType(Inject.class);
 
         private static final String RETURN_STRING = Type.getMethodDescriptor(STRING_TYPE);
         private static final String RETURN_DESCRIBABLE = Type.getMethodDescriptor(DESCRIBABLE_TYPE);
@@ -443,6 +452,7 @@ public class AsmBackedClassGenerator extends AbstractClassGenerator {
         private static final String RETURN_OBJECT_FROM_MODEL_OBJECT_STRING_CLASS = Type.getMethodDescriptor(OBJECT_TYPE, MODEL_OBJECT_TYPE, STRING_TYPE, CLASS_TYPE);
         private static final String RETURN_OBJECT_FROM_MODEL_OBJECT_STRING_CLASS_CLASS = Type.getMethodDescriptor(OBJECT_TYPE, MODEL_OBJECT_TYPE, STRING_TYPE, CLASS_TYPE, CLASS_TYPE);
         private static final String RETURN_OBJECT_FROM_MODEL_OBJECT_STRING_CLASS_CLASS_CLASS = Type.getMethodDescriptor(OBJECT_TYPE, MODEL_OBJECT_TYPE, STRING_TYPE, CLASS_TYPE, CLASS_TYPE, CLASS_TYPE);
+        private static final String RETURN_VOID_FROM_STRING = Type.getMethodDescriptor(VOID_TYPE, STRING_TYPE);
 
         private static final String[] EMPTY_STRINGS = new String[0];
         private static final Type[] EMPTY_TYPES = new Type[0];
@@ -462,6 +472,7 @@ public class AsmBackedClassGenerator extends AbstractClassGenerator {
         private final boolean providesOwnDynamicObject;
         private final boolean requiresToString;
         private final List<Pair<PropertyMetadata, Boolean>> propertiesToAttach;
+        private final List<PropertyMetadata> ineligibleProperties;
         private final boolean requiresServicesMethod;
         private final boolean requiresFactory;
 
@@ -477,7 +488,8 @@ public class AsmBackedClassGenerator extends AbstractClassGenerator {
             boolean requiresToString,
             boolean requiresServicesMethod,
             boolean requiresFactory,
-            List<Pair<PropertyMetadata, Boolean>> propertiesToAttach
+            List<Pair<PropertyMetadata, Boolean>> propertiesToAttach,
+            List<PropertyMetadata> ineligibleProperties
         ) {
             this.type = type;
             this.factoryId = factoryId;
@@ -494,6 +506,7 @@ public class AsmBackedClassGenerator extends AbstractClassGenerator {
             this.providesOwnDynamicObject = providesOwnDynamicObject;
             this.requiresServicesMethod = requiresServicesMethod;
             this.requiresFactory = requiresFactory;
+            this.ineligibleProperties = ineligibleProperties;
         }
 
         public void startClass() {
@@ -566,14 +579,49 @@ public class AsmBackedClassGenerator extends AbstractClassGenerator {
         }
 
         @Override
-        public void addConstructor(Constructor<?> constructor) {
+        public void addNameConstructor() {
+            MethodVisitor methodVisitor = visitor.visitMethod(ACC_PUBLIC, "<init>", RETURN_VOID_FROM_STRING, null, EMPTY_STRINGS);
+
+            methodVisitor.visitAnnotation(INJECT_TYPE.getDescriptor(), true)
+                .visitEnd();
+
+            methodVisitor.visitCode();
+
+            // this.super()
+            methodVisitor.visitVarInsn(ALOAD, 0);
+            methodVisitor.visitMethodInsn(INVOKESPECIAL, OBJECT_TYPE.getInternalName(), "<init>", RETURN_VOID, false);
+
+            // this.name = name
+            methodVisitor.visitVarInsn(ALOAD, 0);
+            methodVisitor.visitVarInsn(ALOAD, 1);
+            methodVisitor.visitFieldInsn(PUTFIELD, generatedType.getInternalName(), NAME_FIELD, STRING_TYPE.getDescriptor());
+
+            // this.init_method()
+            methodVisitor.visitVarInsn(ALOAD, 0);
+            methodVisitor.visitMethodInsn(INVOKEVIRTUAL, generatedType.getInternalName(), INIT_METHOD, RETURN_VOID, false);
+
+            methodVisitor.visitInsn(RETURN);
+            methodVisitor.visitMaxs(0, 0);
+            methodVisitor.visitEnd();
+        }
+
+        @Override
+        public void addConstructor(Constructor<?> constructor, boolean addNameParameter) {
             List<Type> paramTypes = new ArrayList<>();
             for (Class<?> paramType : constructor.getParameterTypes()) {
                 paramTypes.add(Type.getType(paramType));
             }
-            String methodDescriptor = Type.getMethodDescriptor(VOID_TYPE, paramTypes.toArray(EMPTY_TYPES));
+            String superMethodDescriptor = Type.getMethodDescriptor(VOID_TYPE, paramTypes.toArray(EMPTY_TYPES));
 
-            MethodVisitor methodVisitor = visitor.visitMethod(ACC_PUBLIC, "<init>", methodDescriptor, signature(constructor), EMPTY_STRINGS);
+            String methodDescriptor;
+            if (addNameParameter) {
+                paramTypes.add(0, STRING_TYPE);
+                methodDescriptor = Type.getMethodDescriptor(VOID_TYPE, paramTypes.toArray(EMPTY_TYPES));
+            } else {
+                methodDescriptor = superMethodDescriptor;
+            }
+
+            MethodVisitor methodVisitor = visitor.visitMethod(ACC_PUBLIC, "<init>", methodDescriptor, signature(constructor, addNameParameter), EMPTY_STRINGS);
 
             for (Annotation annotation : constructor.getDeclaredAnnotations()) {
                 if (annotation.annotationType().getAnnotation(Inherited.class) != null) {
@@ -588,12 +636,19 @@ public class AsmBackedClassGenerator extends AbstractClassGenerator {
 
             // this.super(p0 .. pn)
             methodVisitor.visitVarInsn(ALOAD, 0);
-            for (int typeVar = 0, stackVar = 1; typeVar < paramTypes.size(); ++typeVar) {
+            for (int typeVar = addNameParameter ? 1 : 0, stackVar = addNameParameter ? 2 : 1; typeVar < paramTypes.size(); ++typeVar) {
                 Type argType = paramTypes.get(typeVar);
                 methodVisitor.visitVarInsn(argType.getOpcode(ILOAD), stackVar);
                 stackVar += argType.getSize();
             }
-            methodVisitor.visitMethodInsn(INVOKESPECIAL, superclassType.getInternalName(), "<init>", methodDescriptor, false);
+            methodVisitor.visitMethodInsn(INVOKESPECIAL, superclassType.getInternalName(), "<init>", superMethodDescriptor, false);
+
+            if (addNameParameter) {
+                // this.name = name
+                methodVisitor.visitVarInsn(ALOAD, 0);
+                methodVisitor.visitVarInsn(ALOAD, 1);
+                methodVisitor.visitFieldInsn(PUTFIELD, generatedType.getInternalName(), NAME_FIELD, STRING_TYPE.getDescriptor());
+            }
 
             // this.init_method()
             methodVisitor.visitVarInsn(ALOAD, 0);
@@ -633,6 +688,7 @@ public class AsmBackedClassGenerator extends AbstractClassGenerator {
                 methodVisitor.visitMethodInsn(INVOKESTATIC, ASM_BACKED_CLASS_GENERATOR_TYPE.getInternalName(), GET_FACTORY_FOR_NEXT_METHOD_NAME, RETURN_MANAGED_OBJECT_FACTORY, false);
                 methodVisitor.visitFieldInsn(PUTFIELD, generatedType.getInternalName(), FACTORY_FIELD, MANAGED_OBJECT_FACTORY_TYPE.getDescriptor());
             }
+
             for (Pair<PropertyMetadata, Boolean> entry : propertiesToAttach) {
                 // ManagedObjectFactory.attachOwner(get<prop>(), this, <property-name>))
                 PropertyMetadata property = entry.left;
@@ -646,6 +702,23 @@ public class AsmBackedClassGenerator extends AbstractClassGenerator {
                 methodVisitor.visitMethodInsn(INVOKESTATIC, MANAGED_OBJECT_FACTORY_TYPE.getInternalName(), "attachOwner", RETURN_OBJECT_FROM_OBJECT_MODEL_OBJECT_STRING, false);
                 if (entry.right) {
                     applyRoleTo(methodVisitor);
+                }
+            }
+
+            // For classes that could have convention mapping, but implement IConventionAware themselves, we need to
+            // mark ineligible-for-convention-mapping properties in a different way.
+            // See mixInConventionAware() for how we do this for decorated types that do not implement IConventionAware manually
+            //
+            // Doing this for all types introduces a performance penalty for types that have Provider properties, even
+            // if they don't use convention mapping.
+            if (conventionAware && IConventionAware.class.isAssignableFrom(type)) {
+                for (PropertyMetadata property : ineligibleProperties) {
+                    // GENERATE getConventionMapping()
+                    methodVisitor.visitVarInsn(ALOAD, 0);
+                    methodVisitor.visitMethodInsn(INVOKEVIRTUAL, generatedType.getInternalName(), "getConventionMapping", RETURN_CONVENTION_MAPPING, false);
+                    // GENERATE convention.ineligible(__property.getName()__)
+                    methodVisitor.visitLdcInsn(property.getName());
+                    methodVisitor.visitMethodInsn(INVOKEINTERFACE, CONVENTION_MAPPING_TYPE.getInternalName(), "ineligible", RETURN_VOID_FROM_STRING, true);
                 }
             }
         }
@@ -778,6 +851,13 @@ public class AsmBackedClassGenerator extends AbstractClassGenerator {
                 visitor.visitMethodInsn(INVOKESPECIAL, CONVENTION_AWARE_HELPER_TYPE.getInternalName(), "<init>", RETURN_VOID_FROM_CONVENTION_AWARE_CONVENTION, false);
 
                 // END
+
+                for (PropertyMetadata property : ineligibleProperties) {
+                    // GENERATE convention.ineligible(__property.getName()__)
+                    visitor.visitInsn(DUP);
+                    visitor.visitLdcInsn(property.getName());
+                    visitor.visitMethodInsn(INVOKEINTERFACE, CONVENTION_MAPPING_TYPE.getInternalName(), "ineligible", RETURN_VOID_FROM_STRING, true);
+                }
             };
 
             addLazyGetter("getConventionMapping", CONVENTION_MAPPING_TYPE, RETURN_CONVENTION_MAPPING, null, MAPPING_FIELD, CONVENTION_MAPPING_TYPE, initConventionAwareHelper);
@@ -1374,10 +1454,6 @@ public class AsmBackedClassGenerator extends AbstractClassGenerator {
             visitor.visitField(ACC_PRIVATE | ACC_TRANSIENT, flagName, Type.BOOLEAN_TYPE.getDescriptor(), null, null);
         }
 
-        private String propFieldName(PropertyMetadata property) {
-            return "__" + property.getName() + "__";
-        }
-
         @Override
         public void applyConventionMappingToGetter(PropertyMetadata property, MethodMetadata getter, boolean attachOwner, boolean applyRole) {
             if (!conventionAware && !attachOwner) {
@@ -1757,6 +1833,15 @@ public class AsmBackedClassGenerator extends AbstractClassGenerator {
         }
 
         @Override
+        public void addNameProperty() {
+            visitor.visitField(ACC_PRIVATE | ACC_SYNTHETIC | ACC_FINAL, NAME_FIELD, STRING_TYPE.getDescriptor(), null, null);
+            addGetter("getName", STRING_TYPE, Type.getMethodDescriptor(STRING_TYPE), null, methodVisitor -> {
+                methodVisitor.visitVarInsn(ALOAD, 0);
+                methodVisitor.visitFieldInsn(GETFIELD, generatedType.getInternalName(), NAME_FIELD, STRING_TYPE.getDescriptor());
+            });
+        }
+
+        @Override
         public Class<?> generate() {
             writeGenericReturnTypeFields();
             visitor.visitEnd();
@@ -1812,6 +1897,14 @@ public class AsmBackedClassGenerator extends AbstractClassGenerator {
         }
     }
 
+    private static String propFieldName(PropertyMetadata property) {
+        return propFieldName(property.getName());
+    }
+
+    public static String propFieldName(String name) {
+        return "__" + name + "__";
+    }
+
     private static Class<?> rawTypeParam(PropertyMetadata property, int paramNum) {
         java.lang.reflect.Type type = property.getGenericType();
         if (!(type instanceof ParameterizedType)) {
@@ -1851,11 +1944,15 @@ public class AsmBackedClassGenerator extends AbstractClassGenerator {
         }
 
         @Override
-        public void addConstructor(Constructor<?> constructor) {
+        public void addConstructor(Constructor<?> constructor, boolean addNameParameter) {
         }
 
         @Override
         public void addDefaultConstructor() {
+        }
+
+        @Override
+        public void addNameConstructor() {
         }
 
         @Override
@@ -1944,6 +2041,10 @@ public class AsmBackedClassGenerator extends AbstractClassGenerator {
 
         @Override
         public void addPropertySetterOverloads(PropertyMetadata property, MethodMetadata getter) {
+        }
+
+        @Override
+        public void addNameProperty() {
         }
 
         @Override

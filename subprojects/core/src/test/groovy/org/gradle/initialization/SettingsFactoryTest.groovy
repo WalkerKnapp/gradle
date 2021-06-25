@@ -25,10 +25,11 @@ import org.gradle.api.internal.initialization.ScriptHandlerInternal
 import org.gradle.configuration.ScriptPluginFactory
 import org.gradle.groovy.scripts.ScriptSource
 import org.gradle.internal.instantiation.InstantiatorFactory
+import org.gradle.internal.management.DependencyResolutionManagementInternal
 import org.gradle.internal.service.ServiceRegistry
 import org.gradle.internal.service.scopes.ServiceRegistryFactory
 import org.gradle.util.TestUtil
-import org.gradle.util.WrapUtil
+import org.gradle.util.internal.WrapUtil
 import spock.lang.Specification
 
 class SettingsFactoryTest extends Specification {
@@ -53,6 +54,7 @@ class SettingsFactoryTest extends Specification {
         1 * settingsServices.get(ScriptHandlerFactory) >> scriptHandlerFactory
         1 * settingsServices.get(ProjectDescriptorRegistry) >> projectDescriptorRegistry
         1 * settingsServices.get(InstantiatorFactory) >> Stub(InstantiatorFactory)
+        1 * settingsServices.get(DependencyResolutionManagementInternal) >> Stub(DependencyResolutionManagementInternal)
         1 * projectDescriptorRegistry.addProject(_ as DefaultProjectDescriptor)
         1 * scriptHandlerFactory.create(scriptSource, _ as ClassLoaderScope) >> Mock(ScriptHandlerInternal)
         1 * scope.createChild(_) >> scope

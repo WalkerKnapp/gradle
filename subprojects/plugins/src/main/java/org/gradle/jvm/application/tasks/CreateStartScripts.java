@@ -18,7 +18,6 @@ package org.gradle.jvm.application.tasks;
 
 import com.google.common.collect.Lists;
 import org.apache.commons.lang.StringUtils;
-import org.gradle.api.Incubating;
 import org.gradle.api.file.FileCollection;
 import org.gradle.api.internal.ConventionTask;
 import org.gradle.api.internal.plugins.StartScriptGenerator;
@@ -26,6 +25,7 @@ import org.gradle.api.internal.plugins.UnixStartScriptGenerator;
 import org.gradle.api.internal.plugins.WindowsStartScriptGenerator;
 import org.gradle.api.jvm.ModularitySpec;
 import org.gradle.api.model.ObjectFactory;
+import org.gradle.api.model.ReplacedBy;
 import org.gradle.api.provider.Property;
 import org.gradle.api.tasks.Classpath;
 import org.gradle.api.tasks.Input;
@@ -34,10 +34,11 @@ import org.gradle.api.tasks.Nested;
 import org.gradle.api.tasks.Optional;
 import org.gradle.api.tasks.OutputDirectory;
 import org.gradle.api.tasks.TaskAction;
+import org.gradle.internal.deprecation.DeprecationLogger;
 import org.gradle.internal.jvm.DefaultModularitySpec;
 import org.gradle.internal.jvm.JavaModuleDetector;
 import org.gradle.jvm.application.scripts.ScriptGenerator;
-import org.gradle.util.GUtil;
+import org.gradle.util.internal.GUtil;
 
 import javax.annotation.Nullable;
 import javax.inject.Inject;
@@ -228,7 +229,6 @@ public class CreateStartScripts extends ConventionTask {
      *
      * @since 6.4
      */
-    @Incubating
     @Optional
     @Input
     public Property<String> getMainModule() {
@@ -242,7 +242,6 @@ public class CreateStartScripts extends ConventionTask {
      *
      * @since 6.4
      */
-    @Incubating
     @Optional
     @Input
     public Property<String> getMainClass() {
@@ -252,13 +251,27 @@ public class CreateStartScripts extends ConventionTask {
     /**
      * The main class name used to start the Java application.
      */
-    @Internal
+    @ReplacedBy("mainClass")
     @Nullable
+    @Deprecated
     public String getMainClassName() {
+        DeprecationLogger.deprecateProperty(CreateStartScripts.class, "mainClassName")
+            .replaceWith("mainClass")
+            .willBeRemovedInGradle8()
+            .withDslReference()
+            .nagUser();
+
         return mainClass.getOrNull();
     }
 
+    @Deprecated
     public void setMainClassName(@Nullable String mainClassName) {
+        DeprecationLogger.deprecateProperty(CreateStartScripts.class, "mainClassName")
+            .replaceWith("mainClass")
+            .willBeRemovedInGradle8()
+            .withDslReference()
+            .nagUser();
+
         this.mainClass.set(mainClassName);
     }
 
@@ -312,7 +325,6 @@ public class CreateStartScripts extends ConventionTask {
      *
      * @since 6.4
      */
-    @Incubating
     @Nested
     public ModularitySpec getModularity() {
         return modularity;

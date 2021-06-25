@@ -19,7 +19,7 @@ package org.gradle.testkit.runner
 import groovy.transform.Sortable
 import org.gradle.api.JavaVersion
 import org.gradle.integtests.fixtures.AbstractIntegrationSpec
-import org.gradle.integtests.fixtures.AbstractMultiTestRunner
+import org.gradle.integtests.fixtures.compatibility.MultiVersionTestCategory
 import org.gradle.integtests.fixtures.daemon.DaemonLogsAnalyzer
 import org.gradle.integtests.fixtures.daemon.DaemonsFixture
 import org.gradle.integtests.fixtures.executer.ExecutionFailure
@@ -29,6 +29,7 @@ import org.gradle.integtests.fixtures.executer.GradleDistribution
 import org.gradle.integtests.fixtures.executer.IntegrationTestBuildContext
 import org.gradle.integtests.fixtures.executer.OutputScrapingExecutionFailure
 import org.gradle.integtests.fixtures.executer.OutputScrapingExecutionResult
+import org.gradle.integtests.fixtures.extensions.AbstractMultiTestInterceptor
 import org.gradle.integtests.fixtures.versions.ReleasedVersionDistributions
 import org.gradle.internal.jvm.Jvm
 import org.gradle.internal.nativeintegration.services.NativeServices
@@ -38,6 +39,7 @@ import org.gradle.test.fixtures.file.TestFile
 import org.gradle.testkit.runner.fixtures.CustomDaemonDirectory
 import org.gradle.testkit.runner.fixtures.CustomEnvironmentVariables
 import org.gradle.testkit.runner.fixtures.Debug
+import org.gradle.testkit.runner.fixtures.HideEnvVariableValuesInDaemonLog
 import org.gradle.testkit.runner.fixtures.InjectsPluginClasspath
 import org.gradle.testkit.runner.fixtures.InspectsBuildOutput
 import org.gradle.testkit.runner.fixtures.InspectsExecutedTasks
@@ -51,7 +53,7 @@ import org.gradle.util.GradleVersion
 import org.gradle.util.SetSystemProperties
 import org.gradle.wrapper.GradleUserHomeLookup
 import org.junit.Rule
-import org.junit.runner.RunWith
+import org.spockframework.runtime.extension.IMethodInvocation
 import spock.lang.Retry
 
 import javax.annotation.Nullable
@@ -61,7 +63,8 @@ import static org.gradle.integtests.fixtures.RetryConditions.onIssueWithReleased
 import static org.gradle.testkit.runner.internal.ToolingApiGradleExecutor.TEST_KIT_DAEMON_DIR_NAME
 import static spock.lang.Retry.Mode.SETUP_FEATURE_CLEANUP
 
-@RunWith(Runner)
+@MultiVersionTestCategory
+@GradleRunnerTest
 @Retry(condition = { onIssueWithReleasedGradleVersion(instance, failure) }, mode = SETUP_FEATURE_CLEANUP, count = 2)
 abstract class BaseGradleRunnerIntegrationTest extends AbstractIntegrationSpec {
 
@@ -70,6 +73,7 @@ abstract class BaseGradleRunnerIntegrationTest extends AbstractIntegrationSpec {
     public static final GradleVersion NO_SOURCE_TASK_OUTCOME_SUPPORT_VERSION = GradleVersion.version("3.4")
     public static final GradleVersion ENVIRONMENT_VARIABLES_SUPPORT_VERSION = GradleVersion.version("3.5")
     public static final GradleVersion INSPECTS_GROUPED_OUTPUT_SUPPORT_VERSION = GradleVersion.version("5.0")
+    public static final GradleVersion HIDE_ENV_VARIABLE_VALUE_IN_DAEMON_LOG_VERSION = GradleVersion.version("6.7")
 
     // Context set by multi run infrastructure
     public static GradleVersion gradleVersion
@@ -177,6 +181,12 @@ abstract class BaseGradleRunnerIntegrationTest extends AbstractIntegrationSpec {
     }
 
     static String determineMinimumVersionThatRunsOnCurrentJavaVersion(String desiredGradleVersion) {
+        if (JavaVersion.current().isCompatibleWith(JavaVersion.VERSION_16)) {
+            def compatibleVersion = GradleVersion.version("7.0")
+            if (GradleVersion.version(desiredGradleVersion) < compatibleVersion) {
+                return compatibleVersion.version
+            }
+        }
         if (JavaVersion.current().isJava11Compatible()) {
             def compatibleVersion = GradleVersion.version("4.8.1") // see https://github.com/gradle/gradle/issues/4860
             if (GradleVersion.version(desiredGradleVersion) < compatibleVersion) {
@@ -191,7 +201,7 @@ abstract class BaseGradleRunnerIntegrationTest extends AbstractIntegrationSpec {
         return desiredGradleVersion
     }
 
-    static class Runner extends AbstractMultiTestRunner {
+    static class Interceptor extends AbstractMultiTestInterceptor {
 
         private static final Map<Class<? extends Annotation>, GradleVersion> MINIMUM_VERSIONS_BY_ANNOTATIONS = [
             (InspectsExecutedTasks): TestKitFeature.CAPTURE_BUILD_RESULT_TASKS.since,
@@ -200,14 +210,15 @@ abstract class BaseGradleRunnerIntegrationTest extends AbstractIntegrationSpec {
             (CustomDaemonDirectory): CUSTOM_DAEMON_DIR_SUPPORT_VERSION,
             (WithNoSourceTaskOutcome): NO_SOURCE_TASK_OUTCOME_SUPPORT_VERSION,
             (CustomEnvironmentVariables): ENVIRONMENT_VARIABLES_SUPPORT_VERSION,
-            (InspectsGroupedOutput): INSPECTS_GROUPED_OUTPUT_SUPPORT_VERSION
+            (InspectsGroupedOutput): INSPECTS_GROUPED_OUTPUT_SUPPORT_VERSION,
+            (HideEnvVariableValuesInDaemonLog): HIDE_ENV_VARIABLE_VALUE_IN_DAEMON_LOG_VERSION
         ]
 
         private static final IntegrationTestBuildContext BUILD_CONTEXT = new IntegrationTestBuildContext()
         private static final String COMPATIBILITY_SYSPROP_NAME = 'org.gradle.integtest.testkit.compatibility'
         private static final ReleasedVersionDistributions RELEASED_VERSION_DISTRIBUTIONS = new ReleasedVersionDistributions()
 
-        Runner(Class<?> target) {
+        Interceptor(Class<?> target) {
             super(target)
         }
 
@@ -327,7 +338,7 @@ abstract class BaseGradleRunnerIntegrationTest extends AbstractIntegrationSpec {
 
         }
 
-        private static class IgnoredGradleRunnerExecution extends AbstractMultiTestRunner.Execution {
+        private static class IgnoredGradleRunnerExecution extends AbstractMultiTestInterceptor.Execution {
 
             private final TestedGradleDistribution testedGradleDistribution
             private final String reason
@@ -343,12 +354,17 @@ abstract class BaseGradleRunnerIntegrationTest extends AbstractIntegrationSpec {
             }
 
             @Override
-            protected boolean isTestEnabled(AbstractMultiTestRunner.TestDetails testDetails) {
+            String toString() {
+                return getDisplayName()
+            }
+
+            @Override
+            boolean isTestEnabled(AbstractMultiTestInterceptor.TestDetails testDetails) {
                 false
             }
         }
 
-        private static class GradleRunnerExecution extends AbstractMultiTestRunner.Execution {
+        private static class GradleRunnerExecution extends AbstractMultiTestInterceptor.Execution {
 
             protected final boolean debug
             private final TestedGradleDistribution testedGradleDistribution
@@ -364,15 +380,20 @@ abstract class BaseGradleRunnerIntegrationTest extends AbstractIntegrationSpec {
             }
 
             @Override
-            protected void before() {
-                super.before()
+            String toString() {
+                return getDisplayName()
+            }
+
+            @Override
+            protected void before(IMethodInvocation invocation) {
+                super.before(invocation)
                 BaseGradleRunnerIntegrationTest.debug = debug
                 gradleVersion = testedGradleDistribution.gradleVersion
                 gradleProvider = testedGradleDistribution.gradleProvider
             }
 
             @Override
-            protected boolean isTestEnabled(AbstractMultiTestRunner.TestDetails testDetails) {
+            boolean isTestEnabled(AbstractMultiTestInterceptor.TestDetails testDetails) {
                 def gradleVersion = testedGradleDistribution.gradleVersion
 
                 if (testDetails.getAnnotation(InjectsPluginClasspath) && gradleVersion < MINIMUM_VERSIONS_BY_ANNOTATIONS[InjectsPluginClasspath]) {
@@ -405,6 +426,9 @@ abstract class BaseGradleRunnerIntegrationTest extends AbstractIntegrationSpec {
                     return false
                 }
                 if (testDetails.getAnnotation(InspectsGroupedOutput) && gradleVersion < INSPECTS_GROUPED_OUTPUT_SUPPORT_VERSION) {
+                    return false
+                }
+                if (testDetails.getAnnotation(HideEnvVariableValuesInDaemonLog) && gradleVersion < HIDE_ENV_VARIABLE_VALUE_IN_DAEMON_LOG_VERSION) {
                     return false
                 }
 

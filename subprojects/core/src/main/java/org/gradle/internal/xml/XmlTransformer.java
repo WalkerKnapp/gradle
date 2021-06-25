@@ -19,8 +19,8 @@ import com.google.common.collect.Lists;
 import groovy.lang.Closure;
 import groovy.util.IndentPrinter;
 import groovy.util.Node;
-import groovy.util.XmlNodePrinter;
-import groovy.util.XmlParser;
+import groovy.xml.XmlNodePrinter;
+import groovy.xml.XmlParser;
 import org.apache.commons.lang.StringUtils;
 import org.gradle.api.Action;
 import org.gradle.api.Transformer;
@@ -29,9 +29,9 @@ import org.gradle.api.internal.DomNode;
 import org.gradle.internal.IoActions;
 import org.gradle.internal.SystemProperties;
 import org.gradle.internal.UncheckedException;
-import org.gradle.util.ConfigureUtil;
-import org.gradle.util.GUtil;
-import org.gradle.util.TextUtil;
+import org.gradle.util.internal.ConfigureUtil;
+import org.gradle.util.internal.GUtil;
+import org.gradle.util.internal.TextUtil;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import org.xml.sax.InputSource;
@@ -350,6 +350,7 @@ public class XmlTransformer implements Transformer<String, String> {
                 org.w3c.dom.Node child = children.item(i);
                 if (child.getNodeType() == org.w3c.dom.Node.TEXT_NODE && child.getNodeValue().trim().length() == 0) {
                     node.removeChild(child);
+                    i--;
                 } else {
                     removeEmptyTextNodes(child);
                 }

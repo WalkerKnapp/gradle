@@ -36,7 +36,7 @@ class RootLocalComponentMetadataTest extends DefaultLocalComponentMetadataTest {
     def 'locking constraints are attached to a configuration and not its children'() {
         given:
         def constraint = DefaultModuleComponentIdentifier.newId(mid, '1.1')
-        dependencyLockingHandler.loadLockState("conf") >> new DefaultDependencyLockingState(true, [constraint] as Set)
+        dependencyLockingHandler.loadLockState("conf") >> new DefaultDependencyLockingState(true, [constraint] as Set, {entry -> false })
         dependencyLockingHandler.loadLockState("child") >> DefaultDependencyLockingState.EMPTY_LOCK_CONSTRAINT
         addConfiguration('conf').enableLocking()
         addConfiguration('child', ['conf']).enableLocking()
@@ -46,22 +46,22 @@ class RootLocalComponentMetadataTest extends DefaultLocalComponentMetadataTest {
         def child = metadata.getConfiguration('child')
 
         then:
-        conf.dependencies.size() == 1
-        child.dependencies.size() == 0
+        conf.syntheticDependencies.size() == 1
+        child.syntheticDependencies.size() == 0
     }
 
     def 'locking constraints are not transitive'() {
         given:
         def constraint = DefaultModuleComponentIdentifier.newId(mid, '1.1')
-        dependencyLockingHandler.loadLockState("conf") >> new DefaultDependencyLockingState(true, [constraint] as Set)
+        dependencyLockingHandler.loadLockState("conf") >> new DefaultDependencyLockingState(true, [constraint] as Set, {entry -> false })
         addConfiguration('conf').enableLocking()
 
         when:
         def conf = metadata.getConfiguration('conf')
 
         then:
-        conf.dependencies.size() == 1
-        conf.dependencies.each {
+        conf.syntheticDependencies.size() == 1
+        conf.syntheticDependencies.each {
             assert !it.transitive
         }
     }
@@ -70,15 +70,15 @@ class RootLocalComponentMetadataTest extends DefaultLocalComponentMetadataTest {
     def 'provides useful reason for locking constraints (#strict)'() {
         given:
         def constraint = DefaultModuleComponentIdentifier.newId(mid, '1.1')
-        dependencyLockingHandler.loadLockState("conf") >> new DefaultDependencyLockingState(strict, [constraint] as Set)
+        dependencyLockingHandler.loadLockState("conf") >> new DefaultDependencyLockingState(strict, [constraint] as Set, {entry -> false })
         addConfiguration('conf').enableLocking()
 
         when:
         def conf = metadata.getConfiguration('conf')
 
         then:
-        conf.dependencies.size() == 1
-        conf.dependencies.each { DependencyMetadata dep ->
+        conf.syntheticDependencies.size() == 1
+        conf.syntheticDependencies.each { DependencyMetadata dep ->
             assert dep.reason == reason
         }
 
@@ -89,7 +89,7 @@ class RootLocalComponentMetadataTest extends DefaultLocalComponentMetadataTest {
     }
 
     private addConfiguration(String name, Collection<String> extendsFrom = [], ImmutableAttributes attributes = ImmutableAttributes.EMPTY) {
-        metadata.addConfiguration(name, "", extendsFrom as Set, ImmutableSet.copyOf(extendsFrom + [name]), true, true, attributes, true, null, true, ImmutableCapabilities.EMPTY)
+        metadata.addConfiguration(name, "", extendsFrom as Set, ImmutableSet.copyOf(extendsFrom + [name]), true, true, attributes, true, null, true, ImmutableCapabilities.EMPTY, Collections.&emptyList)
     }
 
 }

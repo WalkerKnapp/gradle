@@ -54,34 +54,32 @@ The following sections describe use of the Gradle command-line interface, groupe
 [[sec:command_line_executing_tasks]]
 == Executing tasks
 
-You can run a task and all of its <<tutorial_using_tasks.adoc#sec:task_dependencies,dependencies>>.
-----
-$ gradle myTask
-----
-
 You can learn about what projects and tasks are available in the <<#sec:command_line_project_reporting, project reporting section>>.
-
 Most builds support a common set of tasks known as <<more_about_tasks#sec:lifecycle_tasks,_lifecycle tasks_>>. These include the `build`, `assemble`, and `check` tasks.
+
+In order to execute a task called "myTask" on the root project, type:
+----
+$ gradle :myTask
+----
+
+This will run the single "myTask" and also all of its <<tutorial_using_tasks.adoc#sec:task_dependencies,task dependencies>>.
 
 [[executing_tasks_in_multi_project_builds]]
 === Executing tasks in multi-project builds
-In a <<intro_multi_project_builds.adoc#intro_multi_project_builds, multi-project build>>, subproject tasks can be executed with ":" separating subproject name and task name. The following are equivalent _when run from the root project_.
-
+In a <<intro_multi_project_builds.adoc#intro_multi_project_builds, multi-project build>>, subproject tasks can be executed with ":" separating subproject name and task name. The following are equivalent _when run from the root project_:
 ----
-$ gradle :mySubproject:taskName
-$ gradle mySubproject:taskName
+$ gradle :my-subproject:taskName
+$ gradle my-subproject:taskName
 ----
 
-You can also run a task for all subprojects using the task name only. For example, this will run the "test" task for all subprojects when invoked from the root project directory.
-
+You can also run a task for _all_ subprojects by again using a task _selector_ that consists of the task name only. For example, this will run the "test" task for all subprojects when invoked from the root project directory:
 ----
 $ gradle test
 ----
 
 When invoking Gradle from within a subproject, the project name should be omitted:
-
 ----
-$ cd mySubproject
+$ cd my-subproject
 $ gradle taskName
 ----
 
@@ -136,7 +134,8 @@ When executed with `--continue`, Gradle will execute _every_ task to be executed
 
 If a task fails, any subsequent tasks that were depending on it will not be executed. For example, tests will not run if there is a compilation failure in the code under test; because the test task will depend on the compilation task (either directly or indirectly).
 
-=== Task name abbreviation
+[[sec:name_abbreviation]]
+=== Name abbreviation
 
 When you specify tasks on the command-line, you don’t have to provide the full name of the task. You only need to provide enough of the task name to uniquely identify the task. For example, it's likely `gradle che` is enough for Gradle to identify the `check` task.
 
@@ -205,7 +204,7 @@ Running `gradle projects` gives you a list of the sub-projects of the selected p
 $ gradle projects
 ----
 
-You also get a project report within build scans. Learn more about https://guides.gradle.org/creating-build-scans/[creating build scans].
+You also get a project report within build scans. Learn more about https://scans.gradle.com/[creating build scans].
 
 [[sec:listing_tasks]]
 === Listing tasks
@@ -253,7 +252,7 @@ This will give you a link to a web-based report, where you can find dependency i
 
 image::gradle-core-test-build-scan-dependencies.png[Build Scan dependencies report]
 
-Learn more in <<viewing_debugging_dependencies.adoc#,Viewing and debugging dependencies>>.
+Learn more in <<viewing_debugging_dependencies.adoc#viewing-debugging-dependencies,Viewing and debugging dependencies>>.
 
 === Listing project dependencies
 
@@ -263,7 +262,7 @@ Running `gradle dependencies` gives you a list of the dependencies of the select
 $ gradle dependencies
 ----
 
-Concrete examples of build scripts and output available in the <<viewing_debugging_dependencies.adoc#,Viewing and debugging dependencies>>.
+Concrete examples of build scripts and output available in the <<viewing_debugging_dependencies.adoc#viewing-debugging-dependencies,Viewing and debugging dependencies>>.
 
 Running `gradle buildEnvironment` visualises the buildscript dependencies of the selected project, similarly to how `gradle dependencies` visualizes the dependencies of the software being built.
 
@@ -289,17 +288,6 @@ Running `gradle properties` gives you a list of the properties of the selected p
 $ gradle -q api:properties
 include::{snippetsPath}/tutorial/projectReports/tests/propertyListReport.out[]
 ----
-
-=== Software Model reports
-
-You can get a hierarchical view of elements for <<software_model.adoc#software_model,software model>> projects using the `model` task:
-
-----
-$ gradle model
-----
-
-Learn more about <<software_model.adoc#model-report,the model report>> in the software model documentation.
-
 
 [[sec:command_line_completion]]
 == Command-line completion
@@ -335,7 +323,7 @@ Debug <<gradle_daemon.adoc#gradle_daemon, Gradle Daemon>> process.
 
 [[sec:command_line_performance]]
 == Performance options
-Try these options when optimizing build performance. Learn more about https://guides.gradle.org/performance/[improving performance of Gradle builds here].
+Try these options when optimizing build performance. Learn more about <<performance.adoc#performance_gradle,improving performance of Gradle builds here>>.
 
 Many of these options can be specified in `gradle.properties` so command-line flags are not necessary. See the <<build_environment.adoc#sec:gradle_configuration_properties, configuring build environment guide>>.
 
@@ -343,13 +331,13 @@ Many of these options can be specified in `gradle.properties` so command-line fl
 Toggles the <<build_cache.adoc#build_cache, Gradle build cache>>. Gradle will try to reuse outputs from previous builds. _Default is off_.
 
 `--configure-on-demand`, `--no-configure-on-demand`::
-Toggles <<multi_project_builds.adoc#sec:configuration_on_demand, Configure-on-demand>>. Only relevant projects are configured in this build run. _Default is off_.
+Toggles <<multi_project_configuration_and_execution.adoc#sec:configuration_on_demand, Configure-on-demand>>. Only relevant projects are configured in this build run. _Default is off_.
 
 `--max-workers`::
 Sets maximum number of workers that Gradle may use. _Default is number of processors_.
 
 `--parallel`, `--no-parallel`::
-Build projects in parallel. For limitations of this option, see <<multi_project_builds.adoc#sec:parallel_execution, Parallel Project Execution>>. _Default is off_.
+Build projects in parallel. For limitations of this option, see <<multi_project_configuration_and_execution.adoc#sec:parallel_execution, Parallel Project Execution>>. _Default is off_.
 
 `--priority`::
 Specifies the scheduling priority for the Gradle daemon and all processes launched by it. Values are `normal` or `low`. _Default is normal_.
@@ -364,8 +352,8 @@ image::gradle-core-test-build-scan-performance.png[Build Scan performance report
 
 `--watch-fs`, `--no-watch-fs`::
 Toggles <<gradle_daemon.adoc#sec:daemon_watch_fs,watching the file system>>.
-Allows Gradle to re-use information about the file system in the next build.
-_Default is off_.
+When enabled Gradle re-uses information it collects about the file system between builds.
+_Enabled by default on operating systems where Gradle supports this feature._
 
 === Gradle daemon options
 You can manage the <<gradle_daemon.adoc#gradle_daemon,Gradle Daemon>> through the following command line options.
@@ -492,13 +480,14 @@ Learn more about this in <<dependency_locking.adoc#dependency-locking,dependency
 Do not rebuild project dependencies.
 Useful for <<organizing_gradle_projects.adoc#sec:build_sources, debugging and fine-tuning `buildSrc`>>, but can lead to wrong results. Use with caution!
 
+[[sec:environment_options]]
 == Environment options
 You can customize many aspects about where build scripts, settings, caches, and so on through the options below. Learn more about customizing your <<build_environment.adoc#build_environment, build environment>>.
 
-`-b`, `--build-file`::
-Specifies the build file. For example: `gradle --build-file=foo.gradle`. The default is `build.gradle`, then `build.gradle.kts`, then `myProjectName.gradle`.
+`-b`, `--build-file` (deprecated)::
+Specifies the build file. For example: `gradle --build-file=foo.gradle`. The default is `build.gradle`, then `build.gradle.kts`.
 
-`-c`, `--settings-file`::
+`-c`, `--settings-file` (deprecated)::
 Specifies the settings file. For example: `gradle --settings-file=somewhere/else/settings.gradle`
 
 `-g`, `--gradle-user-home`::

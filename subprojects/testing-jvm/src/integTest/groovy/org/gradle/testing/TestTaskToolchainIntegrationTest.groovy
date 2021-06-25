@@ -29,43 +29,30 @@ class TestTaskToolchainIntegrationTest extends AbstractPluginIntegrationTest {
     @IgnoreIf({ AvailableJavaHomes.differentJdk == null })
     def "can manually set java launcher via  #type toolchain on java test task #jdk"() {
         buildFile << """
-            import org.gradle.jvm.toolchain.internal.JavaToolchainQueryService
-            import org.gradle.jvm.toolchain.internal.DefaultToolchainSpec
-
             apply plugin: "java"
 
-            ${jcenterRepository()}
+            ${mavenCentralRepository()}
 
             dependencies {
                 testImplementation 'junit:junit:4.13'
             }
 
-            abstract class ApplyTestToolchain implements Plugin<Project> {
-                @javax.inject.Inject
-                abstract JavaToolchainQueryService getQueryService()
-
-                void apply(Project project) {
-                    def filter = project.objects.newInstance(DefaultToolchainSpec)
-                    filter.languageVersion = JavaVersion.${jdk.javaVersion.name()}
-                    def toolchain = getQueryService().findMatchingToolchain(filter)
-
-                    project.tasks.withType(JavaCompile) {
-                        javaCompiler = toolchain.map({it.javaCompiler})
-                    }
-                    project.tasks.withType(Test) {
-                        javaLauncher = toolchain.map({it.javaLauncher})
-                    }
+            tasks.withType(JavaCompile).configureEach {
+                javaCompiler = javaToolchains.compilerFor {
+                    languageVersion = JavaLanguageVersion.of(${jdk.javaVersion.majorVersion})
                 }
             }
-
-            apply plugin: ApplyTestToolchain
+            test {
+                javaLauncher = javaToolchains.launcherFor {
+                    languageVersion = JavaLanguageVersion.of(${jdk.javaVersion.majorVersion})
+                }
+            }
         """
 
         file('src/test/java/ToolchainTest.java') << testClass("ToolchainTest")
 
         when:
         result = executer
-            .withArgument("-Porg.gradle.java.installations.auto-detect=false")
             .withArgument("-Porg.gradle.java.installations.paths=" + jdk.javaHome.absolutePath)
             .withArgument("--info")
             .withTasks("test")
@@ -83,11 +70,11 @@ class TestTaskToolchainIntegrationTest extends AbstractPluginIntegrationTest {
 
     @IgnoreIf({ AvailableJavaHomes.differentJdk == null })
     def "Test task is configured using default toolchain"() {
-        def someJdk = AvailableJavaHomes.getDifferentJdk()
+        def someJdk = AvailableJavaHomes.getDifferentVersion()
         buildFile << """
             apply plugin: "java"
 
-            ${jcenterRepository()}
+            ${mavenCentralRepository()}
 
             dependencies {
                 testImplementation 'junit:junit:4.13'
@@ -95,7 +82,7 @@ class TestTaskToolchainIntegrationTest extends AbstractPluginIntegrationTest {
 
             java {
                 toolchain {
-                    languageVersion = JavaVersion.toVersion(${someJdk.javaVersion.majorVersion})
+                    languageVersion = JavaLanguageVersion.of(${someJdk.javaVersion.majorVersion})
                 }
             }
         """

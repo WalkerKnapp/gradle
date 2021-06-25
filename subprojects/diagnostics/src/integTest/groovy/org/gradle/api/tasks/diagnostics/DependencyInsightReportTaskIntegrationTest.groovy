@@ -475,7 +475,7 @@ dependencies {
 }
 """
 
-        lockfileFixture.createLockfile('lockedConf', ['org:bar:1.0'], false)
+        lockfileFixture.createLockfile('lockedConf', ['org:bar:1.0'])
 
         when:
         succeeds 'dependencyInsight', '--configuration', 'lockedConf', '--dependency', 'foo'
@@ -525,7 +525,7 @@ dependencies {
 }
 """
 
-        lockfileFixture.createLockfile('lockedConf', ['org:foo:1.0'], false)
+        lockfileFixture.createLockfile('lockedConf', ['org:foo:1.0'])
 
         when:
         succeeds 'dependencyInsight', '--configuration', 'lockedConf', '--dependency', 'foo'
@@ -585,7 +585,7 @@ org:foo:1.+ FAILED
             }
             configurations.forced.resolutionStrategy.force 'org:leaf:1.0'
             configurations.substituted.resolutionStrategy.dependencySubstitution {
-                substitute module('org:leaf') with module('org:leaf:1.0')
+                substitute module('org:leaf') using module('org:leaf:1.0')
             }
             dependencies {
                 conf 'org:foo:1.0', 'org:bar:1.0'
@@ -756,8 +756,8 @@ org:leaf:latest.integration -> 1.0
                         eachDependency { it.useVersion('1.0') }
                         eachDependency { it.useVersion('2.0'); it.because("RULE 2") }
                         dependencySubstitution {
-                            substitute module('org:foo') because "SUBSTITUTION 1" with module('org:foo:3.0')
-                            substitute module('org:foo') because "SUBSTITUTION 2" with module('org:bar:2.0')
+                            substitute module('org:foo') because "SUBSTITUTION 1" using module('org:foo:3.0')
+                            substitute module('org:foo') because "SUBSTITUTION 2" using module('org:bar:2.0')
                             all {
                                 it.useTarget('org:bar:2.0', "SUBSTITUTION 3")
                             }
@@ -899,8 +899,8 @@ org:foo:1.0 -> 2.0
             configurations {
                conf {
                   resolutionStrategy.dependencySubstitution {
-                     substitute module('org:foo') because 'foo superseded by bar' with module('org:bar:1.0')
-                     substitute module('org:baz') with module('org:baz:2.0')
+                     substitute module('org:foo') because 'foo superseded by bar' using module('org:bar:1.0')
+                     substitute module('org:baz') using module('org:baz:2.0')
                   }
                }
             }
@@ -960,8 +960,8 @@ org:foo:1.0 -> org:bar:1.0
             configurations {
                 conf {
                     resolutionStrategy.dependencySubstitution {
-                        substitute module('org:leaf') with module('org:new-leaf:77')
-                        substitute module('org:foo') with module('org:foo:2.0')
+                        substitute module('org:leaf') using module('org:new-leaf:77')
+                        substitute module('org:foo') using module('org:foo:2.0')
                     }
                 }
             }
@@ -1012,8 +1012,8 @@ org:leaf:2.0 -> org:new-leaf:77
             configurations {
                 conf {
                     resolutionStrategy.dependencySubstitution {
-                        substitute module('org:foo:1.0') because('I want to') with module('org:foo:2.0')
-                        substitute module('org:bar:1.0') because('I am not sure I want to explain') with module('org:bar:2.0')
+                        substitute module('org:foo:1.0') because('I want to') using module('org:foo:2.0')
+                        substitute module('org:bar:1.0') because('I am not sure I want to explain') using module('org:bar:2.0')
                     }
                 }
             }
@@ -1500,7 +1500,7 @@ org:middle:1.0 -> 2.0 FAILED
             configurations {
                 conf {
                     resolutionStrategy.dependencySubstitution {
-                        substitute module("org:middle") with module("org:middle:2.0+")
+                        substitute module("org:middle") using module("org:middle:2.0+")
                     }
                 }
             }
@@ -1741,7 +1741,9 @@ org:leaf2:1.0
                 group = 'org.foo'
                 version = '1.0'
             }
-            archivesBaseName = 'root'
+            base {
+                archivesBaseName = 'root'
+            }
             dependencies {
                 implementation project(":impl")
             }
@@ -1767,6 +1769,7 @@ project :
       org.gradle.usage               = java-runtime
       org.gradle.libraryelements     = jar
       org.gradle.dependency.bundling = external
+      org.gradle.jvm.environment     = standard-jvm
       org.gradle.jvm.version         = $jvmVersion
    ]
    variant "runtimeElements" [
@@ -1775,6 +1778,9 @@ project :
       org.gradle.usage               = java-runtime
       org.gradle.libraryelements     = jar
       org.gradle.jvm.version         = $jvmVersion
+
+      Requested attributes not found in the selected variant:
+         org.gradle.jvm.environment     = standard-jvm
    ]
 
 project :
@@ -1829,6 +1835,7 @@ org:leaf2:1.0
 
       Requested attributes not found in the selected variant:
          org.gradle.dependency.bundling = external
+         org.gradle.jvm.environment     = standard-jvm
          org.gradle.jvm.version         = $jvmVersion
    ]
 
@@ -1883,6 +1890,9 @@ project :impl
       org.gradle.usage               = java-api
       org.gradle.libraryelements     = jar (compatible with: classes)
       org.gradle.jvm.version         = $jvmVersion
+
+      Requested attributes not found in the selected variant:
+         org.gradle.jvm.environment     = standard-jvm
    ]
 
 project :impl
@@ -1939,6 +1949,7 @@ org:leaf4:1.0
 
       Requested attributes not found in the selected variant:
          org.gradle.dependency.bundling = external
+         org.gradle.jvm.environment     = standard-jvm
          org.gradle.jvm.version         = ${JavaVersion.current().majorVersion}
    ]
 
@@ -1979,6 +1990,7 @@ org:leaf1:1.0
 
       Requested attributes not found in the selected variant:
          org.gradle.dependency.bundling = external
+         org.gradle.jvm.environment     = standard-jvm
          org.gradle.jvm.version         = ${JavaVersion.current().majorVersion}
    ]
 
@@ -2000,6 +2012,7 @@ org:leaf2:1.0
 
       Requested attributes not found in the selected variant:
          org.gradle.dependency.bundling = external
+         org.gradle.jvm.environment     = standard-jvm
          org.gradle.jvm.version         = ${JavaVersion.current().majorVersion}
    ]
 
@@ -2061,6 +2074,9 @@ project :api
       org.gradle.usage               = java-api
       org.gradle.libraryelements     = jar (compatible with: classes)
       org.gradle.jvm.version         = ${JavaVersion.current().majorVersion}
+
+      Requested attributes not found in the selected variant:
+         org.gradle.jvm.environment     = standard-jvm
    ]
 
 project :api
@@ -2080,6 +2096,9 @@ project :some:deeply:nested
       org.gradle.usage               = java-api
       org.gradle.libraryelements     = jar (compatible with: classes)
       org.gradle.jvm.version         = ${JavaVersion.current().majorVersion}
+
+      Requested attributes not found in the selected variant:
+         org.gradle.jvm.environment     = standard-jvm
    ]
 
 project :some:deeply:nested
@@ -2098,6 +2117,9 @@ project :some:deeply:nested
       org.gradle.usage               = java-api
       org.gradle.libraryelements     = jar (compatible with: classes)
       org.gradle.jvm.version         = ${JavaVersion.current().majorVersion}
+
+      Requested attributes not found in the selected variant:
+         org.gradle.jvm.environment     = standard-jvm
    ]
 
 project :some:deeply:nested
@@ -2153,6 +2175,7 @@ org:leaf3:1.0
 
       Requested attributes not found in the selected variant:
          org.gradle.dependency.bundling = external
+         org.gradle.jvm.environment     = standard-jvm
          org.gradle.jvm.version         = ${JavaVersion.current().majorVersion}
    ]
 
@@ -2263,6 +2286,7 @@ foo:foo:1.0
 
       Requested attributes not found in the selected variant:
          org.gradle.dependency.bundling = external
+         org.gradle.jvm.environment     = standard-jvm
          org.gradle.jvm.version         = ${JavaVersion.current().majorVersion}
    ]
    Selection reasons:
@@ -2321,6 +2345,7 @@ org:foo -> $selected
 
       Requested attributes not found in the selected variant:
          org.gradle.dependency.bundling = external
+         org.gradle.jvm.environment     = standard-jvm
          org.gradle.jvm.version         = ${JavaVersion.current().majorVersion}
    ]
    Selection reasons:
@@ -2376,6 +2401,7 @@ org:foo -> $selected
 
       Requested attributes not found in the selected variant:
          org.gradle.dependency.bundling = external
+         org.gradle.jvm.environment     = standard-jvm
          org.gradle.jvm.version         = ${JavaVersion.current().majorVersion}
    ]
    Selection reasons:
@@ -2428,6 +2454,7 @@ org:foo:${displayVersion} -> $selected
 
       Requested attributes not found in the selected variant:
          org.gradle.dependency.bundling = external
+         org.gradle.jvm.environment     = standard-jvm
          org.gradle.jvm.version         = ${JavaVersion.current().majorVersion}
    ]
    Selection reasons:
@@ -2486,6 +2513,7 @@ org:foo:[1.1,1.3] -> 1.3
 
       Requested attributes not found in the selected variant:
          org.gradle.dependency.bundling = external
+         org.gradle.jvm.environment     = standard-jvm
          org.gradle.jvm.version         = ${JavaVersion.current().majorVersion}
    ]
    Selection reasons:
@@ -2503,6 +2531,7 @@ org:foo:1.1
 
       Requested attributes not found in the selected variant:
          org.gradle.dependency.bundling = external
+         org.gradle.jvm.environment     = standard-jvm
          org.gradle.jvm.version         = ${JavaVersion.current().majorVersion}
    ]
    Selection reasons:
@@ -2565,6 +2594,7 @@ org:bar:1.0
 
       Requested attributes not found in the selected variant:
          org.gradle.dependency.bundling = external
+         org.gradle.jvm.environment     = standard-jvm
          org.gradle.jvm.version         = ${JavaVersion.current().majorVersion}
    ]
    Selection reasons:
@@ -2583,6 +2613,7 @@ org:foo:1.1
 
       Requested attributes not found in the selected variant:
          org.gradle.dependency.bundling = external
+         org.gradle.jvm.environment     = standard-jvm
          org.gradle.jvm.version         = ${JavaVersion.current().majorVersion}
    ]
    Selection reasons:
@@ -2630,6 +2661,7 @@ org:leaf:1.0 (by constraint)
 
       Requested attributes not found in the selected variant:
          org.gradle.dependency.bundling = external
+         org.gradle.jvm.environment     = standard-jvm
          org.gradle.jvm.version         = ${JavaVersion.current().majorVersion}
    ]
 
@@ -2684,6 +2716,7 @@ org.test:leaf:1.0
 
       Requested attributes not found in the selected variant:
          org.gradle.dependency.bundling = external
+         org.gradle.jvm.environment     = standard-jvm
          org.gradle.jvm.version         = ${JavaVersion.current().majorVersion}
    ]
    Selection reasons:
@@ -2871,6 +2904,7 @@ org:foo:1.0
 
       Requested attributes not found in the selected variant:
          org.gradle.dependency.bundling = external
+         org.gradle.jvm.environment     = standard-jvm
          org.gradle.jvm.version         = ${JavaVersion.current().majorVersion}
    ]
    Selection reasons:
@@ -2928,6 +2962,7 @@ org:foo:{require [1.0,); reject 1.1} -> 1.0
 
       Requested attributes not found in the selected variant:
          org.gradle.dependency.bundling = external
+         org.gradle.jvm.environment     = standard-jvm
          org.gradle.jvm.version         = ${JavaVersion.current().majorVersion}
    ]
    Selection reasons:
@@ -2996,6 +3031,7 @@ org:foo:1.0
 
       Requested attributes not found in the selected variant:
          org.gradle.dependency.bundling = external
+         org.gradle.jvm.environment     = standard-jvm
          org.gradle.jvm.version         = ${JavaVersion.current().majorVersion}
    ]
    Selection reasons:
@@ -3003,6 +3039,7 @@ org:foo:1.0
           - Attribute 'color' didn't match. Requested 'blue', was: 'red'
           - Attribute 'org.gradle.category' didn't match. Requested 'library', was: not found
           - Attribute 'org.gradle.dependency.bundling' didn't match. Requested 'external', was: not found
+          - Attribute 'org.gradle.jvm.environment' didn't match. Requested 'standard-jvm', was: not found
           - Attribute 'org.gradle.jvm.version' didn't match. Requested '${JavaVersion.current().majorVersion}', was: not found
           - Attribute 'org.gradle.libraryelements' didn't match. Requested 'classes', was: not found
           - Attribute 'org.gradle.usage' didn't match. Requested 'java-api', was: not found
@@ -3010,6 +3047,7 @@ org:foo:1.0
           - Attribute 'color' didn't match. Requested 'blue', was: 'green'
           - Attribute 'org.gradle.category' didn't match. Requested 'library', was: not found
           - Attribute 'org.gradle.dependency.bundling' didn't match. Requested 'external', was: not found
+          - Attribute 'org.gradle.jvm.environment' didn't match. Requested 'standard-jvm', was: not found
           - Attribute 'org.gradle.jvm.version' didn't match. Requested '${JavaVersion.current().majorVersion}', was: not found
           - Attribute 'org.gradle.libraryelements' didn't match. Requested 'classes', was: not found
           - Attribute 'org.gradle.usage' didn't match. Requested 'java-api', was: not found
@@ -3077,6 +3115,7 @@ planet:mercury:1.0.2
 
       Requested attributes not found in the selected variant:
          org.gradle.dependency.bundling = external
+         org.gradle.jvm.environment     = standard-jvm
          org.gradle.jvm.version         = ${JavaVersion.current().majorVersion}
    ]
    Selection reasons:
@@ -3109,6 +3148,7 @@ planet:venus:2.0.1
 
       Requested attributes not found in the selected variant:
          org.gradle.dependency.bundling = external
+         org.gradle.jvm.environment     = standard-jvm
          org.gradle.jvm.version         = ${JavaVersion.current().majorVersion}
    ]
    Selection reasons:
@@ -3141,6 +3181,7 @@ planet:pluto:1.0.0
 
       Requested attributes not found in the selected variant:
          org.gradle.dependency.bundling = external
+         org.gradle.jvm.environment     = standard-jvm
          org.gradle.jvm.version         = ${JavaVersion.current().majorVersion}
    ]
 
@@ -3192,6 +3233,7 @@ org:foo:1.5
 
       Requested attributes not found in the selected variant:
          org.gradle.dependency.bundling = external
+         org.gradle.jvm.environment     = standard-jvm
          org.gradle.jvm.version         = ${JavaVersion.current().majorVersion}
    ]
    Selection reasons:

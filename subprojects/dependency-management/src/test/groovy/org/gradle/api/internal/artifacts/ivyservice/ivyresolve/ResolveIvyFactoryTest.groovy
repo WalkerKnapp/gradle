@@ -47,6 +47,7 @@ import org.gradle.api.internal.properties.GradleProperties
 import org.gradle.internal.Factory
 import org.gradle.internal.action.InstantiatingAction
 import org.gradle.internal.component.external.model.ModuleComponentArtifactMetadata
+import org.gradle.internal.model.CalculatedValueContainerFactory
 import org.gradle.internal.operations.BuildOperationExecutor
 import org.gradle.internal.reflect.Instantiator
 import org.gradle.internal.resolve.caching.ComponentMetadataSupplierRuleExecutor
@@ -55,7 +56,7 @@ import org.gradle.internal.resource.local.FileStore
 import org.gradle.internal.resource.local.LocallyAvailableResourceFinder
 import org.gradle.internal.resource.transfer.CacheAwareExternalResourceAccessor
 import org.gradle.util.AttributeTestUtil
-import org.gradle.util.BuildCommencedTimeProvider
+import org.gradle.util.internal.BuildCommencedTimeProvider
 import org.gradle.util.TestUtil
 import spock.lang.Specification
 import spock.lang.Subject
@@ -96,7 +97,7 @@ class ResolveIvyFactoryTest extends Specification {
         buildOperationExecutor = Mock()
         listener = Mock()
 
-        resolveIvyFactory = new ResolveIvyFactory(cacheProvider, startParameterResolutionOverride, startParameterResolutionOverride.dependencyVerificationOverride(buildOperationExecutor, TestUtil.checksumService, Mock(SignatureVerificationServiceFactory), new DocumentationRegistry(), buildCommencedTimeProvider, (Factory<GradleProperties>) Mock(Factory)), buildCommencedTimeProvider, versionComparator, moduleIdentifierFactory, repositoryBlacklister, versionParser, listener)
+        resolveIvyFactory = new ResolveIvyFactory(cacheProvider, startParameterResolutionOverride, startParameterResolutionOverride.dependencyVerificationOverride(buildOperationExecutor, TestUtil.checksumService, Mock(SignatureVerificationServiceFactory), new DocumentationRegistry(), buildCommencedTimeProvider, (Factory<GradleProperties>) Mock(Factory)), buildCommencedTimeProvider, versionComparator, moduleIdentifierFactory, repositoryBlacklister, versionParser, listener, Stub(CalculatedValueContainerFactory))
     }
 
     def "returns an empty resolver when no repositories are configured"() {

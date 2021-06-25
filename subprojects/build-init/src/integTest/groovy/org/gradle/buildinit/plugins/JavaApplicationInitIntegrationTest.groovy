@@ -18,7 +18,9 @@ package org.gradle.buildinit.plugins
 
 import org.gradle.buildinit.plugins.fixtures.ScriptDslFixture
 import org.gradle.buildinit.plugins.internal.modifiers.BuildInitTestFramework
-import org.gradle.integtests.fixtures.ToBeFixedForConfigurationCache
+import org.gradle.integtests.fixtures.executer.GradleContextualExecuter
+import spock.lang.IgnoreIf
+import spock.lang.Issue
 import spock.lang.Unroll
 
 import static org.gradle.buildinit.plugins.internal.modifiers.BuildInitDsl.GROOVY
@@ -34,7 +36,7 @@ class JavaApplicationInitIntegrationTest extends AbstractInitIntegrationSpec {
 
     def "defaults to Groovy build scripts"() {
         when:
-        run ('init', '--type', 'java-application')
+        run('init', '--type', 'java-application')
 
         then:
         dslFixtureFor(GROOVY).assertGradleFilesGenerated()
@@ -56,20 +58,19 @@ class JavaApplicationInitIntegrationTest extends AbstractInitIntegrationSpec {
         run("build")
 
         then:
-        assertTestPassed("some.thing.AppTest", "testAppHasAGreeting")
+        assertTestPassed("some.thing.AppTest", "appHasAGreeting")
 
         when:
         run("run")
 
         then:
-        outputContains("Hello world")
+        outputContains("Hello World!")
 
         where:
         scriptDsl << ScriptDslFixture.SCRIPT_DSLS
     }
 
     @Unroll
-    @ToBeFixedForConfigurationCache(because = "gradle/configuration-cache#270")
     def "creates sample source using spock instead of junit with #scriptDsl build scripts"() {
         when:
         run('init', '--type', 'java-application', '--test-framework', 'spock', '--dsl', scriptDsl.id)
@@ -152,27 +153,19 @@ class JavaApplicationInitIntegrationTest extends AbstractInitIntegrationSpec {
         run("build")
 
         then:
-        switch (testFramework) {
-            case BuildInitTestFramework.JUNIT:
-                assertTestPassed("my.app.AppTest", "testAppHasAGreeting")
-                break
-            case BuildInitTestFramework.TESTNG:
-                assertTestPassed("my.app.AppTest", "appHasAGreeting")
-                break
-        }
+        assertTestPassed("my.app.AppTest", "appHasAGreeting")
 
         when:
         run("run")
 
         then:
-        outputContains("Hello world")
+        outputContains("Hello World!")
 
         where:
         [scriptDsl, testFramework] << [ScriptDslFixture.SCRIPT_DSLS, [BuildInitTestFramework.JUNIT, BuildInitTestFramework.TESTNG]].combinations()
     }
 
     @Unroll
-    @ToBeFixedForConfigurationCache(because = "gradle/configuration-cache#270")
     def "creates sample source with package and spock and #scriptDsl build scripts"() {
         when:
         run('init', '--type', 'java-application', '--test-framework', 'spock', '--package', 'my.app', '--dsl', scriptDsl.id)
@@ -194,7 +187,7 @@ class JavaApplicationInitIntegrationTest extends AbstractInitIntegrationSpec {
         run("run")
 
         then:
-        outputContains("Hello world")
+        outputContains("Hello World!")
 
         where:
         scriptDsl << ScriptDslFixture.SCRIPT_DSLS
@@ -231,5 +224,16 @@ class JavaApplicationInitIntegrationTest extends AbstractInitIntegrationSpec {
 
         where:
         scriptDsl << ScriptDslFixture.SCRIPT_DSLS
+    }
+
+
+    @Issue("https://github.com/gradle/gradle/issues/17383")
+    @IgnoreIf({ GradleContextualExecuter.embedded })
+    def "command line works with different locale"() {
+        setup:
+        executer.withCommandLineGradleOpts('-Duser.language=tr', '-Duser.country=TR')
+
+        expect:
+        succeeds('init', '--type', 'java-application', '--dsl', 'groovy')
     }
 }

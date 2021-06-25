@@ -19,7 +19,6 @@ package org.gradle.initialization
 import org.gradle.integtests.fixtures.AbstractIntegrationSpec
 import org.gradle.integtests.fixtures.BuildOperationNotificationsFixture
 import org.gradle.integtests.fixtures.BuildOperationsFixture
-import org.gradle.integtests.fixtures.ToBeFixedForConfigurationCache
 
 class BuildInitializationBuildOperationsIntegrationTest extends AbstractIntegrationSpec {
 
@@ -60,7 +59,6 @@ class BuildInitializationBuildOperationsIntegrationTest extends AbstractIntegrat
         buildOperations.first('Configure build').id == loadProjectsBuildOperation.parentId
     }
 
-    @ToBeFixedForConfigurationCache(because = "composite builds")
     def "operations are fired for complex nest of builds"() {
         settingsFile << """
             rootProject.name = "root-changed"
@@ -148,74 +146,73 @@ class BuildInitializationBuildOperationsIntegrationTest extends AbstractIntegrat
         loadBuildBuildOperations*.details.buildPath == [
             ":",
             ":nested",
-            ":nested-cli",
             ":nested-nested",
+            ":nested-cli",
             ":nested-cli-nested",
-            ":buildSrc",
-            ":buildSrc:buildSrc",
-            ":nested:buildSrc",
-            ":nested:buildSrc:buildSrc",
-            ":nested-cli:buildSrc",
-            ":nested-cli:buildSrc:buildSrc",
             ":nested-nested:buildSrc",
             ":nested-nested:buildSrc:buildSrc",
+            ":nested:buildSrc",
+            ":nested:buildSrc:buildSrc",
             ":nested-cli-nested:buildSrc",
             ":nested-cli-nested:buildSrc:buildSrc",
+            ":nested-cli:buildSrc",
+            ":nested-cli:buildSrc:buildSrc",
+            ":buildSrc",
+            ":buildSrc:buildSrc",
         ]
-
         loadBuildBuildOperations*.details.includedBy == [
             null,
             ":",
-            ":",
             ":nested",
-            ":nested-cli",
             ":",
-            ":buildSrc",
-            ":nested",
-            ":nested:buildSrc",
             ":nested-cli",
-            ":nested-cli:buildSrc",
             ":nested-nested",
             ":nested-nested:buildSrc",
+            ":nested",
+            ":nested:buildSrc",
             ":nested-cli-nested",
             ":nested-cli-nested:buildSrc",
+            ":nested-cli",
+            ":nested-cli:buildSrc",
+            ":",
+            ":buildSrc",
         ]
 
         def evaluateSettingsBuildOperations = buildOperations.all(EvaluateSettingsBuildOperationType)
         evaluateSettingsBuildOperations*.details.buildPath == [
             ":",
             ":nested",
-            ":nested-cli",
             ":nested-nested",
+            ":nested-cli",
             ":nested-cli-nested",
-            ":buildSrc",
-            ":buildSrc:buildSrc",
-            ":nested:buildSrc",
-            ":nested:buildSrc:buildSrc",
-            ":nested-cli:buildSrc",
-            ":nested-cli:buildSrc:buildSrc",
             ":nested-nested:buildSrc",
             ":nested-nested:buildSrc:buildSrc",
+            ":nested:buildSrc",
+            ":nested:buildSrc:buildSrc",
             ":nested-cli-nested:buildSrc",
             ":nested-cli-nested:buildSrc:buildSrc",
+            ":nested-cli:buildSrc",
+            ":nested-cli:buildSrc:buildSrc",
+            ":buildSrc",
+            ":buildSrc:buildSrc",
         ]
 
         def configureOrder = [
-            ":buildSrc:buildSrc",
-            ":buildSrc",
-            ":",
-            ":nested:buildSrc:buildSrc",
-            ":nested:buildSrc",
-            ":nested",
-            ":nested-cli:buildSrc:buildSrc",
-            ":nested-cli:buildSrc",
-            ":nested-cli",
-            ":nested-nested:buildSrc:buildSrc",
-            ":nested-nested:buildSrc",
-            ":nested-nested",
-            ":nested-cli-nested:buildSrc:buildSrc",
-            ":nested-cli-nested:buildSrc",
-            ":nested-cli-nested",
+                ":",
+                ":nested-nested",
+                ":nested-nested:buildSrc",
+                ":nested-nested:buildSrc:buildSrc",
+                ":nested",
+                ":nested:buildSrc",
+                ":nested:buildSrc:buildSrc",
+                ":nested-cli-nested",
+                ":nested-cli-nested:buildSrc",
+                ":nested-cli-nested:buildSrc:buildSrc",
+                ":nested-cli",
+                ":nested-cli:buildSrc",
+                ":nested-cli:buildSrc:buildSrc",
+                ":buildSrc",
+                ":buildSrc:buildSrc",
         ]
 
         def configureBuildBuildOperations = buildOperations.all(ConfigureBuildBuildOperationType)

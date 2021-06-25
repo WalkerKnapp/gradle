@@ -53,15 +53,15 @@ import static org.gradle.util.AttributeTestUtil.attributes
 
 class GradleModuleMetadataWriterTest extends Specification {
 
-    VersionConstraint requires(String version) {
+    static VersionConstraint requires(String version) {
         DefaultImmutableVersionConstraint.of(DefaultMutableVersionConstraint.withVersion(version))
     }
 
-    VersionConstraint strictly(String version) {
+    static VersionConstraint strictly(String version) {
         DefaultImmutableVersionConstraint.of(DefaultMutableVersionConstraint.withStrictVersion(version))
     }
 
-    VersionConstraint prefersAndRejects(String version, List<String> rejects) {
+    static VersionConstraint prefersAndRejects(String version, List<String> rejects) {
         DefaultImmutableVersionConstraint.of(version, "", "", rejects)
     }
 
@@ -73,7 +73,7 @@ class GradleModuleMetadataWriterTest extends Specification {
 
     private writeTo(Writer writer, PublicationInternal publication, List<PublicationInternal> publications) {
         new GradleModuleMetadataWriter(
-            new BuildInvocationScopeId(buildId), projectDependencyResolver, TestUtil.checksumService
+            new BuildInvocationScopeId(buildId), projectDependencyResolver, TestUtil.checksumService, ':task', []
         ).writeTo(
             writer, publication, publications
         )
@@ -92,10 +92,10 @@ class GradleModuleMetadataWriterTest extends Specification {
         ex.message.contains("This publication must publish at least one variant")
     }
 
-    def "writes file for component with attributes"() {
+    def "writes file for component with attributes (with build id: #withBuildId)"() {
         def writer = new StringWriter()
         def component = Stub(TestComponent)
-        def publication = publication(component, id)
+        def publication = publication(component, id, null, withBuildId)
         def v1 = Stub(UsageContext)
         v1.name >> "v1"
         v1.attributes >> attributes(usage: "compile")
@@ -106,6 +106,11 @@ class GradleModuleMetadataWriterTest extends Specification {
         when:
         publication.attributes >> attributes(status: 'release', 'test': 'value')
         writeTo(writer, publication, [publication])
+        def buildIdContent = ""
+        if (withBuildId) {
+            buildIdContent = """,
+      "buildId": "${buildId}\""""
+        }
 
         then:
         writer.toString() == """{
@@ -121,8 +126,7 @@ class GradleModuleMetadataWriterTest extends Specification {
   },
   "createdBy": {
     "gradle": {
-      "version": "${GradleVersion.current().version}",
-      "buildId": "${buildId}"
+      "version": "${GradleVersion.current().version}"$buildIdContent
     }
   },
   "variants": [
@@ -135,6 +139,8 @@ class GradleModuleMetadataWriterTest extends Specification {
   ]
 }
 """
+        where:
+        withBuildId << [true, false]
     }
 
     def "writes file for component with variants with files"() {
@@ -184,8 +190,7 @@ class GradleModuleMetadataWriterTest extends Specification {
   },
   "createdBy": {
     "gradle": {
-      "version": "${GradleVersion.current().version}",
-      "buildId": "${buildId}"
+      "version": "${GradleVersion.current().version}"
     }
   },
   "variants": [
@@ -319,8 +324,7 @@ class GradleModuleMetadataWriterTest extends Specification {
   },
   "createdBy": {
     "gradle": {
-      "version": "${GradleVersion.current().version}",
-      "buildId": "${buildId}"
+      "version": "${GradleVersion.current().version}"
     }
   },
   "variants": [
@@ -499,8 +503,7 @@ class GradleModuleMetadataWriterTest extends Specification {
   },
   "createdBy": {
     "gradle": {
-      "version": "${GradleVersion.current().version}",
-      "buildId": "${buildId}"
+      "version": "${GradleVersion.current().version}"
     }
   },
   "variants": [
@@ -596,8 +599,7 @@ class GradleModuleMetadataWriterTest extends Specification {
   },
   "createdBy": {
     "gradle": {
-      "version": "${GradleVersion.current().version}",
-      "buildId": "${buildId}"
+      "version": "${GradleVersion.current().version}"
     }
   },
   "variants": [
@@ -669,8 +671,7 @@ class GradleModuleMetadataWriterTest extends Specification {
   },
   "createdBy": {
     "gradle": {
-      "version": "${GradleVersion.current().version}",
-      "buildId": "${buildId}"
+      "version": "${GradleVersion.current().version}"
     }
   },
   "variants": [
@@ -710,6 +711,38 @@ class GradleModuleMetadataWriterTest extends Specification {
 """
     }
 
+    def "fails to write component with child at the same coordinates"() {
+        def writer = new StringWriter()
+        def rootComponent = Stub(TestComponent)
+        def rootPublication = publication(rootComponent, id)
+
+        def id1 = DefaultModuleVersionIdentifier.newId("group", "module", "1")
+        def comp1 = Stub(TestComponent)
+        def publication1 = publication(comp1, id1)
+
+        def c1 = Stub(Capability) {
+            getGroup() >> 'org.test'
+            getName() >> 'foo'
+            getVersion() >> '1'
+        }
+
+        def v1 = Stub(UsageContext)
+        v1.name >> "v1"
+        v1.attributes >> attributes(usage: "compile")
+        v1.capabilities >> [c1]
+
+        rootComponent.variants >> [comp1]
+        rootComponent.usages >> []
+        comp1.usages >> [v1]
+
+        when:
+        writeTo(writer, rootPublication, [rootPublication, publication1])
+
+        then:
+        InvalidUserCodeException ex = thrown()
+        ex.message.contains("Cannot have a remote variant with coordinates 'group:module' that are the same as the module itself")
+    }
+
     def "writes file for module that is a child of another component"() {
         def writer = new StringWriter()
         def rootComponent = Stub(TestComponent)
@@ -742,8 +775,7 @@ class GradleModuleMetadataWriterTest extends Specification {
   },
   "createdBy": {
     "gradle": {
-      "version": "${GradleVersion.current().version}",
-      "buildId": "${buildId}"
+      "version": "${GradleVersion.current().version}"
     }
   },
   "variants": [
@@ -802,8 +834,7 @@ class GradleModuleMetadataWriterTest extends Specification {
   },
   "createdBy": {
     "gradle": {
-      "version": "${GradleVersion.current().version}",
-      "buildId": "${buildId}"
+      "version": "${GradleVersion.current().version}"
     }
   },
   "variants": [
@@ -985,7 +1016,7 @@ class GradleModuleMetadataWriterTest extends Specification {
         def publication = publication(component, id, mappingStrategy)
 
         mappingStrategy.findStrategyForVariant(_) >> variantMappingStrategy
-        variantMappingStrategy.maybeResolveVersion(_ as String, _ as String) >> { String group, String name ->
+        variantMappingStrategy.maybeResolveVersion(_ as String, _ as String, _) >> { String group, String name, String projectPath ->
             DefaultModuleVersionIdentifier.newId(group, name, 'v99')
         }
 
@@ -1057,8 +1088,7 @@ class GradleModuleMetadataWriterTest extends Specification {
   },
   "createdBy": {
     "gradle": {
-      "version": "${GradleVersion.current().version}",
-      "buildId": "${buildId}"
+      "version": "${GradleVersion.current().version}"
     }
   },
   "variants": [
@@ -1130,12 +1160,12 @@ class GradleModuleMetadataWriterTest extends Specification {
 """
     }
 
-    def publication(SoftwareComponentInternal component, ModuleVersionIdentifier coords, VersionMappingStrategyInternal mappingStrategyInternal = null) {
+    def publication(SoftwareComponentInternal component, ModuleVersionIdentifier coords, VersionMappingStrategyInternal mappingStrategyInternal = null, boolean withBuildId = false) {
         def publication = Stub(PublicationInternal)
         publication.component >> component
         publication.coordinates >> coords
         publication.versionMappingStrategy >> mappingStrategyInternal
-        publication.isPublishBuildId() >> true
+        publication.isPublishBuildId() >> withBuildId
         return publication
     }
 
@@ -1148,7 +1178,7 @@ class GradleModuleMetadataWriterTest extends Specification {
             this.name = name
             this.uri = uri
         }
-        String name;
-        String uri;
+        String name
+        String uri
     }
 }

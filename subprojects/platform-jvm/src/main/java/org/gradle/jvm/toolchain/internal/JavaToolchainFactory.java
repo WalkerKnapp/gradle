@@ -17,30 +17,35 @@
 package org.gradle.jvm.toolchain.internal;
 
 import org.gradle.api.internal.file.FileFactory;
-import org.gradle.jvm.toolchain.JavaInstallation;
-import org.gradle.jvm.toolchain.JavaInstallationRegistry;
+import org.gradle.internal.jvm.inspection.JvmInstallationMetadata;
+import org.gradle.internal.jvm.inspection.JvmMetadataDetector;
 
 import javax.inject.Inject;
 import java.io.File;
+import java.util.Optional;
 
 public class JavaToolchainFactory {
 
-    private final FileFactory fileFactory;
-    private final JavaInstallationRegistry installationRegistry;
     private final JavaCompilerFactory compilerFactory;
     private final ToolchainToolFactory toolFactory;
+    private final FileFactory fileFactory;
+    private final JvmMetadataDetector detector;
 
     @Inject
-    public JavaToolchainFactory(FileFactory fileFactory, JavaInstallationRegistry installationRegistry, JavaCompilerFactory compilerFactory, ToolchainToolFactory toolFactory) {
-        this.fileFactory = fileFactory;
-        this.installationRegistry = installationRegistry;
+    public JavaToolchainFactory(JvmMetadataDetector detector, JavaCompilerFactory compilerFactory, ToolchainToolFactory toolFactory, FileFactory fileFactory) {
+        this.detector = detector;
         this.compilerFactory = compilerFactory;
         this.toolFactory = toolFactory;
+        this.fileFactory = fileFactory;
     }
 
-    public JavaToolchain newInstance(File javaHome) {
-        final JavaInstallation installation = installationRegistry.installationForDirectory(fileFactory.dir(javaHome)).get();
-        return new JavaToolchain(installation, compilerFactory, toolFactory);
+    public Optional<JavaToolchain> newInstance(File javaHome, JavaToolchainInput input) {
+        final JvmInstallationMetadata metadata = detector.getMetadata(javaHome);
+        if(metadata.isValidInstallation()) {
+            final JavaToolchain toolchain = new JavaToolchain(metadata, compilerFactory, toolFactory, fileFactory, input);
+            return Optional.of(toolchain);
+        }
+        return Optional.empty();
     }
 
 }

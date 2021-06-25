@@ -23,8 +23,6 @@ import org.gradle.api.file.DirectoryProperty;
 import org.gradle.api.internal.project.ProjectInternal;
 import org.gradle.api.internal.tasks.DefaultSourceSetOutput;
 import org.gradle.api.plugins.JavaPlugin;
-import org.gradle.api.plugins.jvm.JvmLanguageGeneratedSourceDirectoryBuilder;
-import org.gradle.api.plugins.jvm.JvmLanguageSourceDirectoryBuilder;
 import org.gradle.api.provider.Provider;
 import org.gradle.api.tasks.SourceSet;
 import org.gradle.api.tasks.TaskProvider;
@@ -75,9 +73,9 @@ public class DefaultJvmLanguageGeneratedSourceDirectoryBuilder implements JvmLan
                 compileTask.setDescription("Compile task for " + description);
                 compileTask.source(details.getSourceDirectory());
                 compileTask.setClasspath(sourceSet.getCompileClasspath());
-                compileTask.setDestinationDir(project.getLayout().getBuildDirectory().dir(
+                compileTask.getDestinationDirectory().set(project.getLayout().getBuildDirectory().dir(
                     "classes/" + compileTaskName + "/" + sourceSet.getName()
-                ).map(Directory::getAsFile));
+                ));
                 compilerConfiguration.execute(compileTask);
             });
             details.setCompileTask(taskProvider, JavaCompile::getDestinationDirectory);

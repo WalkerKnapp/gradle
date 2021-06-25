@@ -16,7 +16,6 @@
 
 package org.gradle.api.plugins.antlr;
 
-import org.gradle.api.Incubating;
 import org.gradle.api.NonNullApi;
 import org.gradle.api.file.FileCollection;
 import org.gradle.api.file.FileTree;
@@ -30,6 +29,7 @@ import org.gradle.api.plugins.antlr.internal.AntlrSpecFactory;
 import org.gradle.api.plugins.antlr.internal.AntlrWorkerManager;
 import org.gradle.api.tasks.CacheableTask;
 import org.gradle.api.tasks.Classpath;
+import org.gradle.api.tasks.IgnoreEmptyDirectories;
 import org.gradle.api.tasks.Input;
 import org.gradle.api.tasks.InputFiles;
 import org.gradle.api.tasks.Internal;
@@ -205,7 +205,6 @@ public class AntlrTask extends SourceTask {
      *
      * @since 6.0
      */
-    @Incubating
     @TaskAction
     public void execute(InputChanges inputChanges) {
         Set<File> grammarFiles = new HashSet<>();
@@ -235,8 +234,7 @@ public class AntlrTask extends SourceTask {
 
         AntlrWorkerManager manager = new AntlrWorkerManager();
         AntlrSpec spec = new AntlrSpecFactory().create(this, grammarFiles, sourceSetDirectories);
-        File projectDir = getProjectLayout().getProjectDirectory().getAsFile();
-        AntlrResult result = manager.runWorker(projectDir, getWorkerProcessBuilderFactory(), getAntlrClasspath(), spec);
+        AntlrResult result = manager.runWorker(projectDir(), getWorkerProcessBuilderFactory(), getAntlrClasspath(), spec);
         evaluate(result);
     }
 
@@ -251,6 +249,10 @@ public class AntlrTask extends SourceTask {
                 + errorCount
                 + " errors during grammar generation", result.getException());
         }
+    }
+
+    private File projectDir() {
+        return getProjectLayout().getProjectDirectory().getAsFile();
     }
 
     /**
@@ -301,8 +303,8 @@ public class AntlrTask extends SourceTask {
      *
      * @since 6.0
      */
-    @Incubating
     @SkipWhenEmpty
+    @IgnoreEmptyDirectories
     @PathSensitive(PathSensitivity.RELATIVE)
     @InputFiles
     protected FileCollection getStableSources() {

@@ -24,6 +24,9 @@ import org.gradle.api.credentials.Credentials;
 import org.gradle.api.credentials.PasswordCredentials;
 import org.gradle.api.file.FileContents;
 import org.gradle.api.file.RegularFile;
+import org.gradle.api.initialization.Settings;
+import org.gradle.internal.service.scopes.Scopes;
+import org.gradle.internal.service.scopes.ServiceScope;
 
 import java.util.concurrent.Callable;
 import java.util.function.BiFunction;
@@ -33,11 +36,12 @@ import java.util.function.BiFunction;
  *
  * <p>
  * An instance of the factory can be injected into a task, plugin or other object by annotating a public constructor or property getter method with {@code javax.inject.Inject}.
- * It is also available via {@link org.gradle.api.Project#getProviders()}.
+ * It is also available via {@link org.gradle.api.Project#getProviders()} and {@link Settings#getProviders()}.
  *
  * @since 4.0
  */
 @NonExtensible
+@ServiceScope(Scopes.Build.class)
 public interface ProviderFactory {
 
     /**
@@ -60,7 +64,6 @@ public interface ProviderFactory {
      * @return The provider. Never returns null.
      * @since 6.1
      */
-    @Incubating
     Provider<String> environmentVariable(String variableName);
 
     /**
@@ -73,7 +76,6 @@ public interface ProviderFactory {
      * @return The provider. Never returns null.
      * @since 6.1
      */
-    @Incubating
     Provider<String> environmentVariable(Provider<String> variableName);
 
     /**
@@ -86,7 +88,6 @@ public interface ProviderFactory {
      * @return the provider for the system property, never returns null
      * @since 6.1
      */
-    @Incubating
     Provider<String> systemProperty(String propertyName);
 
     /**
@@ -99,7 +100,6 @@ public interface ProviderFactory {
      * @return the provider for the system property, never returns null
      * @since 6.1
      */
-    @Incubating
     Provider<String> systemProperty(Provider<String> propertyName);
 
     /**
@@ -112,7 +112,6 @@ public interface ProviderFactory {
      * @return the provider for the Gradle property, never returns null
      * @since 6.2
      */
-    @Incubating
     Provider<String> gradleProperty(String propertyName);
 
     /**
@@ -125,7 +124,6 @@ public interface ProviderFactory {
      * @return the provider for the Gradle property, never returns null
      * @since 6.2
      */
-    @Incubating
     Provider<String> gradleProperty(Provider<String> propertyName);
 
     /**
@@ -142,7 +140,6 @@ public interface ProviderFactory {
      *
      * @since 6.1
      */
-    @Incubating
     FileContents fileContents(RegularFile file);
 
     /**
@@ -159,7 +156,6 @@ public interface ProviderFactory {
      *
      * @since 6.1
      */
-    @Incubating
     FileContents fileContents(Provider<RegularFile> file);
 
     /**
@@ -204,7 +200,6 @@ public interface ProviderFactory {
      *
      * @since 6.6
      */
-    @Incubating
     <T extends Credentials> Provider<T> credentials(Class<T> credentialsType, String identity);
 
     /**
@@ -231,7 +226,6 @@ public interface ProviderFactory {
      *
      * @since 6.6
      */
-    @Incubating
     <T extends Credentials> Provider<T> credentials(Class<T> credentialsType, Provider<String> identity);
 
     /**
@@ -251,6 +245,5 @@ public interface ProviderFactory {
      *
      * @since 6.6
      */
-    @Incubating
     <A, B, R> Provider<R> zip(Provider<A> first, Provider<B> second, BiFunction<A, B, R> combiner);
 }

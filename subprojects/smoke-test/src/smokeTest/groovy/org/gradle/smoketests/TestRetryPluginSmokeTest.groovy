@@ -34,12 +34,10 @@ class TestRetryPluginSmokeTest extends AbstractSmokeTest {
                 id "org.gradle.test-retry" version "${TestedVersions.testRetryPlugin}"
             }
 
-            ${jcenterRepository()}
+            ${mavenCentralRepository()}
 
             dependencies {
-                testImplementation("org.junit.jupiter:junit-jupiter-api:5.6.2")
-                testImplementation("org.junit.jupiter:junit-jupiter-params:5.6.2")
-                testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:5.6.2")
+                testImplementation("org.junit.jupiter:junit-jupiter:5.7.1")
             }
 
             test {
@@ -55,7 +53,6 @@ class TestRetryPluginSmokeTest extends AbstractSmokeTest {
 
         then:
         def result = runner('test').buildAndFail()
-        expectNoDeprecationWarnings(result)
 
         and:
         result.task(":test").outcome == TaskOutcome.FAILED

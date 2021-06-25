@@ -63,7 +63,7 @@ public class ExecuteTaskBuildOperationResult implements ExecuteTaskBuildOperatio
     @Nullable
     @Override
     public Long getOriginExecutionTime() {
-        return originMetadata == null ? null : originMetadata.getExecutionTime();
+        return originMetadata == null ? null : originMetadata.getExecutionTime().toMillis();
     }
 
     @Nullable
@@ -102,12 +102,8 @@ public class ExecuteTaskBuildOperationResult implements ExecuteTaskBuildOperatio
                 return TaskOutputCachingDisabledReasonCategory.NON_CACHEABLE_TREE_OUTPUT;
             case OVERLAPPING_OUTPUTS:
                 return TaskOutputCachingDisabledReasonCategory.OVERLAPPING_OUTPUTS;
-            case NON_CACHEABLE_IMPLEMENTATION:
-                return TaskOutputCachingDisabledReasonCategory.NON_CACHEABLE_TASK_IMPLEMENTATION;
-            case NON_CACHEABLE_ADDITIONAL_IMPLEMENTATION:
-                return TaskOutputCachingDisabledReasonCategory.NON_CACHEABLE_TASK_ACTION;
-            case NON_CACHEABLE_INPUTS:
-                return TaskOutputCachingDisabledReasonCategory.NON_CACHEABLE_INPUTS;
+            case VALIDATION_FAILURE:
+                return TaskOutputCachingDisabledReasonCategory.VALIDATION_FAILURE;
             default:
                 throw new AssertionError();
         }

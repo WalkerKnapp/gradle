@@ -36,7 +36,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import static org.gradle.util.ConfigureUtil.configure;
+import static org.gradle.util.internal.ConfigureUtil.configure;
 
 /**
  * Enables fine-tuning module details (*.iml file) of the IDEA plugin.
@@ -175,8 +175,6 @@ public class IdeaModule {
     private String jdkName;
     private IdeaLanguageLevel languageLevel;
     private JavaVersion targetBytecodeVersion;
-    @SuppressWarnings("deprecation")
-    private org.gradle.language.scala.ScalaPlatform scalaPlatform;
     private final IdeaModuleIml iml;
     private final Project project;
     private PathFactory pathFactory;
@@ -470,19 +468,6 @@ public class IdeaModule {
 
     public void setTargetBytecodeVersion(JavaVersion targetBytecodeVersion) {
         this.targetBytecodeVersion = targetBytecodeVersion;
-    }
-
-    /**
-     * The Scala version used by this module.
-     */
-    @Deprecated
-    public org.gradle.language.scala.ScalaPlatform getScalaPlatform() {
-        return scalaPlatform;
-    }
-
-    @Deprecated
-    public void setScalaPlatform(org.gradle.language.scala.ScalaPlatform scalaPlatform) {
-        this.scalaPlatform = scalaPlatform;
     }
 
     /**

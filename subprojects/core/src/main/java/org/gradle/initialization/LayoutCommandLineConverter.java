@@ -28,15 +28,6 @@ public class LayoutCommandLineConverter extends AbstractCommandLineConverter<Bui
     @Override
     public BuildLayoutParameters convert(ParsedCommandLine options, BuildLayoutParameters target) throws CommandLineArgumentException {
         converter.convert(options, target);
-
-        if (options.getExtraArguments().contains("init")) {
-            target.setSearchUpwards(false);
-        }
-
-        if (target.getSearchDir().getName().equals("buildSrc")) {
-            target.setSearchUpwards(false);
-        }
-
         return target;
     }
 

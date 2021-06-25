@@ -26,7 +26,7 @@ import java.util.Optional;
 /**
  * A snapshot of a missing file or a broken symbolic link or a named pipe.
  */
-public class MissingFileSnapshot extends AbstractCompleteFileSystemLocationSnapshot {
+public class MissingFileSnapshot extends AbstractFileSystemLocationSnapshot implements FileSystemLeafSnapshot {
     private static final HashCode SIGNATURE = Hashing.signature(MissingFileSnapshot.class);
 
     public MissingFileSnapshot(String absolutePath, String name, AccessType accessType) {
@@ -48,17 +48,32 @@ public class MissingFileSnapshot extends AbstractCompleteFileSystemLocationSnaps
     }
 
     @Override
-    public boolean isContentAndMetadataUpToDate(CompleteFileSystemLocationSnapshot other) {
+    public boolean isContentAndMetadataUpToDate(FileSystemLocationSnapshot other) {
+        return isContentUpToDate(other);
+    }
+
+    @Override
+    public boolean isContentUpToDate(FileSystemLocationSnapshot other) {
         return other instanceof MissingFileSnapshot;
     }
 
     @Override
-    public void accept(FileSystemSnapshotVisitor visitor) {
-        visitor.visitFile(this);
+    public void accept(FileSystemLocationSnapshotVisitor visitor) {
+        visitor.visitMissing(this);
     }
 
-    public Optional<FileSystemNode> invalidate(VfsRelativePath relativePath, CaseSensitivity caseSensitivity, SnapshotHierarchy.NodeDiffListener diffListener) {
+    @Override
+    public <T> T accept(FileSystemLocationSnapshotTransformer<T> transformer) {
+        return transformer.visitMissing(this);
+    }
+
+    public Optional<FileSystemNode> invalidate(VfsRelativePath targetPath, CaseSensitivity caseSensitivity, SnapshotHierarchy.NodeDiffListener diffListener) {
         diffListener.nodeRemoved(this);
         return Optional.empty();
+    }
+
+    @Override
+    public String toString() {
+        return String.format("%s/%s", super.toString(), getName());
     }
 }

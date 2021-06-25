@@ -34,7 +34,7 @@ class TaskPropertyNamingIntegrationTest extends AbstractIntegrationSpec {
         file("inputs1").createDir()
         file("inputs2").createDir()
 
-        buildFile << """
+        buildFile """
             class MyConfig {
                 @Input String inputString
                 @InputFile File inputFile
@@ -58,6 +58,7 @@ class TaskPropertyNamingIntegrationTest extends AbstractIntegrationSpec {
 
             import org.gradle.api.internal.tasks.*
             import org.gradle.api.internal.tasks.properties.*
+            import org.gradle.internal.fingerprint.DirectorySensitivity
 
             task myTask(type: MyTask) {
                 inputString = "data"
@@ -83,7 +84,7 @@ class TaskPropertyNamingIntegrationTest extends AbstractIntegrationSpec {
                     def layout = services.get(ProjectLayout)
                     TaskPropertyUtils.visitProperties(services.get(PropertyWalker), it, new PropertyVisitor.Adapter() {
                         @Override
-                        void visitInputFileProperty(String propertyName, boolean optional, boolean skipWhenEmpty, boolean incremental, Class<? extends FileNormalizer> fileNormalizer, PropertyValue value, InputFilePropertyType filePropertyType) {
+                        void visitInputFileProperty(String propertyName, boolean optional, boolean skipWhenEmpty, DirectorySensitivity directorySensitivity, boolean incremental, Class<? extends FileNormalizer> fileNormalizer, PropertyValue value, InputFilePropertyType filePropertyType) {
                             inputFiles[propertyName] = layout.files(value)
                         }
 
@@ -157,7 +158,7 @@ class TaskPropertyNamingIntegrationTest extends AbstractIntegrationSpec {
     @ToBeFixedForConfigurationCache(because = "task references another task")
     def "nested iterable properties have names"() {
         buildFile << printPropertiesTask()
-        buildFile << """
+        buildFile """
             class TaskWithNestedBean extends DefaultTask {
                 @Nested
                 List<Object> beans
@@ -327,7 +328,7 @@ class TaskPropertyNamingIntegrationTest extends AbstractIntegrationSpec {
     @ToBeFixedForConfigurationCache(because = "task references another task")
     def "input properties can be overridden"() {
         buildFile << classesForNestedProperties()
-        buildFile << """
+        buildFile """
             task test(type: TaskWithNestedObjectProperty) {
                 input = "someString"
                 bean = new NestedProperty(
@@ -395,6 +396,7 @@ class TaskPropertyNamingIntegrationTest extends AbstractIntegrationSpec {
         """
             import org.gradle.api.internal.tasks.*
             import org.gradle.api.internal.tasks.properties.*
+            import org.gradle.internal.fingerprint.DirectorySensitivity
 
             class PrintInputsAndOutputs extends DefaultTask {
                 @Internal
@@ -408,7 +410,7 @@ class TaskPropertyNamingIntegrationTest extends AbstractIntegrationSpec {
                         }
 
                         @Override
-                        void visitInputFileProperty(String propertyName, boolean optional, boolean skipWhenEmpty, boolean incremental, Class<? extends FileNormalizer> fileNormalizer, PropertyValue value, InputFilePropertyType filePropertyType) {
+                        void visitInputFileProperty(String propertyName, boolean optional, boolean skipWhenEmpty, DirectorySensitivity directorySensitivity, boolean incremental, Class<? extends FileNormalizer> fileNormalizer, PropertyValue value, InputFilePropertyType filePropertyType) {
                             println "Input file property '\${propertyName}'"
                         }
 

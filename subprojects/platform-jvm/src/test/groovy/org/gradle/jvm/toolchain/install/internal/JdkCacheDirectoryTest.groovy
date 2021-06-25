@@ -16,15 +16,15 @@
 
 package org.gradle.jvm.toolchain.install.internal
 
-import org.gradle.api.internal.file.DefaultTemporaryFileProvider
+import org.gradle.api.internal.file.temp.DefaultTemporaryFileProvider
 import org.gradle.api.internal.file.FileOperations
-import org.gradle.api.internal.file.TemporaryFileProvider
+import org.gradle.api.internal.file.temp.TemporaryFileProvider
 import org.gradle.api.internal.file.TestFiles
 import org.gradle.cache.FileLock
 import org.gradle.cache.FileLockManager
 import org.gradle.cache.LockOptions
 import org.gradle.initialization.GradleUserHomeDirProvider
-import org.gradle.util.Resources
+import org.gradle.util.internal.Resources
 import org.junit.Rule
 import org.junit.rules.TemporaryFolder
 import spock.lang.Specification

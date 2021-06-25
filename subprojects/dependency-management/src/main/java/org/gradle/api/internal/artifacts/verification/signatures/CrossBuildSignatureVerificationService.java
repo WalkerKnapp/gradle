@@ -35,7 +35,7 @@ import org.gradle.internal.serialize.Encoder;
 import org.gradle.internal.serialize.InterningStringSerializer;
 import org.gradle.internal.serialize.SetSerializer;
 import org.gradle.security.internal.PublicKeyService;
-import org.gradle.util.BuildCommencedTimeProvider;
+import org.gradle.util.internal.BuildCommencedTimeProvider;
 
 import java.io.File;
 import java.util.List;
@@ -83,7 +83,7 @@ public class CrossBuildSignatureVerificationService implements SignatureVerifica
         CacheKey cacheKey = new CacheKey(origin.getAbsolutePath(), signature.getAbsolutePath(), trustedKeys, ignoredKeys);
         HashCode originHash = fileHasher.hash(origin);
         HashCode signatureHash = fileHasher.hash(signature);
-        CacheEntry entry = cache.get(cacheKey);
+        CacheEntry entry = cache.getIfPresent(cacheKey);
         if (entry == null || entry.updated(originHash, signatureHash) || hasExpired(entry)) {
             entry = performActualVerification(origin, signature, trustedKeys, ignoredKeys, originHash, signatureHash);
             cache.put(cacheKey, entry);

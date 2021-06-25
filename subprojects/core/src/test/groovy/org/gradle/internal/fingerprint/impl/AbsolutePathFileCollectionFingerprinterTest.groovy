@@ -20,11 +20,10 @@ import org.gradle.api.internal.file.TestFiles
 import org.gradle.internal.execution.history.changes.AbsolutePathFingerprintCompareStrategy
 import org.gradle.internal.execution.history.changes.ChangeTypeInternal
 import org.gradle.internal.execution.history.changes.DefaultFileChange
+import org.gradle.internal.fingerprint.DirectorySensitivity
 import org.gradle.internal.fingerprint.FileCollectionFingerprint
-import org.gradle.internal.vfs.VirtualFileSystem
 import org.gradle.test.fixtures.file.TestFile
 import org.gradle.test.fixtures.file.TestNameTestDirectoryProvider
-import org.gradle.util.ChangeListener
 import org.junit.Rule
 import spock.lang.Specification
 
@@ -32,7 +31,7 @@ class AbsolutePathFileCollectionFingerprinterTest extends Specification {
     def virtualFileSystem = TestFiles.virtualFileSystem()
     def fileSystemAccess = TestFiles.fileSystemAccess(virtualFileSystem)
     def fileCollectionSnapshotter = new DefaultFileCollectionSnapshotter(fileSystemAccess, TestFiles.genericFileTreeSnapshotter(), TestFiles.fileSystem())
-    def fingerprinter = new AbsolutePathFileCollectionFingerprinter(fileCollectionSnapshotter)
+    def fingerprinter = new AbsolutePathFileCollectionFingerprinter(DirectorySensitivity.DEFAULT, fileCollectionSnapshotter)
     def listener = Mock(ChangeListener)
 
     @Rule
@@ -87,8 +86,8 @@ class AbsolutePathFileCollectionFingerprinterTest extends Specification {
 
         when:
         def fingerprint = fingerprinter.fingerprint(files(file1))
-        virtualFileSystem.update(VirtualFileSystem.INVALIDATE_ALL)
-        changes(fingerprinter.fingerprint(files(file1, file2)), fingerprint, listener)
+        virtualFileSystem.invalidateAll()
+        changes(fingerprint, fingerprinter.fingerprint(files(file1, file2)), listener)
 
         then:
         1 * listener.added(file2.path)
@@ -102,8 +101,8 @@ class AbsolutePathFileCollectionFingerprinterTest extends Specification {
 
         when:
         FileCollectionFingerprint fingerprint = fingerprinter.fingerprint(files(file1, file2))
-        virtualFileSystem.update(VirtualFileSystem.INVALIDATE_ALL)
-        changes(fingerprinter.fingerprint(files(file1)), fingerprint, listener)
+        virtualFileSystem.invalidateAll()
+        changes(fingerprint, fingerprinter.fingerprint(files(file1)), listener)
 
         then:
         1 * listener.removed(file2.path)
@@ -117,11 +116,11 @@ class AbsolutePathFileCollectionFingerprinterTest extends Specification {
 
         when:
         FileCollectionFingerprint fingerprint = fingerprinter.fingerprint(files(file))
-        virtualFileSystem.update(VirtualFileSystem.INVALIDATE_ALL)
-        changes(fingerprinter.fingerprint(files(file)), fingerprint, listener)
+        virtualFileSystem.invalidateAll()
+        changes(fingerprint, fingerprinter.fingerprint(files(file)), listener)
         file.setLastModified(45600L)
-        virtualFileSystem.update(VirtualFileSystem.INVALIDATE_ALL)
-        changes(fingerprinter.fingerprint(files(file)), fingerprint, listener)
+        virtualFileSystem.invalidateAll()
+        changes(fingerprint, fingerprinter.fingerprint(files(file)), listener)
 
         then:
         0 * listener._
@@ -137,8 +136,8 @@ class AbsolutePathFileCollectionFingerprinterTest extends Specification {
         FileCollectionFingerprint fingerprint = fingerprinter.fingerprint(fileCollection)
         file.delete()
         file.createDir()
-        virtualFileSystem.update(VirtualFileSystem.INVALIDATE_ALL)
-        changes(fingerprinter.fingerprint(fileCollection), fingerprint, listener)
+        virtualFileSystem.invalidateAll()
+        changes(fingerprint, fingerprinter.fingerprint(fileCollection), listener)
 
         then:
         1 * listener.changed(file.path)
@@ -151,8 +150,8 @@ class AbsolutePathFileCollectionFingerprinterTest extends Specification {
         when:
         FileCollectionFingerprint fingerprint = fingerprinter.fingerprint(files(file))
         file.write('new content')
-        virtualFileSystem.update(VirtualFileSystem.INVALIDATE_ALL)
-        changes(fingerprinter.fingerprint(files(file)), fingerprint, listener)
+        virtualFileSystem.invalidateAll()
+        changes(fingerprint, fingerprinter.fingerprint(files(file)), listener)
 
         then:
         1 * listener.changed(file.path)
@@ -164,8 +163,8 @@ class AbsolutePathFileCollectionFingerprinterTest extends Specification {
 
         when:
         FileCollectionFingerprint fingerprint = fingerprinter.fingerprint(files(dir))
-        virtualFileSystem.update(VirtualFileSystem.INVALIDATE_ALL)
-        changes(fingerprinter.fingerprint(files(dir)), fingerprint, listener)
+        virtualFileSystem.invalidateAll()
+        changes(fingerprint, fingerprinter.fingerprint(files(dir)), listener)
 
         then:
         0 * _
@@ -180,8 +179,8 @@ class AbsolutePathFileCollectionFingerprinterTest extends Specification {
         FileCollectionFingerprint fingerprint = fingerprinter.fingerprint(fileCollection)
         dir.deleteDir()
         dir.createFile()
-        virtualFileSystem.update(VirtualFileSystem.INVALIDATE_ALL)
-        changes(fingerprinter.fingerprint(fileCollection), fingerprint, listener)
+        virtualFileSystem.invalidateAll()
+        changes(fingerprint, fingerprinter.fingerprint(fileCollection), listener)
 
         then:
         1 * listener.changed(dir.path)
@@ -193,8 +192,8 @@ class AbsolutePathFileCollectionFingerprinterTest extends Specification {
 
         when:
         FileCollectionFingerprint fingerprint = fingerprinter.fingerprint(files(file))
-        virtualFileSystem.update(VirtualFileSystem.INVALIDATE_ALL)
-        changes(fingerprinter.fingerprint(files(file)), fingerprint, listener)
+        virtualFileSystem.invalidateAll()
+        changes(fingerprint, fingerprinter.fingerprint(files(file)), listener)
 
         then:
         0 * _
@@ -208,8 +207,8 @@ class AbsolutePathFileCollectionFingerprinterTest extends Specification {
         when:
         FileCollectionFingerprint fingerprint = fingerprinter.fingerprint(fileCollection)
         file.createFile()
-        virtualFileSystem.update(VirtualFileSystem.INVALIDATE_ALL)
-        changes(fingerprinter.fingerprint(fileCollection), fingerprint, listener)
+        virtualFileSystem.invalidateAll()
+        changes(fingerprint, fingerprinter.fingerprint(fileCollection), listener)
 
         then:
         1 * listener.added(file.path)
@@ -223,8 +222,8 @@ class AbsolutePathFileCollectionFingerprinterTest extends Specification {
         when:
         FileCollectionFingerprint fingerprint = fingerprinter.fingerprint(fileCollection)
         file.delete()
-        virtualFileSystem.update(VirtualFileSystem.INVALIDATE_ALL)
-        changes(fingerprinter.fingerprint(fileCollection), fingerprint, listener)
+        virtualFileSystem.invalidateAll()
+        changes(fingerprint, fingerprinter.fingerprint(fileCollection), listener)
 
         then:
         1 * listener.removed(file.path)
@@ -236,8 +235,8 @@ class AbsolutePathFileCollectionFingerprinterTest extends Specification {
 
         when:
         FileCollectionFingerprint fingerprint = fingerprinter.fingerprint(files(file1, file2))
-        virtualFileSystem.update(VirtualFileSystem.INVALIDATE_ALL)
-        changes(fingerprinter.fingerprint(files(file1)), fingerprint, listener)
+        virtualFileSystem.invalidateAll()
+        changes(fingerprint, fingerprinter.fingerprint(files(file1)), listener)
 
         then:
         0 * _
@@ -249,8 +248,8 @@ class AbsolutePathFileCollectionFingerprinterTest extends Specification {
         when:
         FileCollectionFingerprint fingerprint = FileCollectionFingerprint.EMPTY
         FileCollectionFingerprint newFingerprint = fingerprinter.fingerprint(files(file))
-        virtualFileSystem.update(VirtualFileSystem.INVALIDATE_ALL)
-        changes(newFingerprint, fingerprint, listener)
+        virtualFileSystem.invalidateAll()
+        changes(fingerprint, newFingerprint, listener)
 
         then:
         fingerprint.fingerprints.isEmpty()
@@ -258,8 +257,8 @@ class AbsolutePathFileCollectionFingerprinterTest extends Specification {
         0 * listener._
     }
 
-    private static void changes(FileCollectionFingerprint newFingerprint, FileCollectionFingerprint oldFingerprint, ChangeListener<String> listener) {
-        AbsolutePathFingerprintCompareStrategy.INSTANCE.visitChangesSince(newFingerprint, oldFingerprint, "TYPE") { DefaultFileChange change ->
+    private static void changes(FileCollectionFingerprint previous, FileCollectionFingerprint current, ChangeListener<String> listener) {
+        AbsolutePathFingerprintCompareStrategy.INSTANCE.visitChangesSince(previous, current, "TYPE") { DefaultFileChange change ->
             switch (change.type) {
                 case ChangeTypeInternal.ADDED:
                     listener.added(change.path)
@@ -278,4 +277,12 @@ class AbsolutePathFileCollectionFingerprinterTest extends Specification {
     private static FileCollection files(File... files) {
         TestFiles.fixed(files)
     }
+}
+
+interface ChangeListener<T> {
+    void added(T element);
+
+    void removed(T element);
+
+    void changed(T element);
 }

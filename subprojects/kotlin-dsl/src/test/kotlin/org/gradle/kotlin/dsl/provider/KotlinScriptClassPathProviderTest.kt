@@ -11,9 +11,11 @@ import org.gradle.api.Generated
 
 import org.gradle.api.internal.artifacts.dsl.dependencies.DependencyFactory.ClassPathNotation.GRADLE_API
 import org.gradle.api.internal.classpath.Module
+import org.gradle.api.internal.file.TestFiles
 import org.gradle.internal.classpath.DefaultClassPath
 
 import org.gradle.kotlin.dsl.accessors.TestWithClassPath
+import org.gradle.test.fixtures.file.LeaksFileHandles
 
 import org.hamcrest.CoreMatchers.equalTo
 import org.hamcrest.MatcherAssert.assertThat
@@ -21,6 +23,7 @@ import org.hamcrest.MatcherAssert.assertThat
 import org.junit.Test
 
 
+@LeaksFileHandles("embedded Kotlin compiler environment keepalive")
 class KotlinScriptClassPathProviderTest : TestWithClassPath() {
 
     @Test
@@ -43,11 +46,14 @@ class KotlinScriptClassPathProviderTest : TestWithClassPath() {
             coreAndPluginsScope = mock(),
             gradleApiJarsProvider = { gradleApiJar },
             jarCache = { id, generator -> file("$id.jar").apply(generator) },
-            progressMonitorProvider = progressMonitorProvider)
+            progressMonitorProvider = progressMonitorProvider,
+            temporaryFileProvider = TestFiles.tmpDirTemporaryFileProvider(tempFolder.root)
+        )
 
         assertThat(
             subject.gradleKotlinDsl.asFiles.toList(),
-            equalTo(gradleApiJar + generatedKotlinExtensions))
+            equalTo(gradleApiJar + generatedKotlinExtensions)
+        )
 
         verifyProgressMonitor(kotlinExtensionsMonitor)
     }
@@ -60,8 +66,11 @@ class KotlinScriptClassPathProviderTest : TestWithClassPath() {
 
     private
     fun mockGradleApiMetadataModule() =
-        withZip("gradle-api-metadata-0.jar", sequenceOf(
-            "gradle-api-declaration.properties" to "includes=\nexcludes=\n".toByteArray())
+        withZip(
+            "gradle-api-metadata-0.jar",
+            sequenceOf(
+                "gradle-api-declaration.properties" to "includes=\nexcludes=\n".toByteArray()
+            )
         ).let { jar ->
             mock<Module> { on { classpath } doReturn DefaultClassPath.of(listOf(jar)) }
         }

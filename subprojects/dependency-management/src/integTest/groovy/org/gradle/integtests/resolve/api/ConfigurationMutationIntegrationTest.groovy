@@ -262,7 +262,7 @@ project(":consumer") {
 
 subprojects {
     task resolve {
-        dependsOn configurations.compile
+        inputs.files(configurations.runtimeClasspath)
 
         doLast {
             def resolvedJars = configurations.runtimeClasspath.files.collect { it.name }
@@ -280,7 +280,7 @@ include 'consumer', 'producer'
         succeeds("resolve")
 
     }
-    @ToBeFixedForConfigurationCache
+
     def "can use defaultDependencies in a composite build"() {
         buildTestFixture.withBuildInSubDir()
         mavenRepo.module("org", "explicit-dependency", "3.4").publish()

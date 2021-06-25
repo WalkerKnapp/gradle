@@ -18,14 +18,13 @@ package org.gradle.internal.logging.console
 
 import org.gradle.api.logging.configuration.ConsoleOutput
 import org.gradle.integtests.fixtures.AbstractIntegrationSpec
-import org.gradle.integtests.fixtures.ToBeFixedForConfigurationCache
 import org.gradle.integtests.fixtures.RichConsoleStyling
 import org.gradle.integtests.fixtures.executer.GradleHandle
 import org.gradle.test.fixtures.ConcurrentTestUtil
 import org.gradle.test.fixtures.server.http.BlockingHttpServer
 import org.junit.Rule
 
-abstract class AbstractConsoleConfigurationProgressFunctionalTest extends AbstractIntegrationSpec implements RichConsoleStyling {
+abstract class AbstractConsoleConfigurationProgressFunctionalTest extends AbstractIntegrationSpec {
     @Rule
     BlockingHttpServer server = new BlockingHttpServer()
     GradleHandle gradle
@@ -68,7 +67,6 @@ abstract class AbstractConsoleConfigurationProgressFunctionalTest extends Abstra
         gradle.waitForFinish()
     }
 
-    @ToBeFixedForConfigurationCache(because = "composite builds")
     def "shows work in progress with included build"() {
         settingsFile << """
             includeBuild "child"
@@ -158,7 +156,7 @@ abstract class AbstractConsoleConfigurationProgressFunctionalTest extends Abstra
 
     void assertHasWorkInProgress(String message) {
         ConcurrentTestUtil.poll {
-            assertHasWorkInProgress(gradle, "> " + message)
+            RichConsoleStyling.assertHasWorkInProgress(gradle, "> " + message)
         }
     }
 }

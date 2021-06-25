@@ -21,6 +21,8 @@ import org.gradle.api.artifacts.type.ArtifactTypeContainer;
 import org.gradle.api.artifacts.type.ArtifactTypeDefinition;
 import org.gradle.api.internal.CollectionCallbackActionDecorator;
 import org.gradle.api.internal.artifacts.ArtifactAttributes;
+import org.gradle.api.internal.artifacts.ArtifactTransformRegistration;
+import org.gradle.api.internal.artifacts.VariantTransformRegistry;
 import org.gradle.api.internal.attributes.AttributeContainerInternal;
 import org.gradle.api.internal.attributes.ImmutableAttributes;
 import org.gradle.api.internal.attributes.ImmutableAttributesFactory;
@@ -28,6 +30,9 @@ import org.gradle.internal.component.model.ComponentArtifactMetadata;
 import org.gradle.internal.reflect.Instantiator;
 
 import java.io.File;
+import java.util.HashSet;
+import java.util.Set;
+import java.util.function.Consumer;
 
 import static org.gradle.api.internal.artifacts.ArtifactAttributes.ARTIFACT_FORMAT;
 
@@ -35,12 +40,41 @@ public class DefaultArtifactTypeRegistry implements ArtifactTypeRegistry {
     private final Instantiator instantiator;
     private final ImmutableAttributesFactory attributesFactory;
     private final CollectionCallbackActionDecorator callbackActionDecorator;
+    private final VariantTransformRegistry transformRegistry;
     private ArtifactTypeContainer artifactTypeDefinitions;
 
-    public DefaultArtifactTypeRegistry(Instantiator instantiator, ImmutableAttributesFactory attributesFactory, CollectionCallbackActionDecorator callbackActionDecorator) {
+    public DefaultArtifactTypeRegistry(Instantiator instantiator, ImmutableAttributesFactory attributesFactory, CollectionCallbackActionDecorator callbackActionDecorator, VariantTransformRegistry transformRegistry) {
         this.instantiator = instantiator;
         this.attributesFactory = attributesFactory;
         this.callbackActionDecorator = callbackActionDecorator;
+        this.transformRegistry = transformRegistry;
+    }
+
+    @Override
+    public void visitArtifactTypes(Consumer<? super ImmutableAttributes> action) {
+        Set<ImmutableAttributes> seen = new HashSet<>();
+
+        if (artifactTypeDefinitions != null) {
+            for (ArtifactTypeDefinition artifactTypeDefinition : artifactTypeDefinitions) {
+                ImmutableAttributes attributes = ((AttributeContainerInternal) artifactTypeDefinition.getAttributes()).asImmutable();
+                attributes = attributesFactory.concat(attributesFactory.of(ARTIFACT_FORMAT, artifactTypeDefinition.getName()), attributes);
+                if (seen.add(attributes)) {
+                    action.accept(attributes);
+                }
+            }
+        }
+
+        for (ArtifactTransformRegistration transform : transformRegistry.getTransforms()) {
+            AttributeContainerInternal sourceAttributes = transform.getFrom();
+            String format = sourceAttributes.getAttribute(ARTIFACT_FORMAT);
+            // Some format that is not already registered
+            if (format != null) {
+                ImmutableAttributes attributes = sourceAttributes.asImmutable();
+                if (seen.add(attributes)) {
+                    action.accept(attributes);
+                }
+            }
+        }
     }
 
     @Override

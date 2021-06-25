@@ -58,8 +58,7 @@ public abstract class AbstractArtifactRepository implements ArtifactRepositoryIn
     private final Supplier<RepositoryContentDescriptorInternal> repositoryContentDescriptor = Suppliers.memoize(this::createRepositoryDescriptor)::get;
 
     protected AbstractArtifactRepository(ObjectFactory objectFactory) {
-        this.objectFactory = objectFactory;
-
+       this.objectFactory = objectFactory;
     }
 
     @Override
@@ -112,6 +111,15 @@ public abstract class AbstractArtifactRepository implements ArtifactRepositoryIn
     @Override
     public RepositoryContentDescriptorInternal createRepositoryDescriptor() {
         return new DefaultRepositoryContentDescriptor(this::getDisplayName);
+    }
+
+    @Override
+    public RepositoryContentDescriptorInternal getRepositoryDescriptorCopy() {
+        return repositoryContentDescriptor.get().asMutableCopy();
+    }
+
+    RepositoryContentDescriptorInternal getRepositoryDescriptor() {
+        return repositoryContentDescriptor.get();
     }
 
     @Override

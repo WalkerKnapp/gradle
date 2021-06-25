@@ -17,7 +17,6 @@ package org.gradle.testing.jacoco.tasks;
 
 import groovy.lang.Closure;
 import org.gradle.api.Action;
-import org.gradle.api.Incubating;
 import org.gradle.api.provider.Property;
 import org.gradle.api.reporting.Reporting;
 import org.gradle.api.specs.Spec;
@@ -27,7 +26,7 @@ import org.gradle.api.tasks.Nested;
 import org.gradle.api.tasks.TaskAction;
 import org.gradle.internal.jacoco.AntJacocoReport;
 import org.gradle.internal.jacoco.JacocoReportsContainerImpl;
-import org.gradle.util.ClosureBackedAction;
+import org.gradle.util.internal.ClosureBackedAction;
 
 import java.io.File;
 
@@ -53,7 +52,6 @@ public class JacocoReport extends JacocoReportBase implements Reporting<JacocoRe
      * @since 6.4
      */
     @Input
-    @Incubating
     public Property<String> getReportProjectName() {
         return projectName;
     }

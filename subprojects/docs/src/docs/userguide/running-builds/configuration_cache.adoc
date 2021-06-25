@@ -22,7 +22,7 @@ Gradle also applies some performance improvements to task execution as well.
 The configuration cache is conceptually similar to the <<build_cache#build_cache,build cache>>, but caches different information.
 The build cache takes care of caching the outputs and intermediate files of the build, such as task outputs or artifact transform outputs.
 The configuration cache takes care of caching the build configuration for a particular set of tasks.
-In other words, the configuration cache caches the output of the configuration phase, and the build cache caches the outputs of the execution phase.
+In other words, the configuration cache saves the output of the configuration phase, and the build cache saves the outputs of the execution phase.
 
 [IMPORTANT]
 ====
@@ -288,7 +288,6 @@ link:{gradle-issues}13455[[.green]#✓#]:: <<war_plugin.adoc#war_plugin,WAR>>
 link:{gradle-issues}13455[[.green]#✓#]:: <<ear_plugin.adoc#ear_plugin,EAR>>
 link:{gradle-issues}13468[[.yellow]#⚠#]:: <<publishing_maven.adoc#publishing_maven,Maven Publish>>
 link:{gradle-issues}13469[[.red]#✖#]:: <<publishing_ivy.adoc#publishing_ivy,Ivy Publish>>
-[.gray]#🚫#:: <<maven_plugin.adoc#maven_plugin,Legacy Maven Plugin>>
 link:{gradle-issues}13455[[.green]#✓#]:: <<distribution_plugin.adoc#distribution_plugin,Distribution>>
 link:{gradle-issues}13455[[.green]#✓#]:: <<java_library_distribution_plugin.adoc#java_library_distribution_plugin,Java Library Distribution>>
 
@@ -298,10 +297,10 @@ h| Utility
 
 a|
 [horizontal]
-link:{gradle-issues}13475[[.red]#✖#]:: <<checkstyle_plugin.adoc#checkstyle_plugin,Checkstyle>>
-link:{gradle-issues}13476[[.red]#✖#]:: <<pmd_plugin.adoc#pmd_plugin,PMD>>
-link:{gradle-issues}13477[[.red]#✖#]:: <<jacoco_plugin.adoc#jacoco_plugin,JaCoCo>>
-link:{gradle-issues}13478[[.red]#✖#]:: <<codenarc_plugin.adoc#codenarc_plugin,CodeNarc>>
+link:{gradle-issues}13475[[.green]#✓#]:: <<checkstyle_plugin.adoc#checkstyle_plugin,Checkstyle>>
+link:{gradle-issues}13476[[.green]#✓#]:: <<pmd_plugin.adoc#pmd_plugin,PMD>>
+link:{gradle-issues}13477[[.green]#✓#]:: <<jacoco_plugin.adoc#jacoco_plugin,JaCoCo>>
+link:{gradle-issues}13478[[.green]#✓#]:: <<codenarc_plugin.adoc#codenarc_plugin,CodeNarc>>
 
 a|
 [horizontal]
@@ -326,7 +325,6 @@ link:{gradle-issues}13473[[.red]#✖#]:: <<project_report_plugin.adoc#project_re
 [.green]#✓#:: Supported plugin
 [.yellow]#⚠#:: Partially supported plugin
 [.red]#✖#:: Unsupported plugin
-[.gray]#🚫#:: Won't fix
 
 [[config_cache:plugins:community]]
 === Community plugins
@@ -482,7 +480,7 @@ If a build fails, use the HTML report to reason about the reported problems rela
 Continue running more useful tasks.
 +
 This will give you a good overview of the nature of the problems your build and plugins are facing.
-Remember that when turning problems into warnings you might need to <<configuration_cache#config_cache:usage:invalidate, manually invalidating the cache>> in case of troubles.
+Remember that when turning problems into warnings you might need to <<configuration_cache#config_cache:usage:invalidate, manually invalidate the cache>> in case of troubles.
 
 Step back and fix problems iteratively::
 When you feel you know enough about what needs to be fixed, take a step back and start iteratively fixing the most important problems.
@@ -545,6 +543,17 @@ include::sample[dir="snippets/configurationCache/testKit/kotlin",files="src/test
 
 If problems with the configuration cache are found then Gradle will fail the build reporting the problems, and the test will fail.
 
+[TIP]
+====
+A good testing strategy for a Gradle plugin is to run its whole test suite with the configuration cache enabled.
+This requires testing the plugin with a supported Gradle version.
+
+If the plugin already supports a range of Gradle versions it might already have tests for multiple Gradle versions.
+In that case we recommend enabling the configuration cache starting with the Gradle version that supports it.
+
+If this can’t be done right away, using tests that runs all tasks contributed by the plugin several times, for e.g. asserting the `UP_TO_DATE` and `FROM_CACHE` behavior, is also a good strategy.
+====
+
 [[config_cache:requirements]]
 == Requirements
 
@@ -581,9 +590,10 @@ You should instead declare these as a `FileCollection` input and reference just 
 
 The same requirement applies to dependency management types with some nuances.
 
-Some types, such as `Configuration`, don't make good task input parameters, as they hold a lot of irrelevant state, and it is better to model these inputs as something more precise.
+Some types, such as `Configuration` or `SourceDirectorySet`, don't make good task input parameters, as they hold a lot of irrelevant state, and it is better to model these inputs as something more precise.
 We don't intend to make these types serializable at all.
 For example, if you reference a `Configuration` to later get the resolved files, you should instead declare a `FileCollection` as an input to your task.
+In the same vein, if you reference a `SourceDirectorySet` you should instead declare a `FileTree` as an input to your task.
 
 Referencing dependency resolution results is also disallowed (e.g. `ArtifactResolutionQuery`, `ResolvedArtifact`, `ArtifactResult` etc...).
 For example, if you reference some `ResolvedArtifactResult` instances, you should instead declare some `ArtifactCollection` as an input to your task.
@@ -886,12 +896,6 @@ Instead, you can connect the `Provider` returned by link:{javadocPath}/org/gradl
 Support for using configuration caching with certain Gradle features is not yet implemented.
 Support for these features will be added in later Gradle releases.
 
-[[config_cache:not_yet_implemented:build_scan]]
-=== Build scan support
-
-Build scan functionality with configuration caching enabled requires Gradle Enterprise plugin version 3.4 or later.
-When using an earlier version, build scan publishing will be automatically disabled when configuration caching is used.
-
 [[config_cache:not_yet_implemented:sharing]]
 === Sharing the configuration cache
 
@@ -901,6 +905,14 @@ But it can't be shared between developers or CI machines.
 
 See link:{gradle-issues}13510[gradle/gradle#13510].
 
+[[config_cache:not_implemented:store_parallel_execution]]
+=== Parallel task execution on cache misses
+
+When there's no configuration cache available and the work graph needs to be calculated, tasks are not executed in parallel by default.
+Only builds that reuse the configuration cache currently execute all tasks in parallel by default.
+
+See link:{gradle-issues}14624[gradle/gradle#14624].
+
 [[config_cache:not_yet_implemented:normalization]]
 === Custom input normalization
 
@@ -909,14 +921,6 @@ If your build has configuration for input normalization, i.e. `normalization { }
 Builds reusing the configuration cache might see build cache misses but will stay reliable.
 
 See link:{gradle-issues}13706[gradle/gradle#13706].
-
-[[config_cache:not_yet_implemented:composite_builds]]
-=== Composite builds
-
-When using the configuration cache on a <<composite_builds#composite_builds,composite build>> a problem will be reported.
-If you <<configuration_cache#config_cache:usage:ignore_problems,ignore problems>> then the included builds will be skipped when reusing the configuration cache.
-
-See link:{gradle-issues}13503[gradle/gradle#13503].
 
 [[config_cache:not_yet_implemented:source_dependencies]]
 === Source dependencies

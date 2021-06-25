@@ -19,7 +19,6 @@ import org.gradle.integtests.fixtures.GradleMetadataResolveRunner
 import org.gradle.integtests.fixtures.RequiredFeature
 import org.gradle.integtests.fixtures.ToBeFixedForConfigurationCache
 import org.gradle.integtests.resolve.AbstractModuleDependencyResolveTest
-import spock.lang.Ignore
 import spock.lang.Unroll
 
 import static org.gradle.integtests.resolve.strict.StrictVersionsInPlatformCentricDevelopmentIntegrationTest.PlatformType.ENFORCED_PLATFORM
@@ -135,7 +134,7 @@ class StrictVersionsInPlatformCentricDevelopmentIntegrationTest extends Abstract
         }
     }
 
-    static private String expectStrictVersion(platformType, String requiredVersion, String rejectedVersions = '') {
+    static String expectStrictVersion(platformType, String requiredVersion, String rejectedVersions = '') {
         boolean strictVersion = platformType != ENFORCED_PLATFORM
         if (strictVersion && rejectedVersions.isEmpty()) {
             return "{strictly $requiredVersion}"
@@ -185,8 +184,8 @@ class StrictVersionsInPlatformCentricDevelopmentIntegrationTest extends Abstract
                         configuration(platformType == ENFORCED_PLATFORM ? 'enforcedApiElements' : 'apiElements')
                         noArtifacts()
                     }
-                    constraint("org:bar:${expectStrictVersion(platformType, '2.0')}", 'org:bar:2.0').byConstraint()
-                    constraint("org:foo:${expectStrictVersion(platformType, '3.0', '3.1 & 3.2')}", 'org:foo:3.0').byConstraint()
+                    constraint("org:bar:${StrictVersionsInPlatformCentricDevelopmentIntegrationTest.expectStrictVersion(platformType, '2.0')}", 'org:bar:2.0').byConstraint()
+                    constraint("org:foo:${StrictVersionsInPlatformCentricDevelopmentIntegrationTest.expectStrictVersion(platformType, '3.0', '3.1 & 3.2')}", 'org:foo:3.0').byConstraint()
                 }
                 edge('org:bar', 'org:bar:2.0') {
                     byRequest()
@@ -244,8 +243,8 @@ class StrictVersionsInPlatformCentricDevelopmentIntegrationTest extends Abstract
                         configuration(platformType == ENFORCED_PLATFORM ? 'enforcedApiElements' : 'apiElements')
                         noArtifacts()
                     }
-                    constraint("org:bar:${expectStrictVersion(platformType, '2.0')}", 'org:bar:2.0').byConstraint()
-                    constraint("org:foo:${expectStrictVersion(platformType, '3.1.1', '3.1 & 3.2')}", 'org:foo:3.1.1').byConstraint()
+                    constraint("org:bar:${StrictVersionsInPlatformCentricDevelopmentIntegrationTest.expectStrictVersion(platformType, '2.0')}", 'org:bar:2.0').byConstraint()
+                    constraint("org:foo:${StrictVersionsInPlatformCentricDevelopmentIntegrationTest.expectStrictVersion(platformType, '3.1.1', '3.1 & 3.2')}", 'org:foo:3.1.1').byConstraint()
                 }
                 edge('org:bar', 'org:bar:2.0') {
                     byRequest()
@@ -317,10 +316,11 @@ class StrictVersionsInPlatformCentricDevelopmentIntegrationTest extends Abstract
             fails ':checkDeps'
         }
         then:
+        def platformVariant = platformType == MODULE ? 'runtime' : 'apiElements'
         (platformType == ENFORCED_PLATFORM && !failure) || failure.assertHasCause(
             """Cannot find a version of 'org:foo' that satisfies the version constraints:
-   Dependency path ':test:unspecified' --> 'org:bar:2.0' --> 'org:foo:3.1'
-   Constraint path ':test:unspecified' --> 'org:platform:1.1' --> 'org:foo:{strictly 3.1.1; reject 3.1 & 3.2}'
+   Dependency path ':test:unspecified' --> 'org:bar:2.0' (runtime) --> 'org:foo:3.1'
+   Constraint path ':test:unspecified' --> 'org:platform:1.1' (${platformVariant}) --> 'org:foo:{strictly 3.1.1; reject 3.1 & 3.2}'
    Constraint path ':test:unspecified' --> 'org:foo:3.2'""")
 
         where:
@@ -382,8 +382,8 @@ class StrictVersionsInPlatformCentricDevelopmentIntegrationTest extends Abstract
         then:
         if (platformType == ENFORCED_PLATFORM) {
             failure.assertHasCause """Cannot find a version of 'org:foo' that satisfies the version constraints:
-   Dependency path ':test:unspecified' --> 'org:bar:2.0' --> 'org:foo:3.1'
-   Constraint path ':test:unspecified' --> 'org:platform:1.1' --> 'org:foo:{require 3.1.1; reject 3.1 & 3.2}'
+   Dependency path ':test:unspecified' --> 'org:bar:2.0' (runtime) --> 'org:foo:3.1'
+   Constraint path ':test:unspecified' --> 'org:platform:1.1' (enforcedApiElements) --> 'org:foo:{require 3.1.1; reject 3.1 & 3.2}'
    Constraint path ':test:unspecified' --> 'org:foo:{strictly 3.2}'"""
         } else {
             resolve.expectGraph {
@@ -395,8 +395,8 @@ class StrictVersionsInPlatformCentricDevelopmentIntegrationTest extends Abstract
                             configuration(platformType == ENFORCED_PLATFORM ? 'enforcedApiElements' : 'apiElements')
                             noArtifacts()
                         }
-                        constraint("org:bar:${expectStrictVersion(platformType, '2.0')}", 'org:bar:2.0').byConstraint()
-                        constraint("org:foo:${expectStrictVersion(platformType, '3.1.1', '3.1 & 3.2')}", "org:foo:$expectedFooVersion").byConstraint()
+                        constraint("org:bar:${StrictVersionsInPlatformCentricDevelopmentIntegrationTest.expectStrictVersion(platformType, '2.0')}", 'org:bar:2.0').byConstraint()
+                        constraint("org:foo:${StrictVersionsInPlatformCentricDevelopmentIntegrationTest.expectStrictVersion(platformType, '3.1.1', '3.1 & 3.2')}", "org:foo:$expectedFooVersion").byConstraint()
                     }
                     edge('org:bar', 'org:bar:2.0') {
                         edge('org:foo:3.1', "org:foo:$expectedFooVersion").byAncestor()
@@ -469,25 +469,19 @@ class StrictVersionsInPlatformCentricDevelopmentIntegrationTest extends Abstract
         then:
         if (platformType == ENFORCED_PLATFORM) {
             failure.assertHasCause """Cannot find a version of 'org:foo' that satisfies the version constraints:
-   Dependency path ':test:unspecified' --> 'test:recklessLibrary:unspecified' --> 'org:bar:2.0' --> 'org:foo:3.1'
-   Constraint path ':test:unspecified' --> 'test:recklessLibrary:unspecified' --> 'org:platform:1.1' --> 'org:foo:{require 3.1.1; reject 3.1 & 3.2}'
-   Constraint path ':test:unspecified' --> 'test:recklessLibrary:unspecified' --> 'org:foo:{strictly 3.2}'"""
+   Dependency path ':test:unspecified' --> 'test:recklessLibrary:unspecified' (conf) --> 'org:bar:2.0' (runtime) --> 'org:foo:3.1'
+   Constraint path ':test:unspecified' --> 'test:recklessLibrary:unspecified' (conf) --> 'org:platform:1.1' (enforcedApiElements) --> 'org:foo:{require 3.1.1; reject 3.1 & 3.2}'
+   Constraint path ':test:unspecified' --> 'test:recklessLibrary:unspecified' (conf) --> 'org:foo:{strictly 3.2}'"""
         } else {
+            def platformVariant = platformType == MODULE ? 'runtime' : 'apiElements'
             failure.assertHasCause(
                 """Cannot find a version of 'org:foo' that satisfies the version constraints:
-   Dependency path ':test:unspecified' --> 'test:recklessLibrary:unspecified' --> 'org:bar:2.0' --> 'org:foo:3.1'
-   Constraint path ':test:unspecified' --> 'test:recklessLibrary:unspecified' --> 'org:platform:1.1' --> 'org:foo:{strictly 3.1.1; reject 3.1 & 3.2}'
-   Constraint path ':test:unspecified' --> 'test:recklessLibrary:unspecified' --> 'org:foo:{strictly 3.2}'""")
+   Dependency path ':test:unspecified' --> 'test:recklessLibrary:unspecified' (conf) --> 'org:bar:2.0' (runtime) --> 'org:foo:3.1'
+   Constraint path ':test:unspecified' --> 'test:recklessLibrary:unspecified' (conf) --> 'org:platform:1.1' (${platformVariant}) --> 'org:foo:{strictly 3.1.1; reject 3.1 & 3.2}'
+   Constraint path ':test:unspecified' --> 'test:recklessLibrary:unspecified' (conf) --> 'org:foo:{strictly 3.2}'""")
         }
 
         where:
         platformType << PlatformType.values()
-    }
-
-    @Ignore
-    // Having only Unroll tests breaks something in the combination with GradleMetadataResolveRunner
-    void "dummy"() {
-        expect:
-        true
     }
 }

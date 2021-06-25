@@ -20,10 +20,10 @@ import org.gradle.api.attributes.Category;
 import org.gradle.api.attributes.DocsType;
 import org.gradle.api.attributes.LibraryElements;
 import org.gradle.api.attributes.Usage;
+import org.gradle.api.attributes.java.TargetJvmEnvironment;
 import org.gradle.api.attributes.java.TargetJvmVersion;
 import org.gradle.api.internal.attributes.AttributeContainerInternal;
 import org.gradle.api.model.ObjectFactory;
-import org.gradle.api.plugins.jvm.JvmEcosystemAttributesDetails;
 
 import javax.inject.Inject;
 
@@ -104,6 +104,12 @@ public class DefaultJvmEcosystemAttributesDetails implements JvmEcosystemAttribu
     @Override
     public JvmEcosystemAttributesDetails withTargetJvmVersion(int version) {
         attributes.attribute(TargetJvmVersion.TARGET_JVM_VERSION_ATTRIBUTE, version);
+        return this;
+    }
+
+    @Override
+    public JvmEcosystemAttributesDetails preferStandardJVM() {
+        attributes.attribute(TargetJvmEnvironment.TARGET_JVM_ENVIRONMENT_ATTRIBUTE, objectFactory.named(TargetJvmEnvironment.class, TargetJvmEnvironment.STANDARD_JVM));
         return this;
     }
 }

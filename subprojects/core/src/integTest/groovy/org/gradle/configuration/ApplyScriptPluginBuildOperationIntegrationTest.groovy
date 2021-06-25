@@ -19,11 +19,10 @@ package org.gradle.configuration
 import org.gradle.integtests.fixtures.AbstractIntegrationSpec
 import org.gradle.integtests.fixtures.BuildOperationNotificationsFixture
 import org.gradle.integtests.fixtures.BuildOperationsFixture
-import org.gradle.integtests.fixtures.ToBeFixedForConfigurationCache
 import org.gradle.test.fixtures.server.http.HttpServer
 import org.junit.Rule
 
-import static org.gradle.util.TextUtil.normaliseFileSeparators
+import static org.gradle.util.internal.TextUtil.normaliseFileSeparators
 
 class ApplyScriptPluginBuildOperationIntegrationTest extends AbstractIntegrationSpec {
 
@@ -85,7 +84,6 @@ class ApplyScriptPluginBuildOperationIntegrationTest extends AbstractIntegration
         operations.search(ops[2], ApplyScriptPluginBuildOperationType).size() == 0
     }
 
-    @ToBeFixedForConfigurationCache(because = "composite builds")
     def "identifies build of application target"() {
         given:
         def subBuildSettingsFile = file("subBuild/settings.gradle")

@@ -32,6 +32,26 @@
                 <td>targetCompatibility</td>
                 <td><literal>project.sourceCompatibility</literal></td>
             </tr>
+            <tr>
+                <td>toolchain</td>
+                <td/>
+            </tr>
+            <tr>
+                <td>docsDir</td>
+                <td><literal><replaceable>${project.buildDir}</replaceable>/docs</literal></td>
+            </tr>
+            <tr>
+                <td>testResultsDir</td>
+                <td><literal><replaceable>${project.buildDir}</replaceable>/test-results</literal></td>
+            </tr>
+            <tr>
+                <td>testReportDir</td>
+                <td><literal><replaceable>${project.reporting.baseDir}</replaceable>/tests</literal></td>
+            </tr>
+            <tr>
+                <td>sourceSets</td>
+                <td/>
+            </tr>
         </table>
     </section>
     <section>
@@ -53,6 +73,15 @@
             </tr>
             <tr>
                 <td>registerFeature</td>
+            </tr>
+            <tr>
+                <td>toolchain</td>
+            </tr>
+            <tr>
+                <td>sourceSets</td>
+            </tr>
+            <tr>
+                <td>manifest</td>
             </tr>
         </table>
     </section>

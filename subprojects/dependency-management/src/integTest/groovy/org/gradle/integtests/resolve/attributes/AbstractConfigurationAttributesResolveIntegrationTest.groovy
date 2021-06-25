@@ -18,11 +18,10 @@
 package org.gradle.integtests.resolve.attributes
 
 import org.gradle.integtests.fixtures.AbstractIntegrationSpec
-import org.gradle.integtests.fixtures.FluidDependenciesResolveRunner
+import org.gradle.integtests.fixtures.extensions.FluidDependenciesResolveTest
 import org.gradle.integtests.fixtures.resolve.ResolveTestFixture
-import org.junit.runner.RunWith
 
-@RunWith(FluidDependenciesResolveRunner)
+@FluidDependenciesResolveTest
 abstract class AbstractConfigurationAttributesResolveIntegrationTest extends AbstractIntegrationSpec {
 
     abstract String getTypeDefs()
@@ -1260,7 +1259,7 @@ All of them match the consumer attributes:
                 }
                 configurations.all {
                     resolutionStrategy.dependencySubstitution {
-                        substitute module('com.acme.external:external') with project(":c")
+                        substitute module('com.acme.external:external') using project(":c")
                     }
                 }
             }
@@ -1336,7 +1335,7 @@ All of them match the consumer attributes:
                 }
                 task checkRelease(dependsOn: configurations._compileFreeRelease) {
                     doLast {
-                       assert configurations._compileFreeRelease.collect { it.name } == ['b-bar.jar', , 'c-bar.jar']
+                       assert configurations._compileFreeRelease.collect { it.name } == ['b-bar.jar', 'c-bar.jar']
                     }
                 }
             }
@@ -1437,7 +1436,7 @@ The following variants were also considered but didn't match the requested attri
             }
 
             project(':a') {
-                ${jcenterRepository()}
+                ${mavenCentralRepository()}
 
                 configurations {
                     _compileFreeDebug.attributes { $freeDebug }
@@ -1471,7 +1470,7 @@ The following variants were also considered but didn't match the requested attri
                 }
             }
             project(':c') {
-                ${jcenterRepository()}
+                ${mavenCentralRepository()}
                 configurations {
                     foo.attributes { $freeDebug }
                     bar.attributes { $freeRelease }
@@ -1574,8 +1573,8 @@ The following variants were also considered but didn't match the requested attri
                 }
                 tasks.withType(Jar) { destinationDirectory = buildDir }
                 artifacts {
-                    _compileFreeDebug fooJar
-                    _compileFreeRelease barJar
+                    _compileFreeDebug(fooJar)
+                    _compileFreeRelease(barJar)
                 }
             }
 

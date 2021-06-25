@@ -22,6 +22,7 @@ import org.gradle.api.file.ConfigurableFileCollection
 import org.gradle.api.file.FileCollection
 import org.gradle.api.internal.AbstractTask
 import org.gradle.api.internal.ConventionTask
+import org.gradle.api.internal.DocumentationRegistry
 import org.gradle.api.internal.DynamicObjectAware
 import org.gradle.api.internal.HasConvention
 import org.gradle.api.internal.IConventionAware
@@ -48,8 +49,11 @@ import org.gradle.api.tasks.OutputFiles
 import org.gradle.cache.internal.TestCrossBuildInMemoryCacheFactory
 import org.gradle.internal.reflect.DefaultTypeValidationContext
 import org.gradle.internal.reflect.PropertyMetadata
-import org.gradle.internal.reflect.TypeValidationContext
 import org.gradle.internal.reflect.annotations.impl.DefaultTypeAnnotationMetadataStore
+import org.gradle.internal.reflect.problems.ValidationProblemId
+import org.gradle.internal.reflect.validation.TypeValidationContext
+import org.gradle.internal.reflect.validation.ValidationMessageChecker
+import org.gradle.internal.reflect.validation.ValidationTestFor
 import org.gradle.internal.scripts.ScriptOrigin
 import org.gradle.internal.service.ServiceRegistryBuilder
 import org.gradle.internal.service.scopes.ExecutionGlobalServices
@@ -62,9 +66,11 @@ import javax.inject.Inject
 import java.lang.annotation.Annotation
 
 import static ModifierAnnotationCategory.NORMALIZATION
-import static org.gradle.internal.reflect.TypeValidationContext.Severity.WARNING
+import static org.gradle.internal.reflect.validation.Severity.WARNING
+import static org.gradle.util.internal.TextUtil.normaliseLineSeparators
 
-class DefaultTypeMetadataStoreTest extends Specification {
+class DefaultTypeMetadataStoreTest extends Specification implements ValidationMessageChecker {
+    static final DocumentationRegistry DOCUMENTATION_REGISTRY = new DocumentationRegistry()
 
     static final PROCESSED_PROPERTY_TYPE_ANNOTATIONS = [
         Input, InputFile, InputFiles, InputDirectory, Nested, OutputFile, OutputDirectory, OutputFiles, OutputDirectories, Destroys, LocalState
@@ -127,7 +133,13 @@ class DefaultTypeMetadataStoreTest extends Specification {
         _ * annotationHandler.propertyRelevant >> true
         _ * annotationHandler.annotationType >> SearchPath
         _ * annotationHandler.validatePropertyMetadata(_, _) >> { PropertyMetadata metadata, TypeValidationContext context ->
-            context.visitPropertyProblem(WARNING, metadata.propertyName, "is broken")
+            context.visitPropertyProblem {
+                it.withId(ValidationProblemId.TEST_PROBLEM)
+                    .reportAs(WARNING)
+                    .forProperty(metadata.propertyName)
+                    .withDescription("is broken")
+                    .happensBecause("Test")
+            }
         }
 
         def metadataStore = new DefaultTypeMetadataStore([], [annotationHandler], [], typeAnnotationMetadataStore, cacheFactory)
@@ -140,7 +152,7 @@ class DefaultTypeMetadataStoreTest extends Specification {
         propertiesMetadata.size() == 1
         def propertyMetadata = propertiesMetadata.first()
         propertyMetadata.propertyName == 'searchPath'
-        collectProblems(typeMetadata) == ["Property 'searchPath' is broken."]
+        collectProblems(typeMetadata) == [dummyValidationProblem(null, 'searchPath', 'is broken', 'Test').trim()]
     }
 
     def "custom annotation that is not relevant can have validation problems"() {
@@ -148,7 +160,13 @@ class DefaultTypeMetadataStoreTest extends Specification {
         _ * annotationHandler.propertyRelevant >> false
         _ * annotationHandler.annotationType >> SearchPath
         _ * annotationHandler.validatePropertyMetadata(_, _) >> { PropertyMetadata metadata, TypeValidationContext context ->
-            context.visitPropertyProblem(WARNING, metadata.propertyName, "is broken")
+            context.visitPropertyProblem {
+                it.withId(ValidationProblemId.TEST_PROBLEM)
+                    .reportAs(WARNING)
+                    .forProperty(metadata.propertyName)
+                    .withDescription("is broken")
+                    .happensBecause("Test")
+            }
         }
 
         def metadataStore = new DefaultTypeMetadataStore([], [annotationHandler], [], typeAnnotationMetadataStore, cacheFactory)
@@ -159,14 +177,19 @@ class DefaultTypeMetadataStoreTest extends Specification {
 
         then:
         propertiesMetadata.empty
-        collectProblems(typeMetadata) == ["Property 'searchPath' is broken."]
+        collectProblems(typeMetadata) == [dummyValidationProblem(null, 'searchPath', 'is broken', 'Test').trim()]
     }
 
     def "custom type annotation handler can inspect for static type problems"() {
         def typeAnnotationHandler = Stub(TypeAnnotationHandler)
         _ * typeAnnotationHandler.annotationType >> CustomCacheable
         _ * typeAnnotationHandler.validateTypeMetadata(_, _) >> { Class type, TypeValidationContext context ->
-            context.visitTypeProblem(WARNING, type, "type is broken")
+            context.visitTypeProblem { it.reportAs(WARNING)
+                .withId(ValidationProblemId.TEST_PROBLEM)
+                .forType(type)
+                .withDescription("type is broken")
+                .happensBecause("Test")
+            }
         }
 
         def metadataStore = new DefaultTypeMetadataStore([typeAnnotationHandler], [], [], typeAnnotationMetadataStore, cacheFactory)
@@ -181,7 +204,7 @@ class DefaultTypeMetadataStoreTest extends Specification {
         def typeMetadata = metadataStore.getTypeMetadata(TypeWithCustomAnnotation)
 
         then:
-        collectProblems(typeMetadata) == ["Type 'DefaultTypeMetadataStoreTest.TypeWithCustomAnnotation': type is broken." as String]
+        collectProblems(typeMetadata) == [dummyValidationProblem(TypeWithCustomAnnotation.canonicalName, null, 'type is broken', 'Test').trim()]
     }
 
     @Unroll
@@ -348,6 +371,9 @@ class DefaultTypeMetadataStoreTest extends Specification {
         @Input String useful
     }
 
+    @ValidationTestFor(
+        ValidationProblemId.MISSING_ANNOTATION
+    )
     def "warns about and ignores properties that are not annotated"() {
         when:
         def metadata = metadataStore.getTypeMetadata(TypeWithUnannotatedProperties)
@@ -355,8 +381,8 @@ class DefaultTypeMetadataStoreTest extends Specification {
         then:
         metadata.propertiesMetadata.propertyName == ["useful"]
         collectProblems(metadata) == [
-            "Property 'bad1' is not annotated with an input or output annotation.",
-            "Property 'bad2' is not annotated with an input or output annotation."
+            missingAnnotationMessage { property('bad1').missingInputOrOutput().includeLink() },
+            missingAnnotationMessage { property('bad2').missingInputOrOutput().includeLink() },
         ]
     }
 
@@ -396,9 +422,9 @@ class DefaultTypeMetadataStoreTest extends Specification {
     }
 
     private static List<String> collectProblems(TypeMetadata metadata) {
-        def validationContext = DefaultTypeValidationContext.withoutRootType(false)
+        def validationContext = DefaultTypeValidationContext.withoutRootType(DOCUMENTATION_REGISTRY, false)
         metadata.visitValidationFailures(null, validationContext)
-        return validationContext.problems.keySet().toList()
+        return validationContext.problems.keySet().collect { normaliseLineSeparators(it) }
     }
 
     private static boolean isOfType(PropertyMetadata metadata, Class<? extends Annotation> type) {

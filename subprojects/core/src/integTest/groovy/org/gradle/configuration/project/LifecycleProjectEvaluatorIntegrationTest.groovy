@@ -19,7 +19,6 @@ package org.gradle.configuration.project
 import org.gradle.execution.taskgraph.NotifyTaskGraphWhenReadyBuildOperationType
 import org.gradle.integtests.fixtures.AbstractIntegrationSpec
 import org.gradle.integtests.fixtures.BuildOperationsFixture
-import org.gradle.integtests.fixtures.ToBeFixedForConfigurationCache
 
 class LifecycleProjectEvaluatorIntegrationTest extends AbstractIntegrationSpec {
 
@@ -32,7 +31,7 @@ class LifecycleProjectEvaluatorIntegrationTest extends AbstractIntegrationSpec {
     def "nested afterEvaluate action is executed after outer action completes"() {
         given:
 
-        buildFile << """
+        buildFile """
             afterEvaluate {
                 println "> Outer"
                 afterEvaluate {
@@ -49,7 +48,6 @@ class LifecycleProjectEvaluatorIntegrationTest extends AbstractIntegrationSpec {
         output =~ /> Outer\s+< Outer\s+Inner/
     }
 
-    @ToBeFixedForConfigurationCache(because = "composite builds")
     def "captures lifecycle operations"() {
         given:
         file('buildSrc/buildSrcWhenReady.gradle') << ""
@@ -89,7 +87,7 @@ class LifecycleProjectEvaluatorIntegrationTest extends AbstractIntegrationSpec {
         file("foo/before.gradle") << ""
         file("foo/after.gradle") << ""
         file("foo/whenReady.gradle") << ""
-        buildFile << """
+        buildFile """
             project(':foo').beforeEvaluate {
                 project(':foo').apply from: 'before.gradle'
             }

@@ -17,8 +17,9 @@
 package org.gradle.api.file;
 
 import org.gradle.api.Action;
-import org.gradle.api.Incubating;
 import org.gradle.api.tasks.WorkResult;
+import org.gradle.internal.service.scopes.Scopes;
+import org.gradle.internal.service.scopes.ServiceScope;
 
 
 /**
@@ -28,7 +29,7 @@ import org.gradle.api.tasks.WorkResult;
  *
  * @since 6.0
  */
-@Incubating
+@ServiceScope(Scopes.Build.class)
 public interface FileSystemOperations {
 
     /**

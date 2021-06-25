@@ -20,19 +20,21 @@ import org.gradle.api.file.ConfigurableFileCollection;
 import org.gradle.api.file.FileCollection;
 import org.gradle.api.internal.file.FileCollectionFactory;
 import org.gradle.api.internal.file.FileResolver;
+import org.gradle.api.internal.file.temp.TemporaryFileProvider;
 import org.gradle.api.jvm.ModularitySpec;
 import org.gradle.api.logging.Logger;
 import org.gradle.api.logging.Logging;
 import org.gradle.api.model.ObjectFactory;
 import org.gradle.api.provider.Property;
 import org.gradle.initialization.BuildCancellationToken;
+import org.gradle.internal.deprecation.DeprecationLogger;
 import org.gradle.internal.jvm.DefaultModularitySpec;
 import org.gradle.internal.jvm.JavaModuleDetector;
 import org.gradle.process.CommandLineArgumentProvider;
 import org.gradle.process.JavaDebugOptions;
 import org.gradle.process.JavaExecSpec;
 import org.gradle.process.JavaForkOptions;
-import org.gradle.util.CollectionUtils;
+import org.gradle.util.internal.CollectionUtils;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -58,6 +60,7 @@ import static org.gradle.process.internal.util.LongCommandLineDetectionUtil.hasC
 public class JavaExecHandleBuilder extends AbstractExecHandleBuilder implements JavaExecSpec, ProcessArgumentsSpec.HasExecutable {
     private static final Logger LOGGER = Logging.getLogger(JavaExecHandleBuilder.class);
     private final FileCollectionFactory fileCollectionFactory;
+    private final TemporaryFileProvider temporaryFileProvider;
     private final JavaModuleDetector javaModuleDetector;
     private final Property<String> mainModule;
     private final Property<String> mainClass;
@@ -66,9 +69,19 @@ public class JavaExecHandleBuilder extends AbstractExecHandleBuilder implements 
     private final ProcessArgumentsSpec applicationArgsSpec = new ProcessArgumentsSpec(this);
     private final ModularitySpec modularity;
 
-    public JavaExecHandleBuilder(FileResolver fileResolver, FileCollectionFactory fileCollectionFactory, ObjectFactory objectFactory, Executor executor, BuildCancellationToken buildCancellationToken, @Nullable JavaModuleDetector javaModuleDetector, JavaForkOptions javaOptions) {
+    public JavaExecHandleBuilder(
+        FileResolver fileResolver,
+        FileCollectionFactory fileCollectionFactory,
+        ObjectFactory objectFactory,
+        Executor executor,
+        BuildCancellationToken buildCancellationToken,
+        TemporaryFileProvider temporaryFileProvider,
+        @Nullable JavaModuleDetector javaModuleDetector,
+        JavaForkOptions javaOptions
+    ) {
         super(fileResolver, executor, buildCancellationToken);
         this.fileCollectionFactory = fileCollectionFactory;
+        this.temporaryFileProvider = temporaryFileProvider;
         this.javaModuleDetector = javaModuleDetector;
         this.classpath = fileCollectionFactory.configurableFiles("classpath");
         this.mainModule = objectFactory.property(String.class);
@@ -282,12 +295,26 @@ public class JavaExecHandleBuilder extends AbstractExecHandleBuilder implements 
     }
 
     @Override
+    @Deprecated
     public String getMain() {
+        DeprecationLogger.deprecateMethod(JavaExecHandleBuilder.class, "getMain()")
+            .withAdvice("Please use the mainClass property instead.")
+            .willBeRemovedInGradle8()
+            .withUpgradeGuideSection(7, "java_exec_properties")
+            .nagUser();
+
         return mainClass.getOrNull();
     }
 
     @Override
+    @Deprecated
     public JavaExecHandleBuilder setMain(String mainClassName) {
+        DeprecationLogger.deprecateMethod(JavaExecHandleBuilder.class, "setMain(String)")
+            .withAdvice("Please use the mainClass property instead.")
+            .willBeRemovedInGradle8()
+            .withUpgradeGuideSection(7, "java_exec_properties")
+            .nagUser();
+
         this.mainClass.set(mainClassName);
         return this;
     }
@@ -385,7 +412,7 @@ public class JavaExecHandleBuilder extends AbstractExecHandleBuilder implements 
     }
 
     private File writePathingJarFile(FileCollection classPath) throws IOException {
-        File pathingJarFile = File.createTempFile("gradle-javaexec-classpath", ".jar");
+        File pathingJarFile = temporaryFileProvider.createTemporaryFile("gradle-javaexec-classpath", ".jar");
         try (FileOutputStream fileOutputStream = new FileOutputStream(pathingJarFile);
              JarOutputStream jarOutputStream = new JarOutputStream(fileOutputStream, toManifest(classPath))) {
             jarOutputStream.putNextEntry(new ZipEntry("META-INF/"));

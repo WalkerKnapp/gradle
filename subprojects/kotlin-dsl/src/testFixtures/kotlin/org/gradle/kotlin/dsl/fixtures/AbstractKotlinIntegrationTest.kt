@@ -104,28 +104,34 @@ abstract class AbstractKotlinIntegrationTest : AbstractIntegrationTest() {
 
     protected
     fun withBuildSrc() =
-        withFile("buildSrc/src/main/groovy/build/Foo.groovy", """
+        withFile(
+            "buildSrc/src/main/groovy/build/Foo.groovy",
+            """
             package build
             class Foo {}
-        """)
+            """
+        )
 
     protected
     fun withKotlinBuildSrc() {
         withDefaultSettingsIn("buildSrc")
-        withBuildScriptIn("buildSrc", """
+        withBuildScriptIn(
+            "buildSrc",
+            """
             plugins {
                 `kotlin-dsl`
             }
 
             $repositoriesBlock
-        """)
+            """
+        )
     }
 
     protected
-    fun givenPrecompiledKotlinScript(fileName: String, code: String) {
+    fun givenPrecompiledKotlinScript(fileName: String, code: String): ExecutionResult {
         withKotlinDslPlugin()
         withPrecompiledKotlinScript(fileName, code)
-        compileKotlin()
+        return compileKotlin()
     }
 
     protected
@@ -234,5 +240,12 @@ abstract class AbstractKotlinIntegrationTest : AbstractIntegrationTest() {
     protected
     fun assumeNonEmbeddedGradleExecuter() {
         assumeFalse(GradleContextualExecuter.isEmbedded())
+    }
+
+    protected
+    fun ignoreKotlinDaemonJvmDeprecationWarningsOnJdk16() {
+        if (JavaVersion.current().isCompatibleWith(JavaVersion.VERSION_16)) {
+            executer.noDeprecationChecks()
+        }
     }
 }

@@ -16,58 +16,66 @@
 
 package org.gradle.testfixtures.internal;
 
-import org.gradle.StartParameter;
 import org.gradle.api.Project;
-import org.gradle.api.Transformer;
+import org.gradle.api.artifacts.ModuleVersionIdentifier;
 import org.gradle.api.artifacts.component.BuildIdentifier;
 import org.gradle.api.artifacts.component.ProjectComponentIdentifier;
-import org.gradle.api.internal.BuildType;
 import org.gradle.api.internal.GradleInternal;
 import org.gradle.api.internal.SettingsInternal;
 import org.gradle.api.internal.StartParameterInternal;
 import org.gradle.api.internal.artifacts.DefaultBuildIdentifier;
 import org.gradle.api.internal.artifacts.DefaultProjectComponentIdentifier;
 import org.gradle.api.internal.file.FileResolver;
-import org.gradle.api.internal.file.TemporaryFileProvider;
-import org.gradle.api.internal.file.TmpDirTemporaryFileProvider;
+import org.gradle.api.internal.file.temp.DefaultTemporaryFileProvider;
+import org.gradle.api.internal.file.temp.TemporaryFileProvider;
 import org.gradle.api.internal.initialization.ClassLoaderScope;
-import org.gradle.api.internal.project.IProjectFactory;
 import org.gradle.api.internal.project.ProjectInternal;
+import org.gradle.api.internal.project.ProjectState;
 import org.gradle.api.internal.project.ProjectStateRegistry;
 import org.gradle.initialization.BuildRequestMetaData;
 import org.gradle.initialization.DefaultBuildCancellationToken;
 import org.gradle.initialization.DefaultBuildRequestMetaData;
 import org.gradle.initialization.DefaultProjectDescriptor;
 import org.gradle.initialization.LegacyTypesSupport;
-import org.gradle.initialization.NestedBuildFactory;
 import org.gradle.initialization.NoOpBuildEventConsumer;
 import org.gradle.initialization.ProjectDescriptorRegistry;
+import org.gradle.internal.Factory;
 import org.gradle.internal.FileUtils;
+import org.gradle.internal.Pair;
+import org.gradle.internal.SystemProperties;
 import org.gradle.internal.build.AbstractBuildState;
 import org.gradle.internal.build.BuildState;
 import org.gradle.internal.build.BuildStateRegistry;
 import org.gradle.internal.build.RootBuildState;
+import org.gradle.internal.buildtree.BuildTreeLifecycleController;
+import org.gradle.internal.buildtree.BuildTreeModelControllerServices;
+import org.gradle.internal.buildtree.BuildTreeState;
+import org.gradle.internal.buildtree.RunTasksRequirements;
 import org.gradle.internal.classpath.ClassPath;
-import org.gradle.internal.instantiation.InstantiatorFactory;
-import org.gradle.internal.invocation.BuildController;
+import org.gradle.internal.composite.IncludedBuildInternal;
+import org.gradle.internal.concurrent.Stoppable;
 import org.gradle.internal.logging.services.LoggingServiceRegistry;
 import org.gradle.internal.nativeintegration.services.NativeServices;
 import org.gradle.internal.resources.DefaultResourceLockCoordinationService;
 import org.gradle.internal.resources.ResourceLockCoordinationService;
 import org.gradle.internal.service.ServiceRegistry;
 import org.gradle.internal.service.ServiceRegistryBuilder;
-import org.gradle.internal.service.scopes.BuildSessionScopeServices;
-import org.gradle.internal.service.scopes.BuildTreeScopeServices;
-import org.gradle.internal.service.scopes.CrossBuildSessionScopeServices;
 import org.gradle.internal.service.scopes.GradleUserHomeScopeServiceRegistry;
-import org.gradle.internal.service.scopes.ServiceRegistryFactory;
+import org.gradle.internal.session.BuildSessionState;
+import org.gradle.internal.session.CrossBuildSessionState;
 import org.gradle.internal.time.Time;
+import org.gradle.internal.work.DefaultWorkerLeaseService;
+import org.gradle.internal.work.WorkerLeaseRegistry;
 import org.gradle.internal.work.WorkerLeaseService;
-import org.gradle.invocation.DefaultGradle;
 import org.gradle.util.Path;
 
+import javax.annotation.Nullable;
 import java.io.File;
 import java.util.Collections;
+import java.util.Set;
+import java.util.function.Function;
+
+import static org.gradle.internal.concurrent.CompositeStoppable.stoppable;
 
 public class ProjectBuilderImpl {
     private static ServiceRegistry globalServices;
@@ -81,39 +89,40 @@ public class ProjectBuilderImpl {
         DefaultProjectDescriptor projectDescriptor = new DefaultProjectDescriptor(parentDescriptor, name, projectDir, descriptorRegistry, parentProject.getServices().get(FileResolver.class));
         descriptorRegistry.addProject(projectDescriptor);
 
-        parentProject.getServices().get(ProjectStateRegistry.class).registerProject(parentProject.getServices().get(BuildState.class), projectDescriptor);
-        ProjectInternal project = parentProject.getServices().get(IProjectFactory.class).createProject(parentProject.getGradle(), projectDescriptor, parentProject, parentProject.getClassLoaderScope().createChild("project-" + name), parentProject.getBaseClassLoaderScope());
+        ProjectState projectState = parentProject.getServices().get(ProjectStateRegistry.class).registerProject(parentProject.getServices().get(BuildState.class), projectDescriptor);
+        projectState.createMutableModel(parentProject.getClassLoaderScope().createChild("project-" + name), parentProject.getBaseClassLoaderScope());
+        ProjectInternal project = projectState.getMutableModel();
 
         // Lock the project, these won't ever be released as ProjectBuilder has no lifecycle
         ResourceLockCoordinationService coordinationService = project.getServices().get(ResourceLockCoordinationService.class);
-        coordinationService.withStateLock(DefaultResourceLockCoordinationService.lock(project.getMutationState().getAccessLock()));
+        coordinationService.withStateLock(DefaultResourceLockCoordinationService.lock(project.getOwner().getAccessLock()));
 
         return project;
     }
 
-    public Project createProject(String name, File inputProjectDir, File gradleUserHomeDir) {
-        File projectDir = prepareProjectDir(inputProjectDir);
+    public ProjectInternal createProject(String name, File inputProjectDir, File gradleUserHomeDir) {
 
+        final File projectDir = prepareProjectDir(inputProjectDir);
         final File homeDir = new File(projectDir, "gradleHome");
-
-        StartParameter startParameter = new StartParameterInternal();
-
         File userHomeDir = gradleUserHomeDir == null ? new File(projectDir, "userHome") : FileUtils.canonicalize(gradleUserHomeDir);
+        StartParameterInternal startParameter = new StartParameterInternal();
         startParameter.setGradleUserHomeDir(userHomeDir);
-        NativeServices.initialize(userHomeDir);
+        NativeServices.initializeOnDaemon(userHomeDir);
+
+        final ServiceRegistry globalServices = getGlobalServices();
 
         BuildRequestMetaData buildRequestMetaData = new DefaultBuildRequestMetaData(Time.currentTimeMillis());
-        CrossBuildSessionScopeServices crossBuildSessionScopeServices = new CrossBuildSessionScopeServices(getGlobalServices(), startParameter);
-        ServiceRegistry userHomeServices = getUserHomeServices(userHomeDir);
-        BuildSessionScopeServices buildSessionScopeServices = new BuildSessionScopeServices(userHomeServices, crossBuildSessionScopeServices, startParameter, buildRequestMetaData, ClassPath.EMPTY, new DefaultBuildCancellationToken(), buildRequestMetaData.getClient(), new NoOpBuildEventConsumer());
-        BuildTreeScopeServices buildTreeScopeServices = new BuildTreeScopeServices(buildSessionScopeServices, BuildType.TASKS);
-        TestBuildScopeServices buildServices = new TestBuildScopeServices(buildTreeScopeServices, homeDir);
-        TestRootBuild build = new TestRootBuild(projectDir);
-        buildServices.add(BuildState.class, build);
+        CrossBuildSessionState crossBuildSessionState = new CrossBuildSessionState(globalServices, startParameter);
+        GradleUserHomeScopeServiceRegistry userHomeServices = userHomeServicesOf(globalServices);
+        BuildSessionState buildSessionState = new BuildSessionState(userHomeServices, crossBuildSessionState, startParameter, buildRequestMetaData, ClassPath.EMPTY, new DefaultBuildCancellationToken(), buildRequestMetaData.getClient(), new NoOpBuildEventConsumer());
+        BuildTreeModelControllerServices.Supplier modelServices = buildSessionState.getServices().get(BuildTreeModelControllerServices.class).servicesForBuildTree(new RunTasksRequirements(startParameter));
+        BuildTreeState buildTreeState = new BuildTreeState(buildSessionState.getServices(), modelServices);
+        TestBuildScopeServices buildServices = new TestBuildScopeServices(buildTreeState.getServices(), homeDir, startParameter);
+        TestRootBuild build = new TestRootBuild(projectDir, buildServices);
 
         buildServices.get(BuildStateRegistry.class).attachRootBuild(build);
 
-        GradleInternal gradle = buildServices.get(InstantiatorFactory.class).decorateLenient().newInstance(DefaultGradle.class, null, startParameter, buildServices.get(ServiceRegistryFactory.class));
+        GradleInternal gradle = build.getMutableModel();
         gradle.setIncludedBuilds(Collections.emptyList());
 
         ProjectDescriptorRegistry projectDescriptorRegistry = buildServices.get(ProjectDescriptorRegistry.class);
@@ -123,8 +132,10 @@ public class ProjectBuilderImpl {
         ClassLoaderScope baseScope = gradle.getClassLoaderScope();
         ClassLoaderScope rootProjectScope = baseScope.createChild("root-project");
 
-        buildServices.get(ProjectStateRegistry.class).registerProject(build, projectDescriptor);
-        ProjectInternal project = buildServices.get(IProjectFactory.class).createProject(gradle, projectDescriptor, null, rootProjectScope, baseScope);
+        ProjectStateRegistry projectStateRegistry = buildServices.get(ProjectStateRegistry.class);
+        ProjectState projectState = projectStateRegistry.registerProject(build, projectDescriptor);
+        projectState.createMutableModel(rootProjectScope, baseScope);
+        ProjectInternal project = projectState.getMutableModel();
 
         gradle.setRootProject(project);
         gradle.setDefaultProject(project);
@@ -132,26 +143,35 @@ public class ProjectBuilderImpl {
         // Take a root worker lease and lock the project, these won't ever be released as ProjectBuilder has no lifecycle
         ResourceLockCoordinationService coordinationService = buildServices.get(ResourceLockCoordinationService.class);
         WorkerLeaseService workerLeaseService = buildServices.get(WorkerLeaseService.class);
-        coordinationService.withStateLock(DefaultResourceLockCoordinationService.lock(workerLeaseService.getWorkerLease(), project.getMutationState().getAccessLock()));
+        WorkerLeaseRegistry.WorkerLease workerLease = workerLeaseService.getWorkerLease();
+        coordinationService.withStateLock(DefaultResourceLockCoordinationService.lock(workerLease, project.getOwner().getAccessLock()));
+
+        project.getExtensions().getExtraProperties().set(
+            "ProjectBuilder.stoppable",
+            stoppable(
+                (Stoppable) workerLeaseService::releaseCurrentProjectLocks,
+                (Stoppable) ((DefaultWorkerLeaseService) workerLeaseService)::releaseCurrentResourceLocks,
+                buildServices,
+                buildTreeState,
+                buildSessionState,
+                crossBuildSessionState
+            )
+        );
 
         return project;
     }
 
-    private ServiceRegistry getUserHomeServices(File userHomeDir) {
-        ServiceRegistry globalServices = getGlobalServices();
-        GradleUserHomeScopeServiceRegistry userHomeScopeServiceRegistry = globalServices.get(GradleUserHomeScopeServiceRegistry.class);
-        return userHomeScopeServiceRegistry.getServicesFor(userHomeDir);
+    public static void stop(Project rootProject) {
+        ((Stoppable) rootProject.getExtensions().getExtraProperties().get("ProjectBuilder.stoppable")).stop();
+    }
+
+    private GradleUserHomeScopeServiceRegistry userHomeServicesOf(ServiceRegistry globalServices) {
+        return globalServices.get(GradleUserHomeScopeServiceRegistry.class);
     }
 
     public synchronized static ServiceRegistry getGlobalServices() {
         if (globalServices == null) {
-            globalServices = ServiceRegistryBuilder
-                .builder()
-                .displayName("global services")
-                .parent(LoggingServiceRegistry.newNestedLogging())
-                .parent(NativeServices.getInstance())
-                .provider(new TestGlobalScopeServices())
-                .build();
+            globalServices = createGlobalServices();
             // Inject missing interfaces to support the usage of plugins compiled with older Gradle versions.
             // A normal gradle build does this by adding the MixInLegacyTypesClassLoader to the class loader hierarchy.
             // In a test run, which is essentially a plain Java application, the classpath is flattened and injected
@@ -163,23 +183,54 @@ public class ProjectBuilderImpl {
         return globalServices;
     }
 
-    public File prepareProjectDir(File projectDir) {
-        if (projectDir == null) {
-            TemporaryFileProvider temporaryFileProvider = new TmpDirTemporaryFileProvider();
-            projectDir = temporaryFileProvider.createTemporaryDirectory("gradle", "projectDir");
-            // TODO deleteOnExit won't clean up non-empty directories (and it leaks memory for long-running processes).
-            projectDir.deleteOnExit();
-        } else {
-            projectDir = FileUtils.canonicalize(projectDir);
+    private static ServiceRegistry createGlobalServices() {
+        return ServiceRegistryBuilder
+            .builder()
+            .displayName("global services")
+            .parent(LoggingServiceRegistry.newNestedLogging())
+            .parent(NativeServices.getInstance())
+            .provider(new TestGlobalScopeServices())
+            .build();
+    }
+
+    public File prepareProjectDir(@Nullable final File projectDir) {
+        if (projectDir != null) {
+            return FileUtils.canonicalize(projectDir);
         }
-        return projectDir;
+
+        TemporaryFileProvider temporaryFileProvider = new DefaultTemporaryFileProvider(new Factory<File>() {
+            @Override
+            public File create() {
+                String rootTmpDir = SystemProperties.getInstance().getWorkerTmpDir();
+                if (rootTmpDir == null) {
+                    @SuppressWarnings("deprecation")
+                    String javaIoTmpDir = SystemProperties.getInstance().getJavaIoTmpDir();
+                    rootTmpDir = javaIoTmpDir;
+                }
+                return FileUtils.canonicalize(new File(rootTmpDir));
+            }
+        });
+        File tempDirectory = temporaryFileProvider.createTemporaryDirectory("gradle", "projectDir");
+        // TODO deleteOnExit won't clean up non-empty directories (and it leaks memory for long-running processes).
+        tempDirectory.deleteOnExit();
+        return tempDirectory;
     }
 
     private static class TestRootBuild extends AbstractBuildState implements RootBuildState {
         private final File rootProjectDir;
+        private final ProjectStateRegistry projectStateRegistry;
+        private final GradleInternal gradle;
 
-        public TestRootBuild(File rootProjectDir) {
+        public TestRootBuild(File rootProjectDir, TestBuildScopeServices buildServices) {
             this.rootProjectDir = rootProjectDir;
+            buildServices.add(BuildState.class, this);
+            this.projectStateRegistry = buildServices.get(ProjectStateRegistry.class);
+            this.gradle = buildServices.get(GradleInternal.class);
+        }
+
+        @Override
+        protected ProjectStateRegistry getProjectStateRegistry() {
+            return projectStateRegistry;
         }
 
         @Override
@@ -203,11 +254,6 @@ public class ProjectBuilderImpl {
         }
 
         @Override
-        public NestedBuildFactory getNestedBuildFactory() {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
         public Path getCurrentPrefixForProjectsInChildBuilds() {
             return Path.ROOT;
         }
@@ -218,12 +264,12 @@ public class ProjectBuilderImpl {
         }
 
         @Override
-        public StartParameter getStartParameter() {
+        public StartParameterInternal getStartParameter() {
             throw new UnsupportedOperationException();
         }
 
         @Override
-        public <T> T run(Transformer<T, ? super BuildController> buildAction) {
+        public <T> T run(Function<? super BuildTreeLifecycleController, T> action) {
             throw new UnsupportedOperationException();
         }
 
@@ -237,8 +283,33 @@ public class ProjectBuilderImpl {
         }
 
         @Override
+        public IncludedBuildInternal getModel() {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public Set<Pair<ModuleVersionIdentifier, ProjectComponentIdentifier>> getAvailableModules() {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public ProjectComponentIdentifier idToReferenceProjectFromAnotherBuild(ProjectComponentIdentifier identifier) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
         public File getBuildRootDir() {
             return rootProjectDir;
+        }
+
+        @Override
+        public GradleInternal getMutableModel() {
+            return gradle;
+        }
+
+        @Override
+        public GradleInternal getBuild() {
+            return gradle;
         }
     }
 }

@@ -17,12 +17,15 @@
 package org.gradle.smoketests
 
 import org.gradle.integtests.fixtures.ToBeFixedForConfigurationCache
+import org.gradle.internal.reflect.validation.ValidationMessageChecker
+import org.gradle.util.GradleVersion
 import org.gradle.util.Requires
 import org.gradle.util.TestPrecondition
+import spock.lang.Ignore
 import spock.lang.Issue
 import spock.lang.Unroll
 
-class NebulaPluginsSmokeTest extends AbstractSmokeTest {
+class NebulaPluginsSmokeTest extends AbstractPluginValidatingSmokeTest implements ValidationMessageChecker {
 
     @Issue('https://plugins.gradle.org/plugin/nebula.dependency-recommender')
     @ToBeFixedForConfigurationCache
@@ -34,15 +37,15 @@ class NebulaPluginsSmokeTest extends AbstractSmokeTest {
                 id "nebula.dependency-recommender" version "${TestedVersions.nebulaDependencyRecommender}"
             }
 
-            ${jcenterRepository()}
+            ${mavenCentralRepository()}
 
             dependencyRecommendations {
                 mavenBom module: 'netflix:platform:latest.release'
             }
 
             dependencies {
-                compile 'com.google.guava:guava' // no version, version is recommended
-                compile 'commons-lang:commons-lang:2.6' // I know what I want, don't recommend
+                implementation 'com.google.guava:guava' // no version, version is recommended
+                implementation 'commons-lang:commons-lang:2.6' // I know what I want, don't recommend
             }
             """
 
@@ -72,16 +75,23 @@ class NebulaPluginsSmokeTest extends AbstractSmokeTest {
         """
 
         then:
-        runner('groovydoc').build()
+        runner('groovydoc')
+            .expectDeprecationWarning("The Report.enabled property has been deprecated. " +
+                "This is scheduled to be removed in Gradle 8.0. " +
+                "Please use the required property instead. See https://docs.gradle.org/${GradleVersion.current().version}/dsl/org.gradle.api.reporting.Report.html#org.gradle.api.reporting.Report:enabled for more details.",
+                "https://github.com/nebula-plugins/nebula-plugin-plugin/pull/66"
+            )
+            .build()
     }
 
+    @Ignore("Waiting for Groovy3 compatibility https://github.com/gradle/gradle/issues/16358")
     @Issue('https://plugins.gradle.org/plugin/nebula.lint')
     @ToBeFixedForConfigurationCache
     def 'nebula lint plugin'() {
         given:
         buildFile << """
             buildscript {
-                ${jcenterRepository()}
+                ${mavenCentralRepository()}
             }
 
             plugins {
@@ -93,7 +103,7 @@ class NebulaPluginsSmokeTest extends AbstractSmokeTest {
             gradleLint.rules = ['dependency-parentheses']
 
             dependencies {
-                testCompile('junit:junit:4.7')
+                testImplementation('junit:junit:4.7')
             }
         """.stripIndent()
 
@@ -101,12 +111,12 @@ class NebulaPluginsSmokeTest extends AbstractSmokeTest {
         def result = runner('autoLintGradle').build()
 
         then:
-        int numOfRepoBlockLines = 14 + jcenterRepository().readLines().size()
+        int numOfRepoBlockLines = 14 + mavenCentralRepository().readLines().size()
         result.output.contains("parentheses are unnecessary for dependencies")
         result.output.contains("warning   dependency-parentheses")
         result.output.contains("build.gradle:$numOfRepoBlockLines")
-        result.output.contains("testCompile('junit:junit:4.7')")
-        buildFile.text.contains("testCompile('junit:junit:4.7')")
+        result.output.contains("testImplementation('junit:junit:4.7')")
+        buildFile.text.contains("testImplementation('junit:junit:4.7')")
 
         when:
         result = runner('fixGradleLint').build()
@@ -114,8 +124,8 @@ class NebulaPluginsSmokeTest extends AbstractSmokeTest {
         then:
         result.output.contains("""fixed          dependency-parentheses             parentheses are unnecessary for dependencies
 build.gradle:$numOfRepoBlockLines
-testCompile('junit:junit:4.7')""")
-        buildFile.text.contains("testCompile 'junit:junit:4.7'")
+testImplementation('junit:junit:4.7')""")
+        buildFile.text.contains("testImplementation 'junit:junit:4.7'")
     }
 
     @Issue('https://plugins.gradle.org/plugin/nebula.dependency-lock')
@@ -143,7 +153,7 @@ testCompile('junit:junit:4.7')""")
                 id 'nebula.dependency-lock' version '$version'
             }
 
-            ${jcenterRepository()}
+            ${mavenCentralRepository()}
 
             dependencies {
                 api 'org.apache.commons:commons-math3:3.6.1'
@@ -221,7 +231,7 @@ testCompile('junit:junit:4.7')""")
                 id 'nebula.resolution-rules' version '${TestedVersions.nebulaResolutionRules}'
             }
 
-            ${jcenterRepository()}
+            ${mavenCentralRepository()}
 
             dependencies {
                 resolutionRules files('rules.json')
@@ -233,5 +243,16 @@ testCompile('junit:junit:4.7')""")
 
         then:
         runner('dependencies').build()
+    }
+
+    @Override
+    Map<String, Versions> getPluginsToValidate() {
+        [
+            'nebula.dependency-recommender': Versions.of(TestedVersions.nebulaDependencyRecommender),
+            'nebula.plugin-plugin': Versions.of(TestedVersions.nebulaPluginPlugin),
+            'nebula.lint': Versions.of(TestedVersions.nebulaLint),
+            'nebula.dependency-lock': TestedVersions.nebulaDependencyLock,
+            'nebula.resolution-rules': Versions.of(TestedVersions.nebulaResolutionRules)
+        ]
     }
 }

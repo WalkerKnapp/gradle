@@ -16,9 +16,8 @@
 
 package org.gradle.plugin.devel.tasks;
 
+import com.google.common.collect.Lists;
 import org.gradle.api.DefaultTask;
-import org.gradle.api.Incubating;
-import org.gradle.api.InvalidUserDataException;
 import org.gradle.api.file.ConfigurableFileCollection;
 import org.gradle.api.file.RegularFileProperty;
 import org.gradle.api.internal.DocumentationRegistry;
@@ -40,10 +39,14 @@ import javax.inject.Inject;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.util.List;
-import java.util.stream.Collectors;
 
 /**
  * Validates plugins by checking property annotations on work items like tasks and artifact transforms.
+ *
+ * This task should be used in Gradle plugin projects for doing static analysis on the plugin classes.
+ *
+ * The <a href="https://docs.gradle.org/current/userguide/java_gradle_plugin.html" target="_top">java-gradle-plugin</a> adds
+ * a {@code validatePlugins} task, though if you cannot use this plugin then you need to register the task yourself.
  *
  * See the user guide for more information on
  * <a href="https://docs.gradle.org/current/userguide/more_about_tasks.html#sec:up_to_date_checks" target="_top">incremental build</a> and
@@ -52,7 +55,6 @@ import java.util.stream.Collectors;
  * @since 6.0
  */
 @CacheableTask
-@Incubating
 public abstract class ValidatePlugins extends DefaultTask {
 
     public ValidatePlugins() {
@@ -72,7 +74,7 @@ public abstract class ValidatePlugins extends DefaultTask {
             });
         getWorkerExecutor().await();
 
-        List<String> problemMessages = Files.readAllLines(getOutputFile().get().getAsFile().toPath());
+        List<String> problemMessages = parseMessageList(Files.readAllLines(getOutputFile().get().getAsFile().toPath()));
 
         if (problemMessages.isEmpty()) {
             getLogger().info("Plugin validation finished without warnings.");
@@ -83,9 +85,10 @@ public abstract class ValidatePlugins extends DefaultTask {
                         getDocumentationRegistry().getDocumentationFor("more_about_tasks", "sec:task_input_output_annotations"),
                         toMessageList(problemMessages));
                 } else {
-                    throw new WorkValidationException(String.format("Plugin validation failed. See %s for more information on how to annotate task properties.",
-                        getDocumentationRegistry().getDocumentationFor("more_about_tasks", "sec:task_input_output_annotations")),
-                        toExceptionList(problemMessages));
+                    throw WorkValidationException.forProblems(problemMessages)
+                        .withSummary(helper -> "Plugin validation failed with " + helper.size() + helper.pluralize(" problem"))
+                        .getWithExplanation(String.format("See %s for more information on how to annotate task properties.",
+                            getDocumentationRegistry().getDocumentationFor("more_about_tasks", "sec:task_input_output_annotations")));
                 }
             } else {
                 getLogger().warn("Plugin validation finished with warnings:{}",
@@ -94,18 +97,32 @@ public abstract class ValidatePlugins extends DefaultTask {
         }
     }
 
+    private static List<String> parseMessageList(List<String> lines) {
+        List<String> list = Lists.newArrayList();
+        StringBuilder sb = new StringBuilder();
+        for (String line : lines) {
+            if (line.equals(ValidateAction.PROBLEM_SEPARATOR)) {
+                list.add(sb.toString());
+                sb.setLength(0);
+            } else {
+                if (sb.length() > 0) {
+                    sb.append("\n");
+                }
+                sb.append(line);
+            }
+        }
+        if (sb.length() > 0) {
+            list.add(sb.toString());
+        }
+        return list;
+    }
+
     private static CharSequence toMessageList(List<String> problemMessages) {
         StringBuilder builder = new StringBuilder();
         for (String problemMessage : problemMessages) {
             builder.append(String.format("%n  - %s", problemMessage));
         }
         return builder;
-    }
-
-    private static List<InvalidUserDataException> toExceptionList(List<String> problemMessages) {
-        return problemMessages.stream()
-            .map(InvalidUserDataException::new)
-            .collect(Collectors.toList());
     }
 
     /**

@@ -17,7 +17,6 @@
 package org.gradle.configurationcache.serialization.codecs
 
 import org.gradle.api.Project
-import org.gradle.api.Script
 import org.gradle.api.artifacts.ArtifactView
 import org.gradle.api.artifacts.ConfigurationContainer
 import org.gradle.api.artifacts.Dependency
@@ -50,12 +49,13 @@ import org.gradle.api.attributes.DisambiguationRuleChain
 import org.gradle.api.initialization.Settings
 import org.gradle.api.invocation.Gradle
 import org.gradle.api.publish.Publication
+import org.gradle.api.services.BuildService
 import org.gradle.api.tasks.SourceSet
 import org.gradle.api.tasks.SourceSetContainer
 import org.gradle.api.tasks.TaskContainer
 import org.gradle.api.tasks.TaskDependency
 import org.gradle.configurationcache.serialization.unsupported
-import org.gradle.kotlin.dsl.*
+import org.gradle.internal.scripts.GradleScript
 import java.io.FileDescriptor
 import java.io.InputStream
 import java.io.OutputStream
@@ -82,8 +82,7 @@ fun BindingsBuilder.unsupportedTypes() {
     bind(unsupported<ServerSocket>())
 
     // Gradle Scripts
-    bind(unsupported<Script>())
-    bind(unsupported<KotlinScript>())
+    bind(unsupported<GradleScript>(" Gradle script object references"))
 
     // Gradle Build Model
     bind(unsupported<Gradle>())
@@ -127,4 +126,8 @@ fun BindingsBuilder.unsupportedTypes() {
 
     // Publishing types
     bind(unsupported<Publication>())
+
+    // Direct build service references
+    // Build services must always be referenced via their providers.
+    bind(unsupported<BuildService<*>>())
 }

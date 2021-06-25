@@ -16,12 +16,10 @@
 
 package org.gradle.configurationcache.inputs.undeclared
 
-import spock.lang.Ignore
-
 class UndeclaredBuildInputsStaticGroovyBuildSrcIntegrationTest extends AbstractUndeclaredBuildInputsIntegrationTest implements GroovyPluginImplementation {
     @Override
     String getLocation() {
-        return "plugin class 'SneakyPlugin'"
+        return "Plugin class 'SneakyPlugin'"
     }
 
     @Override
@@ -30,15 +28,5 @@ class UndeclaredBuildInputsStaticGroovyBuildSrcIntegrationTest extends AbstractU
         buildFile << """
             apply plugin: SneakyPlugin
         """
-    }
-
-    @Ignore
-    def "can reference static methods via instance variables"() {
-        expect: false
-    }
-
-    @Ignore
-    def "can reference methods from groovy closure"() {
-        expect: false
     }
 }

@@ -16,15 +16,12 @@
 
 package org.gradle.configurationcache.serialization.codecs
 
-import org.gradle.api.Project
 import org.gradle.api.Task
 import org.gradle.api.file.FileCollection
 import org.gradle.api.internal.GeneratedSubclasses
 import org.gradle.api.internal.TaskInputsInternal
 import org.gradle.api.internal.TaskInternal
 import org.gradle.api.internal.TaskOutputsInternal
-import org.gradle.api.internal.project.ProjectState
-import org.gradle.api.internal.project.ProjectStateRegistry
 import org.gradle.api.internal.provider.Providers
 import org.gradle.api.internal.tasks.TaskDestroyablesInternal
 import org.gradle.api.internal.tasks.TaskLocalStateInternal
@@ -35,8 +32,6 @@ import org.gradle.api.internal.tasks.properties.PropertyValue
 import org.gradle.api.internal.tasks.properties.PropertyVisitor
 import org.gradle.api.specs.Spec
 import org.gradle.api.tasks.FileNormalizer
-import org.gradle.execution.plan.LocalTaskNode
-import org.gradle.execution.plan.TaskNodeFactory
 import org.gradle.configurationcache.extensions.uncheckedCast
 import org.gradle.configurationcache.problems.PropertyKind
 import org.gradle.configurationcache.problems.PropertyTrace
@@ -54,26 +49,25 @@ import org.gradle.configurationcache.serialization.readCollection
 import org.gradle.configurationcache.serialization.readCollectionInto
 import org.gradle.configurationcache.serialization.readEnum
 import org.gradle.configurationcache.serialization.readNonNull
-import org.gradle.configurationcache.serialization.runWriteOperation
 import org.gradle.configurationcache.serialization.withDebugFrame
 import org.gradle.configurationcache.serialization.withIsolate
 import org.gradle.configurationcache.serialization.withPropertyTrace
 import org.gradle.configurationcache.serialization.writeCollection
 import org.gradle.configurationcache.serialization.writeEnum
-import org.gradle.util.DeferredUtil
+import org.gradle.execution.plan.LocalTaskNode
+import org.gradle.execution.plan.TaskNodeFactory
+import org.gradle.internal.fingerprint.DirectorySensitivity
+import org.gradle.util.internal.DeferredUtil
 
 
 class TaskNodeCodec(
-    private val projectStateRegistry: ProjectStateRegistry,
     private val userTypesCodec: Codec<Any?>,
     private val taskNodeFactory: TaskNodeFactory
 ) : Codec<LocalTaskNode> {
 
     override suspend fun WriteContext.encode(value: LocalTaskNode) {
         val task = value.task
-        runWriteOperationWithMutableStateOf(task.project) {
-            writeTask(task)
-        }
+        writeTask(task)
     }
 
     override suspend fun ReadContext.decode(): LocalTaskNode {
@@ -202,16 +196,6 @@ class TaskNodeCodec(
             task.localState.register(readNonNull<FileCollection>())
         }
     }
-
-    /**
-     * Runs the suspending [operation] against the [public mutable state][ProjectState.withMutableState] of [project].
-     */
-    private
-    fun WriteContext.runWriteOperationWithMutableStateOf(project: Project, operation: suspend WriteContext.() -> Unit) {
-        projectStateRegistry.stateFor(project).withMutableState {
-            runWriteOperation(operation)
-        }
-    }
 }
 
 
@@ -246,7 +230,8 @@ sealed class RegisteredProperty {
         val filePropertyType: InputFilePropertyType,
         val skipWhenEmpty: Boolean,
         val incremental: Boolean,
-        val fileNormalizer: Class<out FileNormalizer>?
+        val fileNormalizer: Class<out FileNormalizer>?,
+        val directorySensitivity: DirectorySensitivity
     ) : RegisteredProperty()
 
     data class OutputFile(
@@ -280,13 +265,14 @@ suspend fun WriteContext.writeRegisteredPropertiesOf(
         property.run {
             when (this) {
                 is RegisteredProperty.InputFile -> {
-                    val finalValue = DeferredUtil.unpack(propertyValue)
+                    val finalValue = DeferredUtil.unpackOrNull(propertyValue)
                     writeInputProperty(propertyName, finalValue)
                     writeBoolean(optional)
                     writeBoolean(true)
                     writeEnum(filePropertyType)
                     writeBoolean(skipWhenEmpty)
                     writeClass(fileNormalizer!!)
+                    writeEnum(directorySensitivity)
                 }
                 is RegisteredProperty.Input -> {
                     val finalValue = InputParameterUtils.prepareInputParameterValue(propertyValue)
@@ -301,7 +287,7 @@ suspend fun WriteContext.writeRegisteredPropertiesOf(
     val outputProperties = collectRegisteredOutputsOf(task)
     writeCollection(outputProperties) { property ->
         property.run {
-            val finalValue = DeferredUtil.unpack(propertyValue)
+            val finalValue = DeferredUtil.unpackOrNull(propertyValue)
             writeOutputProperty(propertyName, finalValue)
             writeBoolean(optional)
             writeEnum(filePropertyType)
@@ -348,6 +334,7 @@ fun collectRegisteredInputsOf(task: Task): List<RegisteredProperty> {
             propertyName: String,
             optional: Boolean,
             skipWhenEmpty: Boolean,
+            directorySensitivity: DirectorySensitivity,
             incremental: Boolean,
             fileNormalizer: Class<out FileNormalizer>?,
             propertyValue: PropertyValue,
@@ -361,7 +348,8 @@ fun collectRegisteredInputsOf(task: Task): List<RegisteredProperty> {
                     filePropertyType,
                     skipWhenEmpty,
                     incremental,
-                    fileNormalizer
+                    fileNormalizer,
+                    directorySensitivity
                 )
             )
         }
@@ -403,6 +391,7 @@ suspend fun ReadContext.readInputPropertiesOf(task: Task) =
                     val filePropertyType = readEnum<InputFilePropertyType>()
                     val skipWhenEmpty = readBoolean()
                     val normalizer = readClass()
+                    val directorySensitivity = readEnum<DirectorySensitivity>()
                     task.inputs.run {
                         when (filePropertyType) {
                             InputFilePropertyType.FILE -> file(pack(propertyValue))
@@ -414,6 +403,7 @@ suspend fun ReadContext.readInputPropertiesOf(task: Task) =
                         optional(optional)
                         skipWhenEmpty(skipWhenEmpty)
                         withNormalizer(normalizer.uncheckedCast())
+                        ignoreEmptyDirectories(directorySensitivity == DirectorySensitivity.IGNORE_DIRECTORIES)
                     }
                 }
                 else -> {

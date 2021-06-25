@@ -25,6 +25,8 @@ import org.gradle.configuration.ScriptPluginFactory
 import org.gradle.groovy.scripts.ScriptSource
 import spock.lang.Specification
 
+import java.util.function.Consumer
+
 class BuildScriptProcessorTest extends Specification {
     def project = Mock(ProjectInternal)
     def scriptSource = Mock(ScriptSource)
@@ -41,8 +43,8 @@ class BuildScriptProcessorTest extends Specification {
         project.getBuildscript() >> scriptHandler
         project.getClassLoaderScope() >> targetScope
         project.getBaseClassLoaderScope() >> baseScope
-        project.getMutationState() >> projectState
-        projectState.withMutableState(_) >> { args -> args[0].run() }
+        project.getOwner() >> projectState
+        projectState.applyToMutableState(_) >> { Consumer consumer -> consumer.accept(project) }
     }
 
     def configuresProjectUsingBuildScript() {

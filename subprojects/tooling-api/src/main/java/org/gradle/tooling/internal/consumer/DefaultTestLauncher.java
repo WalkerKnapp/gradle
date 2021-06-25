@@ -30,7 +30,7 @@ import org.gradle.tooling.internal.consumer.connection.ConsumerAction;
 import org.gradle.tooling.internal.consumer.connection.ConsumerConnection;
 import org.gradle.tooling.internal.consumer.parameters.ConsumerOperationParameters;
 import org.gradle.tooling.internal.protocol.test.InternalJvmTestRequest;
-import org.gradle.util.CollectionUtils;
+import org.gradle.util.internal.CollectionUtils;
 
 import java.util.Arrays;
 import java.util.Collections;
@@ -47,7 +47,7 @@ public class DefaultTestLauncher extends AbstractLongRunningOperation<DefaultTes
     private final Set<String> testClassNames = new LinkedHashSet<String>();
     private final Set<InternalJvmTestRequest> internalJvmTestRequests = new LinkedHashSet<InternalJvmTestRequest>();
     private final DefaultDebugOptions debugOptions = new DefaultDebugOptions();
-    private final Map<String, List<InternalJvmTestRequest>> tasksAndTests = new HashMap<>();
+    private final Map<String, List<InternalJvmTestRequest>> tasksAndTests = new HashMap<String, List<InternalJvmTestRequest>>();
 
     public DefaultTestLauncher(AsyncConsumerActionExecutor connection, ConnectionParameters parameters) {
         super(parameters);
@@ -125,7 +125,7 @@ public class DefaultTestLauncher extends AbstractLongRunningOperation<DefaultTes
     }
 
     @Override
-    public TestLauncher withTaskAndTestMethods(String task, String testClass, Iterable<String> methods) {
+    public TestLauncher withTaskAndTestMethods(String task, final String testClass, Iterable<String> methods) {
         List<InternalJvmTestRequest> tests = CollectionUtils.collect(methods, new Transformer<InternalJvmTestRequest, String>() {
             @Override
             public InternalJvmTestRequest transform(String methodName) {

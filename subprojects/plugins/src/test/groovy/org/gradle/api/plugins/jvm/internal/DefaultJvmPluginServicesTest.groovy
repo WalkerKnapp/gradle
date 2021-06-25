@@ -16,6 +16,7 @@
 
 package org.gradle.api.plugins.jvm.internal
 
+import org.gradle.api.Action
 import org.gradle.api.NamedDomainObjectContainer
 import org.gradle.api.artifacts.ConfigurationPublications
 import org.gradle.api.artifacts.PublishArtifact
@@ -26,6 +27,7 @@ import org.gradle.api.attributes.DocsType
 import org.gradle.api.attributes.HasConfigurableAttributes
 import org.gradle.api.attributes.LibraryElements
 import org.gradle.api.attributes.Usage
+import org.gradle.api.attributes.java.TargetJvmEnvironment
 import org.gradle.api.file.ConfigurableFileCollection
 import org.gradle.api.internal.artifacts.ConfigurationVariantInternal
 import org.gradle.api.internal.artifacts.configurations.ConfigurationInternal
@@ -36,11 +38,21 @@ import org.gradle.api.tasks.TaskProvider
 import org.gradle.api.tasks.compile.JavaCompile
 import org.gradle.util.AttributeTestUtil
 
-import static org.gradle.api.attributes.Bundling.*
-import static org.gradle.api.attributes.Category.*
+import static org.gradle.api.attributes.Bundling.BUNDLING_ATTRIBUTE
+import static org.gradle.api.attributes.Bundling.EMBEDDED
+import static org.gradle.api.attributes.Bundling.EXTERNAL
+import static org.gradle.api.attributes.Bundling.SHADOWED
+import static org.gradle.api.attributes.Category.CATEGORY_ATTRIBUTE
+import static org.gradle.api.attributes.Category.DOCUMENTATION
+import static org.gradle.api.attributes.Category.LIBRARY
+import static org.gradle.api.attributes.Category.REGULAR_PLATFORM
 import static org.gradle.api.attributes.DocsType.DOCS_TYPE_ATTRIBUTE
 import static org.gradle.api.attributes.LibraryElements.LIBRARY_ELEMENTS_ATTRIBUTE
-import static org.gradle.api.attributes.Usage.*
+import static org.gradle.api.attributes.Usage.JAVA_API
+import static org.gradle.api.attributes.Usage.JAVA_RUNTIME
+import static org.gradle.api.attributes.Usage.USAGE_ATTRIBUTE
+import static org.gradle.api.attributes.java.TargetJvmEnvironment.STANDARD_JVM
+import static org.gradle.api.attributes.java.TargetJvmEnvironment.TARGET_JVM_ENVIRONMENT_ATTRIBUTE
 import static org.gradle.api.attributes.java.TargetJvmVersion.TARGET_JVM_VERSION_ATTRIBUTE
 import static org.gradle.util.AttributeTestUtil.named
 
@@ -49,13 +61,17 @@ class DefaultJvmPluginServicesTest extends AbstractJvmPluginServicesTest {
     def configuresCompileClasspath() {
         def mutable = AttributeTestUtil.attributesFactory().mutable()
         def attrs = Mock(HasConfigurableAttributes)
+        Action[] action = new Action[1]
         def config
         config = Stub(ConfigurationInternal) {
-            beforeLocking(_) >> { args -> args[0].execute(config) }
+            beforeLocking(_) >> { args -> action[0] = args[0] }
             getAttributes() >> mutable
         }
-        def sourceSet = Stub(SourceSet)
-
+        def javaCompileProvider = Stub(TaskProvider) {
+                get() >> Stub(JavaCompile) {
+                    getTargetCompatibility() >> '8'
+                }
+            }
         when:
         services.configureAsCompileClasspath(attrs)
 
@@ -65,23 +81,20 @@ class DefaultJvmPluginServicesTest extends AbstractJvmPluginServicesTest {
         mutable.asMap() == [
             (CATEGORY_ATTRIBUTE): named(Category, LIBRARY),
             (USAGE_ATTRIBUTE): named(Usage, JAVA_API),
-            (BUNDLING_ATTRIBUTE): named(Bundling, EXTERNAL)
+            (BUNDLING_ATTRIBUTE): named(Bundling, EXTERNAL),
+            (TARGET_JVM_ENVIRONMENT_ATTRIBUTE): named(TargetJvmEnvironment, STANDARD_JVM),
         ]
 
         when:
-        services.useDefaultTargetPlatformInference(config, sourceSet)
+        services.useDefaultTargetPlatformInference(config, javaCompileProvider)
+        action[0].execute(config)
 
         then:
-        1 * tasks.named(_, _) >> Stub(TaskProvider) {
-            get() >> Stub(JavaCompile) {
-                getTargetCompatibility() >> '8'
-            }
-        }
-
         mutable.asMap() == [
             (CATEGORY_ATTRIBUTE): named(Category, LIBRARY),
             (USAGE_ATTRIBUTE): named(Usage, JAVA_API),
             (BUNDLING_ATTRIBUTE): named(Bundling, EXTERNAL),
+            (TARGET_JVM_ENVIRONMENT_ATTRIBUTE): named(TargetJvmEnvironment, STANDARD_JVM),
             (TARGET_JVM_VERSION_ATTRIBUTE): 8
         ]
     }
@@ -100,7 +113,8 @@ class DefaultJvmPluginServicesTest extends AbstractJvmPluginServicesTest {
             (CATEGORY_ATTRIBUTE): named(Category, LIBRARY),
             (USAGE_ATTRIBUTE): named(Usage, JAVA_RUNTIME),
             (BUNDLING_ATTRIBUTE): named(Bundling, EXTERNAL),
-            (LIBRARY_ELEMENTS_ATTRIBUTE): named(LibraryElements, LibraryElements.JAR)
+            (LIBRARY_ELEMENTS_ATTRIBUTE): named(LibraryElements, LibraryElements.JAR),
+            (TARGET_JVM_ENVIRONMENT_ATTRIBUTE): named(TargetJvmEnvironment, STANDARD_JVM)
         ]
     }
 
@@ -294,6 +308,19 @@ class DefaultJvmPluginServicesTest extends AbstractJvmPluginServicesTest {
             (USAGE_ATTRIBUTE): named(Usage, JAVA_RUNTIME),
             (BUNDLING_ATTRIBUTE): named(Bundling, SHADOWED),
             (TARGET_JVM_VERSION_ATTRIBUTE): 15
+        ]
+
+        when:
+        services.configureAttributes(Stub(HasConfigurableAttributes) { getAttributes() >> attrs }) {
+            it.preferStandardJVM()
+        }
+
+        then:
+        attrs.asMap() == [
+            (USAGE_ATTRIBUTE): named(Usage, JAVA_RUNTIME),
+            (BUNDLING_ATTRIBUTE): named(Bundling, SHADOWED),
+            (TARGET_JVM_VERSION_ATTRIBUTE): 15,
+            (TARGET_JVM_ENVIRONMENT_ATTRIBUTE): named(TargetJvmEnvironment, STANDARD_JVM)
         ]
     }
 

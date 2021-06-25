@@ -79,6 +79,10 @@ public class SystemProperties {
         return System.getProperty("line.separator");
     }
 
+    /**
+     * @deprecated Using the temporary directory on UNIX-based systems can lead to local privilege escalation or local sensitive information disclosure vulnerabilities.
+     */
+    @Deprecated
     public String getJavaIoTmpDir() {
         return System.getProperty("java.io.tmpdir");
     }
@@ -97,6 +101,11 @@ public class SystemProperties {
 
     public File getCurrentDir() {
         return new File(System.getProperty("user.dir"));
+    }
+
+    @Nullable
+    public String getWorkerTmpDir() {
+        return System.getProperty("org.gradle.internal.worker.tmpdir");
     }
 
     /**

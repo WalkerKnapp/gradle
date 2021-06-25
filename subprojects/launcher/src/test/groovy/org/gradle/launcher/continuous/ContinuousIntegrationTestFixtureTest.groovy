@@ -109,11 +109,17 @@ Waiting for changes to input files of tasks... (ctrl-d then enter to exit)
     }
 
     private AbstractContinuousIntegrationTest testCase() {
-        new AbstractContinuousIntegrationTest() {
-            @Override
-            GradleExecuter createExecuter() {
-                return gradleExecuter
-            }
+        ContinuousIntegrationTestFixture fixture = new ContinuousIntegrationTestFixture()
+        fixture.executer = gradleExecuter
+        return fixture
+    }
+
+    private static class ContinuousIntegrationTestFixture extends AbstractContinuousIntegrationTest {
+        GradleExecuter executer
+
+        @Override
+        GradleExecuter createExecuter() {
+            return executer
         }
     }
 

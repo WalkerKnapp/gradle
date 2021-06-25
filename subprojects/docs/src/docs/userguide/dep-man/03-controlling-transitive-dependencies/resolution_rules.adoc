@@ -4,10 +4,10 @@
 [WARNING]
 ====
 This section covers mechanisms Gradle offers to directly influence the behavior of the dependency resolution engine.
-In contrast to the other concepts covered in this chapter, like <<dependency_constraints.adoc#,dependency constraints>> or <<component_metadata_rules.adoc#,component metadata rules>>, which are all *inputs* to resolution, the following mechanisms allow you to write rules which are directly injected into the resolution engine.
+In contrast to the other concepts covered in this chapter, like <<dependency_constraints.adoc#dependency-constraints,dependency constraints>> or <<component_metadata_rules.adoc#sec:component_metadata_rules,component metadata rules>>, which are all *inputs* to resolution, the following mechanisms allow you to write rules which are directly injected into the resolution engine.
 Because of this, they can be seen as _brute force_ solutions, that may hide future problems (e.g. if new dependencies are added).
 Therefore, the general advice is to only use the following mechanisms if other means are not sufficient.
-If you are authoring a <<library_vs_application.adoc#,library>>, you should always prefer <<dependency_constraints.adoc#,dependency constraints>> as they are published for your consumers.
+If you are authoring a <<library_vs_application.adoc#sec:understanding-diff-libraries-and-apps,library>>, you should always prefer <<dependency_constraints.adoc#dependency-constraints,dependency constraints>> as they are published for your consumers.
 ====
 
 [[sec:dependency_resolve_rules]]
@@ -176,8 +176,8 @@ The following example uses a dependency substitution rule to replace any module 
 
 .Conditionally substituting a dependency
 ====
-include::sample[dir="snippets/dependencyManagement/customizingResolution-conditionalSubstitutionRule/groovy",files="build.gradle[tags=project_substitution]"]
-include::sample[dir="snippets/dependencyManagement/customizingResolution-conditionalSubstitutionRule/kotlin",files="build.gradle.kts[tags=project_substitution]"]
+include::sample[dir="snippets/dependencyManagement/customizingResolution-conditionalSubstitutionRule/groovy/consumer",files="build.gradle[tags=project_substitution]"]
+include::sample[dir="snippets/dependencyManagement/customizingResolution-conditionalSubstitutionRule/kotlin/consumer",files="build.gradle.kts[tags=project_substitution]"]
 ====
 
 Note that a project that is substituted must be included in the multi-project build (via `settings.gradle`).
@@ -213,8 +213,8 @@ This can be done by using a substitution rule:
 
 .Substitute a platform dependency with a regular dependency
 ====
-include::sample[dir="snippets/dependencyManagement/customizingResolution-attributeSubstitutionRule/groovy",files="build.gradle[tags=substitution_rule]"]
-include::sample[dir="snippets/dependencyManagement/customizingResolution-attributeSubstitutionRule/kotlin",files="build.gradle.kts[tags=substitution_rule]"]
+include::sample[dir="snippets/dependencyManagement/customizingResolution-attributeSubstitutionRule/groovy",files="consumer/build.gradle[tags=substitution_rule]"]
+include::sample[dir="snippets/dependencyManagement/customizingResolution-attributeSubstitutionRule/kotlin",files="consumer/build.gradle.kts[tags=substitution_rule]"]
 ====
 
 The same rule _without_ the `platform` keyword would try to substitute _regular dependencies_ with a regular dependency, which is not what you want, so it's important to understand that the substitution rules apply on a _dependency specification_: it matches the requested dependency (`substitute XXX`) with a substitute (`using YYY`).
@@ -224,8 +224,8 @@ The following rule is _strictly equivalent_ to the rule above:
 
 .Substitute a platform dependency with a regular dependency using the variant notation
 ====
-include::sample[dir="snippets/dependencyManagement/customizingResolution-attributeSubstitutionRule/groovy",files="build.gradle[tags=substitution_rule_alternative]"]
-include::sample[dir="snippets/dependencyManagement/customizingResolution-attributeSubstitutionRule/kotlin",files="build.gradle.kts[tags=substitution_rule_alternative]"]
+include::sample[dir="snippets/dependencyManagement/customizingResolution-attributeSubstitutionRule/groovy",files="consumer/build.gradle[tags=substitution_rule_alternative]"]
+include::sample[dir="snippets/dependencyManagement/customizingResolution-attributeSubstitutionRule/kotlin",files="consumer/build.gradle.kts[tags=substitution_rule_alternative]"]
 ====
 
 Please refer to the link:{javadocPath}/org/gradle/api/artifacts/DependencySubstitutions.html#variant-org.gradle.api.artifacts.component.ComponentSelector-org.gradle.api.Action-[Substitution DSL API docs] for a complete reference of the variant substitution API.
@@ -256,7 +256,7 @@ Please refer to the link:{javadocPath}/org/gradle/api/artifacts/DependencySubsti
 
 [WARNING]
 ====
-In <<composite_builds.adoc#composite_build_intro,composite builds>>, the rule that you have to match the exact requested dependency capabilities is not applied: when using composites, Gradle will automatically match the requested capabilities. In other words, it is implicit that if you include another build, you are substituting _all variants__ of the substituted module with an equivalent variant in the included build.]
+In <<composite_builds.adoc#composite_build_intro,composite builds>>, the rule that you have to match the exact requested dependency capabilities is not applied: when using composites, Gradle will automatically match the requested capabilities. In other words, it is implicit that if you include another build, you are substituting _all variants_ of the substituted module with an equivalent variant in the included build.
 ====
 
 [[sec:substitution_with_classifier]]
@@ -264,15 +264,15 @@ In <<composite_builds.adoc#composite_build_intro,composite builds>>, the rule th
 
 While external modules are in general addressed via their group/artifact/version coordinates, it is common that such modules are published with additional artifacts that you may want to use in place of the main artifact.
 This is typically the case for _classified_ artifacts, but you may also need to select an artifact with a different file type or extension.
-Gradle discourages use of classifiers in dependencies and prefers to model such artifacts as <<variant_model.adoc#understanding-variant-selection,variants additional variants of a module>>.
+Gradle discourages use of classifiers in dependencies and prefers to model such artifacts as <<variant_model.adoc#understanding-variant-selection,additional variants of a module>>.
 There are lots of advantages of using variants instead of classified artifacts, including, but not only, a different set of dependencies for those artifacts.
 
 However, in order to help bridging the two models, Gradle provides means to change or remove a classifier in a substitution rule.
 
 .Dependencies which will lead to a resolution error
 ====
-include::sample[dir="snippets/dependencyManagement/customizingResolution-classifierSubstitutionRule/groovy",files="build.gradle[tags=dependencies]"]
-include::sample[dir="snippets/dependencyManagement/customizingResolution-classifierSubstitutionRule/kotlin",files="build.gradle.kts[tags=dependencies]"]
+include::sample[dir="snippets/dependencyManagement/customizingResolution-classifierSubstitutionRule/groovy",files="consumer/build.gradle[tags=dependencies]"]
+include::sample[dir="snippets/dependencyManagement/customizingResolution-classifierSubstitutionRule/kotlin",files="consumer/build.gradle.kts[tags=dependencies]"]
 ====
 
 In the example above, the first level dependency on `quasar` makes us think that Gradle would resolve `quasar-core-0.8.0.jar` but it's not the case: the build would fail with this message:
@@ -283,7 +283,7 @@ Execution failed for task ':resolve'.
 > Could not resolve all files for configuration ':runtimeClasspath'.
    > Could not find quasar-core-0.8.0-jdk8.jar (co.paralleluniverse:quasar-core:0.8.0).
      Searched in the following locations:
-         https://jcenter.bintray.com/co/paralleluniverse/quasar-core/0.8.0/quasar-core-0.8.0-jdk8.jar
+         https://repo1.maven.org/maven2/co/paralleluniverse/quasar-core/0.8.0/quasar-core-0.8.0-jdk8.jar
 ----
 
 That's because there's a dependency on another project, `lib`, which itself depends on a different version of `quasar-core`:
@@ -301,8 +301,8 @@ To fix this problem, you can ask Gradle to resolve both dependencies _without cl
 
 .A resolution rule to disable selection of a classifier
 ====
-include::sample[dir="snippets/dependencyManagement/customizingResolution-classifierSubstitutionRule/groovy",files="build.gradle[tags=substitution_rule]"]
-include::sample[dir="snippets/dependencyManagement/customizingResolution-classifierSubstitutionRule/kotlin",files="build.gradle.kts[tags=substitution_rule]"]
+include::sample[dir="snippets/dependencyManagement/customizingResolution-classifierSubstitutionRule/groovy",files="consumer/build.gradle[tags=substitution_rule]"]
+include::sample[dir="snippets/dependencyManagement/customizingResolution-classifierSubstitutionRule/kotlin",files="consumer/build.gradle.kts[tags=substitution_rule]"]
 ====
 
 This rule effectively replaces any dependency on `quasar-core` found in the graph with a dependency without classifier.

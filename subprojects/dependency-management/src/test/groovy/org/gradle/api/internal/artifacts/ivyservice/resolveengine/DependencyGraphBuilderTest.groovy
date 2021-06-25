@@ -24,7 +24,6 @@ import org.gradle.api.artifacts.ModuleVersionIdentifier
 import org.gradle.api.artifacts.ResolveException
 import org.gradle.api.artifacts.component.ComponentIdentifier
 import org.gradle.api.artifacts.component.ComponentSelector
-import org.gradle.api.internal.FeaturePreviews
 import org.gradle.api.internal.artifacts.ComponentSelectorConverter
 import org.gradle.api.internal.artifacts.DefaultModuleIdentifier
 import org.gradle.api.internal.artifacts.DependencyManagementTestUtil
@@ -118,7 +117,7 @@ class DependencyGraphBuilderTest extends Specification {
 
     def moduleConflictHandler = new DefaultConflictHandler(conflictResolver, moduleReplacements)
     def capabilitiesConflictHandler = new DefaultCapabilitiesConflictHandler()
-    def versionComparator = new DefaultVersionComparator(new FeaturePreviews())
+    def versionComparator = new DefaultVersionComparator()
     def versionSelectorScheme = new DefaultVersionSelectorScheme(versionComparator, new VersionParser())
 
     DependencyGraphBuilder builder
@@ -134,7 +133,7 @@ class DependencyGraphBuilderTest extends Specification {
 
     private TestGraphVisitor resolve(DependencyGraphBuilder builder = this.builder) {
         def graphVisitor = new TestGraphVisitor()
-        builder.resolve(configuration, graphVisitor)
+        builder.resolve(configuration, graphVisitor, false)
         return graphVisitor
     }
 
@@ -1027,16 +1026,16 @@ class DependencyGraphBuilderTest extends Specification {
         // TODO Shouldn't really be using the local component implementation here
         def id = newId("group", name, revision)
         def metaData = new DefaultLocalComponentMetadata(id, DefaultModuleComponentIdentifier.newId(id), "release", attributesSchema)
-        metaData.addConfiguration("default", "defaultConfig", [] as Set<String>, ImmutableSet.of("default"), true, true, attributes, true, null, true, ImmutableCapabilities.EMPTY)
+        metaData.addConfiguration("default", "defaultConfig", [] as Set<String>, ImmutableSet.of("default"), true, true, attributes, true, null, true, ImmutableCapabilities.EMPTY, configuration.getConsistentResolutionConstraints())
         metaData.addArtifacts("default", [new DefaultPublishArtifact("art1", "zip", "art", null, new Date(), new File("art1.zip"))])
         return metaData
     }
 
     def rootProject(String name, String revision = '1.0', List<String> extraConfigs = []) {
-        def metaData = new RootLocalComponentMetadata(newId("group", name, revision), newProjectId(":${name}"), "release", attributesSchema, NoOpDependencyLockingProvider.getInstance())
-        metaData.addConfiguration("default", "defaultConfig", [] as Set<String>, ImmutableSet.of("default"), true, true, attributes, true, null, true, ImmutableCapabilities.EMPTY)
+        def metaData = new RootLocalComponentMetadata(newId("group", name, revision), newProjectId(":${name}"), "release", attributesSchema, NoOpDependencyLockingProvider.instance)
+        metaData.addConfiguration("default", "defaultConfig", [] as Set<String>, ImmutableSet.of("default"), true, true, attributes, true, null, true, ImmutableCapabilities.EMPTY, Collections.&emptyList)
         extraConfigs.each { String config ->
-            metaData.addConfiguration(config, "${config}Config", ["default"] as Set<String>, ImmutableSet.of("default", config), true, true, attributes, true, null, true, ImmutableCapabilities.EMPTY)
+            metaData.addConfiguration(config, "${config}Config", ["default"] as Set<String>, ImmutableSet.of("default", config), true, true, attributes, true, null, true, ImmutableCapabilities.EMPTY, Collections.&emptyList)
         }
         metaData.addArtifacts("default", [new DefaultPublishArtifact("art1", "zip", "art", null, new Date(), new File("art1.zip"))])
         return metaData

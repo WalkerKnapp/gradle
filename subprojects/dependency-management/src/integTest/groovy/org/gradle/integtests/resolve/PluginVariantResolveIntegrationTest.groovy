@@ -18,7 +18,6 @@ package org.gradle.integtests.resolve
 
 import org.gradle.api.JavaVersion
 import org.gradle.integtests.fixtures.AbstractPluginIntegrationTest
-import org.gradle.integtests.fixtures.ToBeFixedForConfigurationCache
 import spock.lang.Issue
 import spock.lang.Unroll
 
@@ -26,7 +25,6 @@ class PluginVariantResolveIntegrationTest extends AbstractPluginIntegrationTest 
 
     @Unroll
     @Issue("https://github.com/gradle/gradle/issues/13659")
-    @ToBeFixedForConfigurationCache(because = "Publish plugin plugin is not compatible")
     def "should report an incompatible Java version of a plugin properly (#id)"() {
         withDummyPlugin(true)
         executer.inDirectory(file("my-plugin"))
@@ -79,6 +77,9 @@ class PluginVariantResolveIntegrationTest extends AbstractPluginIntegrationTest 
     @Issue("https://github.com/gradle/gradle/issues/13659")
     def "should report an incompatible Java version of a plugin properly (#id) using composite builds"() {
         settingsFile << """
+            pluginManagement {
+                includeBuild('my-plugin')
+            }
             rootProject.name = 'test-plugin'
 
             includeBuild('my-plugin') {

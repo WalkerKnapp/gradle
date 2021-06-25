@@ -33,7 +33,7 @@ import org.gradle.internal.resource.local.DefaultPathKeyFileStore;
 import org.gradle.internal.serialize.AbstractSerializer;
 import org.gradle.internal.serialize.Decoder;
 import org.gradle.internal.serialize.Encoder;
-import org.gradle.util.BuildCommencedTimeProvider;
+import org.gradle.util.internal.BuildCommencedTimeProvider;
 
 public class PersistentModuleMetadataCache extends AbstractModuleMetadataCache {
 
@@ -71,7 +71,7 @@ public class PersistentModuleMetadataCache extends AbstractModuleMetadataCache {
     protected CachedMetadata get(ModuleComponentAtRepositoryKey key) {
         final PersistentIndexedCache<ModuleComponentAtRepositoryKey, ModuleMetadataCacheEntry> cache = getCache();
         return artifactCacheLockingManager.useCache(() -> {
-            ModuleMetadataCacheEntry entry = cache.get(key);
+            ModuleMetadataCacheEntry entry = cache.getIfPresent(key);
             if (entry == null) {
                 return null;
             }

@@ -15,6 +15,9 @@
  */
 package org.gradle.performance.generator
 
+import groovy.transform.CompileStatic
+
+@CompileStatic
 class KotlinDslFileContentGenerator extends FileContentGenerator {
 
     KotlinDslFileContentGenerator(TestProjectGeneratorConfiguration config) {
@@ -24,11 +27,6 @@ class KotlinDslFileContentGenerator extends FileContentGenerator {
     @Override
     protected String generateEnableFeaturePreviewCode() {
         return ""
-    }
-
-    @Override
-    protected String missingJavaLibrarySupportFlag() {
-        'val missingJavaLibrarySupport = GradleVersion.current() < GradleVersion.version("3.4")'
     }
 
     @Override
@@ -55,14 +53,14 @@ class KotlinDslFileContentGenerator extends FileContentGenerator {
             options.forkOptions.memoryInitialSize = compilerMemory
             options.forkOptions.memoryMaximumSize = compilerMemory
         }
-        
+
         tasks.withType<Test> {
             ${config.useTestNG ? 'useTestNG()' : ''}
             minHeapSize = testRunnerMemory
             maxHeapSize = testRunnerMemory
             maxParallelForks = ${config.maxParallelForks}
             setForkEvery(testForkEvery.toLong())
-            
+
             if (!JavaVersion.current().isJava8Compatible) {
                 jvmArgs("-XX:MaxPermSize=512m")
             }
@@ -91,18 +89,9 @@ class KotlinDslFileContentGenerator extends FileContentGenerator {
     }
 
     @Override
-    protected String configurationsIfMissingJavaLibrarySupport(boolean hasParent) {
+    protected String addJavaLibraryConfigurationsIfNecessary(boolean hasParent) {
         """
-        if (missingJavaLibrarySupport) {
-            configurations {
-                ${hasParent ? '"api"()' : ''}
-                "implementation"()
-                "testImplementation"()
-                ${hasParent ? '"compile" { extendsFrom(configurations["api"]) }' : ''}
-                "compile" { extendsFrom(configurations["implementation"]) }
-                "testCompile" { extendsFrom(configurations["testImplementation"]) }
-            }
-        } else if (noJavaLibraryPlugin) {
+        if (noJavaLibraryPlugin) {
             configurations {
                 ${hasParent ? '"api"()' : ''}
                 ${hasParent ? '"compile" { extendsFrom(configurations["api"]) }' : ''}

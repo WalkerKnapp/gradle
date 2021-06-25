@@ -16,17 +16,30 @@
 
 package org.gradle.configurationcache
 
-import org.gradle.api.internal.SettingsInternal
+import org.gradle.api.internal.GradleInternal
+import org.gradle.api.internal.project.CrossProjectModelAccess
+import org.gradle.api.internal.project.DefaultCrossProjectModelAccess
+import org.gradle.api.internal.project.ProjectInternal
+import org.gradle.api.internal.project.ProjectRegistry
+import org.gradle.configuration.ProjectsPreparer
 import org.gradle.configuration.internal.UserCodeApplicationContext
+import org.gradle.configurationcache.build.ConfigurationCacheIncludedBuildState
+import org.gradle.configurationcache.build.NoOpBuildModelController
+import org.gradle.configurationcache.extensions.get
 import org.gradle.configurationcache.fingerprint.ConfigurationCacheFingerprintController
-import org.gradle.configurationcache.initialization.ConfigurationCacheProblemsListener
+import org.gradle.configurationcache.initialization.ConfigurationCacheBuildEnablement
 import org.gradle.configurationcache.initialization.ConfigurationCacheStartParameter
 import org.gradle.configurationcache.initialization.DefaultConfigurationCacheProblemsListener
 import org.gradle.configurationcache.initialization.DefaultInjectedClasspathInstrumentationStrategy
-import org.gradle.configurationcache.initialization.NoOpConfigurationCacheProblemsListener
 import org.gradle.configurationcache.problems.ConfigurationCacheProblems
+import org.gradle.configurationcache.problems.ProblemsListener
 import org.gradle.configurationcache.serialization.beans.BeanConstructors
-import org.gradle.internal.build.PublicBuildPath
+import org.gradle.initialization.SettingsPreparer
+import org.gradle.initialization.TaskExecutionPreparer
+import org.gradle.initialization.VintageBuildModelController
+import org.gradle.internal.build.BuildModelController
+import org.gradle.internal.build.BuildState
+import org.gradle.internal.buildtree.BuildModelParameters
 import org.gradle.internal.event.ListenerManager
 import org.gradle.internal.service.ServiceRegistration
 import org.gradle.internal.service.scopes.AbstractPluginServiceRegistry
@@ -41,6 +54,12 @@ class ConfigurationCacheServices : AbstractPluginServiceRegistry() {
         }
     }
 
+    override fun registerBuildSessionServices(registration: ServiceRegistration) {
+        registration.run {
+            add(DefaultBuildTreeModelControllerServices::class.java)
+        }
+    }
+
     override fun registerBuildTreeServices(registration: ServiceRegistration) {
         registration.run {
             add(BuildTreeListenerManager::class.java)
@@ -49,41 +68,65 @@ class ConfigurationCacheServices : AbstractPluginServiceRegistry() {
             add(ConfigurationCacheKey::class.java)
             add(ConfigurationCacheReport::class.java)
             add(ConfigurationCacheProblems::class.java)
+            add(ConfigurationCacheClassLoaderScopeRegistryListener::class.java)
+            add(DefaultConfigurationCacheProblemsListener::class.java)
+            add(DefaultBuildTreeLifecycleControllerFactory::class.java)
+            add(ConfigurationCacheRepository::class.java)
+            add(DefaultConfigurationCache::class.java)
         }
     }
 
     override fun registerBuildServices(registration: ServiceRegistration) {
         registration.run {
-            add(ConfigurationCacheClassLoaderScopeRegistryListener::class.java)
-            add(ConfigurationCacheBuildScopeListenerManagerAction::class.java)
+            add(ConfigurationCacheBuildEnablement::class.java)
+            add(ConfigurationCacheProblemsListenerManagerAction::class.java)
             add(SystemPropertyAccessListener::class.java)
             add(RelevantProjectsRegistry::class.java)
             add(ConfigurationCacheFingerprintController::class.java)
-            addProvider(BuildServicesProvider())
+            addProvider(BuildScopeServicesProvider())
         }
     }
 
     override fun registerGradleServices(registration: ServiceRegistration) {
         registration.run {
-            add(ConfigurationCacheRepository::class.java)
             add(ConfigurationCacheHost::class.java)
-            add(DefaultConfigurationCache::class.java)
+            add(ConfigurationCacheIO::class.java)
         }
     }
-}
 
+    class BuildScopeServicesProvider {
+        fun createBuildModelController(
+            build: BuildState,
+            gradle: GradleInternal,
+            startParameter: ConfigurationCacheStartParameter,
+            configurationCache: BuildTreeConfigurationCache
+        ): BuildModelController {
+            if (build is ConfigurationCacheIncludedBuildState) {
+                return NoOpBuildModelController(gradle)
+            }
+            val projectsPreparer: ProjectsPreparer = gradle.services.get()
+            val settingsPreparer: SettingsPreparer = gradle.services.get()
+            val taskExecutionPreparer: TaskExecutionPreparer = gradle.services.get()
+            val vintageController = VintageBuildModelController(gradle, projectsPreparer, settingsPreparer, taskExecutionPreparer)
+            return if (startParameter.isEnabled) {
+                ConfigurationCacheAwareBuildModelController(gradle, vintageController, configurationCache)
+            } else {
+                vintageController
+            }
+        }
 
-class BuildServicesProvider {
-    fun createConfigurationCacheProblemsListener(
-        buildPath: PublicBuildPath,
-        startParameter: ConfigurationCacheStartParameter,
-        problemsListener: ConfigurationCacheProblems,
-        userCodeApplicationContext: UserCodeApplicationContext
-    ): ConfigurationCacheProblemsListener {
-        if (!startParameter.isEnabled || buildPath.buildPath.name == SettingsInternal.BUILD_SRC) {
-            return NoOpConfigurationCacheProblemsListener()
-        } else {
-            return DefaultConfigurationCacheProblemsListener(problemsListener, userCodeApplicationContext)
+        fun createCrossProjectModelAccess(
+            projectRegistry: ProjectRegistry<ProjectInternal>,
+            modelParameters: BuildModelParameters,
+            problemsListener: ProblemsListener,
+            userCodeApplicationContext: UserCodeApplicationContext
+        ): CrossProjectModelAccess {
+            val delegate = DefaultCrossProjectModelAccess(projectRegistry)
+            return if (modelParameters.isIsolatedProjects) {
+                ProblemReportingCrossProjectModelAccess(delegate, problemsListener, userCodeApplicationContext)
+            } else {
+                delegate
+            }
         }
     }
 }

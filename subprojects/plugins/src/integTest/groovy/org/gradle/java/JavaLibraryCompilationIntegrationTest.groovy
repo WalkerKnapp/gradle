@@ -119,18 +119,13 @@ class JavaLibraryCompilationIntegrationTest extends AbstractIntegrationSpec {
         skipped ':b:processResources'
     }
 
-    @Unroll
     def "uses the API of a library when compiling production code against it using the #configuration configuration"() {
-        if (configuration == 'compile') {
-            executer.expectDeprecationWarning()
-        }
-
         given:
         subproject('a') {
             'build.gradle'("""
                 apply plugin: 'java'
                 dependencies {
-                    $configuration project(':b')
+                    implementation project(':b')
                 }
             """)
             src {
@@ -161,9 +156,6 @@ class JavaLibraryCompilationIntegrationTest extends AbstractIntegrationSpec {
         then:
         executedAndNotSkipped ':b:compileJava'
         notExecuted ':b:processResources', ':b:classes', ':b:jar'
-
-        where:
-        configuration << ['compile', 'implementation']
     }
 
     @Unroll
@@ -218,18 +210,13 @@ class JavaLibraryCompilationIntegrationTest extends AbstractIntegrationSpec {
         true                      | _
     }
 
-    @Unroll
     def "uses the API of a library when compiling tests against it using the #configuration configuration"() {
-        if (configuration == 'testCompile') {
-            executer.expectDeprecationWarning()
-        }
-
         given:
         subproject('a') {
             'build.gradle'("""
                 apply plugin: 'java'
                 dependencies {
-                    $configuration project(':b')
+                    testImplementation project(':b')
                 }
             """)
             src {
@@ -260,9 +247,6 @@ class JavaLibraryCompilationIntegrationTest extends AbstractIntegrationSpec {
         then:
         executedAndNotSkipped ':b:compileJava'
         notExecuted ':b:processResources', ':b:classes', ':b:jar'
-
-        where:
-        configuration << ['testCompile', 'testImplementation']
     }
 
     @Unroll
@@ -288,7 +272,7 @@ class JavaLibraryCompilationIntegrationTest extends AbstractIntegrationSpec {
             src {
                 main {
                     java {
-                        'ToolImpl.java'('public class ToolImpl implements Tool { public void execute() {} }')
+                        'ToolImpl.java'('public class ToolImpl extends Tool { public void execute() {} }')
                     }
                 }
             }
@@ -309,7 +293,7 @@ class JavaLibraryCompilationIntegrationTest extends AbstractIntegrationSpec {
             src {
                 main {
                     java {
-                        'Tool.java'('public interface Tool { void execute(); }')
+                        'Tool.java'('public class Tool { public Foo foo() { return new Foo(); } public void execute() {} }')
                     }
                 }
             }
@@ -358,7 +342,7 @@ class JavaLibraryCompilationIntegrationTest extends AbstractIntegrationSpec {
             src {
                 main {
                     java {
-                        'ToolImpl.java'('public class ToolImpl implements Tool { public void execute() {} }')
+                        'ToolImpl.java'('public class ToolImpl extends Tool { public void execute() {} }')
                     }
                 }
             }
@@ -379,7 +363,7 @@ class JavaLibraryCompilationIntegrationTest extends AbstractIntegrationSpec {
             src {
                 main {
                     java {
-                        'Tool.java'('public interface Tool { void execute(); }')
+                        'Tool.java'('public class Tool { private Foo foo; public void execute() {}; }')
                     }
                 }
             }
@@ -416,18 +400,18 @@ class JavaLibraryCompilationIntegrationTest extends AbstractIntegrationSpec {
         settingsFile << "include 'a', 'b'"
         file('a/build.gradle') << """
             apply plugin: 'java'
-            
+
             dependencies {
                 implementation project(':b')
             }
-            
+
             task processDependency {
                 def lazyInputs = configurations.runtimeClasspath.incoming.artifactView {
                     attributes{ attribute(LibraryElements.LIBRARY_ELEMENTS_ATTRIBUTE, objects.named(LibraryElements, LibraryElements.${token})) }
                 }.files
                 inputs.files(lazyInputs)
                 doLast {
-                    assert org.gradle.util.CollectionUtils.single(lazyInputs.files).toPath().endsWith('${expectedDirName}')
+                    assert org.gradle.util.internal.CollectionUtils.single(lazyInputs.files).toPath().endsWith('${expectedDirName}')
                 }
             }
         """

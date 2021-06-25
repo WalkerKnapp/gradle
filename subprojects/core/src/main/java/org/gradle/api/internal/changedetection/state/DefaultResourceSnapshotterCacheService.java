@@ -20,7 +20,6 @@ import org.gradle.cache.PersistentIndexedCache;
 import org.gradle.internal.hash.HashCode;
 import org.gradle.internal.hash.Hasher;
 import org.gradle.internal.hash.Hashing;
-import org.gradle.internal.snapshot.RegularFileSnapshot;
 
 public class DefaultResourceSnapshotterCacheService implements ResourceSnapshotterCacheService {
     private static final HashCode NO_HASH = Hashing.signature(CachingResourceHasher.class.getName() + " : no hash");
@@ -31,10 +30,10 @@ public class DefaultResourceSnapshotterCacheService implements ResourceSnapshott
     }
 
     @Override
-    public HashCode hashFile(RegularFileSnapshot fileSnapshot, RegularFileHasher hasher, HashCode configurationHash) {
-        HashCode resourceHashCacheKey = resourceHashCacheKey(fileSnapshot.getHash(), configurationHash);
+    public HashCode hashFile(RegularFileSnapshotContext fileSnapshotContext, RegularFileHasher hasher, HashCode configurationHash) {
+        HashCode resourceHashCacheKey = resourceHashCacheKey(fileSnapshotContext.getSnapshot().getHash(), configurationHash);
 
-        HashCode resourceHash = persistentCache.get(resourceHashCacheKey);
+        HashCode resourceHash = persistentCache.getIfPresent(resourceHashCacheKey);
         if (resourceHash != null) {
             if (resourceHash.equals(NO_HASH)) {
                 return null;
@@ -42,7 +41,7 @@ public class DefaultResourceSnapshotterCacheService implements ResourceSnapshott
             return resourceHash;
         }
 
-        resourceHash = hasher.hash(fileSnapshot);
+        resourceHash = hasher.hash(fileSnapshotContext);
 
         if (resourceHash != null) {
             persistentCache.put(resourceHashCacheKey, resourceHash);

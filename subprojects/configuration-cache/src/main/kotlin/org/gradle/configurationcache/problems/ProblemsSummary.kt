@@ -22,7 +22,7 @@ import java.io.File
 
 
 private
-data class UniquePropertyProblem(val property: String, val message: StructuredMessage, val documentationSection: String?)
+data class UniquePropertyProblem(val userCodeLocation: String, val message: StructuredMessage, val documentationSection: String?)
 
 
 private
@@ -34,21 +34,21 @@ fun buildConsoleSummary(cacheAction: String, problems: List<PropertyProblem>, re
     val documentationRegistry = DocumentationRegistry()
     val uniquePropertyProblems = uniquePropertyProblems(problems)
     return StringBuilder().apply {
-        appendln()
-        appendln(buildSummaryHeader(cacheAction, problems.size, uniquePropertyProblems))
+        appendLine()
+        appendLine(buildSummaryHeader(cacheAction, problems.size, uniquePropertyProblems))
         uniquePropertyProblems.take(maxConsoleProblems).forEach { problem ->
             append("- ")
-            append(problem.property)
+            append(problem.userCodeLocation.capitalize())
             append(": ")
-            appendln(problem.message)
+            appendLine(problem.message)
             if (problem.documentationSection != null) {
-                appendln("  See ${documentationRegistry.getDocumentationFor("configuration_cache", problem.documentationSection)}")
+                appendLine("  See ${documentationRegistry.getDocumentationFor("configuration_cache", problem.documentationSection)}")
             }
         }
         if (uniquePropertyProblems.size > maxConsoleProblems) {
-            appendln("plus ${uniquePropertyProblems.size - maxConsoleProblems} more problems. Please see the report for details.")
+            appendLine("plus ${uniquePropertyProblems.size - maxConsoleProblems} more problems. Please see the report for details.")
         }
-        appendln()
+        appendLine()
         append(buildSummaryReportLink(reportFile))
     }.toString()
 }
@@ -56,9 +56,7 @@ fun buildConsoleSummary(cacheAction: String, problems: List<PropertyProblem>, re
 
 private
 fun uniquePropertyProblems(problems: List<PropertyProblem>): Set<UniquePropertyProblem> =
-    problems.sortedBy { it.trace.sequence.toList().reversed().joinToString(".") }
-        .groupBy { UniquePropertyProblem(propertyDescriptionFor(it.trace), it.message, it.documentationSection?.anchor) }
-        .keys
+    problems.map { UniquePropertyProblem(it.trace.containingUserCode, it.message, it.documentationSection?.anchor) }.sortedBy { it.userCodeLocation }.toSet()
 
 
 private

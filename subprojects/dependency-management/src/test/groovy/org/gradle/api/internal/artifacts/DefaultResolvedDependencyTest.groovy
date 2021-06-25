@@ -20,16 +20,17 @@ import org.gradle.api.artifacts.ResolvedArtifact
 import org.gradle.api.artifacts.component.ComponentArtifactIdentifier
 import org.gradle.api.internal.attributes.ImmutableAttributes
 import org.gradle.api.internal.tasks.TaskDependencyContainer
-import org.gradle.internal.Factory
+import org.gradle.internal.Describables
 import org.gradle.internal.component.model.IvyArtifactName
 import org.gradle.internal.operations.BuildOperationExecutor
 import org.gradle.internal.operations.TestBuildOperationExecutor
+import org.gradle.util.TestUtil
 import spock.lang.Specification
 
 import static com.google.common.collect.Iterables.concat
 import static com.google.common.collect.Sets.newHashSet
 import static org.gradle.util.Matchers.strictlyEquals
-import static org.gradle.util.WrapUtil.toSet
+import static org.gradle.util.internal.WrapUtil.toSet
 
 class DefaultResolvedDependencyTest extends Specification {
     private BuildOperationExecutor buildOperationProcessor = new TestBuildOperationExecutor()
@@ -200,15 +201,14 @@ class DefaultResolvedDependencyTest extends Specification {
 
     private ResolvedArtifact createArtifact(String name) {
         def id = DefaultModuleVersionIdentifier.newId("group", name, "1.2")
-        final IvyArtifactName artifactStub = Mock() {
+        IvyArtifactName artifactStub = Mock() {
             getName() >> name
             getType() >> "someType"
             getExtension() >> "someExt"
             getClassifier() >> null
         }
-        final Factory artifactSource = Mock() {
-            create() >> new File("pathTo" + name)
-        }
-        return new DefaultResolvedArtifact(id, artifactStub, Mock(ComponentArtifactIdentifier), Mock(TaskDependencyContainer), artifactSource)
+        def calculatedValueContainerFactory = TestUtil.calculatedValueContainerFactory()
+        def artifactSource = calculatedValueContainerFactory.create(Describables.of("artifact"), new File("pathTo" + name))
+        return new DefaultResolvableArtifact(id, artifactStub, Mock(ComponentArtifactIdentifier), Mock(TaskDependencyContainer), artifactSource, calculatedValueContainerFactory).toPublicView()
     }
 }

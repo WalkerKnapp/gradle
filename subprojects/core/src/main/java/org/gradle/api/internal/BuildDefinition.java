@@ -31,25 +31,27 @@ public class BuildDefinition {
     private final String name;
     @Nullable
     private final File buildRootDir;
-    private final StartParameter startParameter;
+    private final StartParameterInternal startParameter;
     private final PluginRequests injectedSettingsPlugins;
     private final Action<? super DependencySubstitutions> dependencySubstitutions;
     private final PublicBuildPath fromBuild;
+    private final boolean pluginBuild;
 
     private BuildDefinition(
         @Nullable String name,
         @Nullable File buildRootDir,
-        StartParameter startParameter,
+        StartParameterInternal startParameter,
         PluginRequests injectedSettingsPlugins,
         Action<? super DependencySubstitutions> dependencySubstitutions,
-        PublicBuildPath fromBuild
-    ) {
+        PublicBuildPath fromBuild,
+        boolean pluginBuild) {
         this.name = name;
         this.buildRootDir = buildRootDir;
         this.startParameter = startParameter;
         this.injectedSettingsPlugins = injectedSettingsPlugins;
         this.dependencySubstitutions = dependencySubstitutions;
         this.fromBuild = fromBuild;
+        this.pluginBuild = pluginBuild;
     }
 
     /**
@@ -80,7 +82,7 @@ public class BuildDefinition {
         return fromBuild;
     }
 
-    public StartParameter getStartParameter() {
+    public StartParameterInternal getStartParameter() {
         return startParameter;
     }
 
@@ -92,20 +94,39 @@ public class BuildDefinition {
         return dependencySubstitutions;
     }
 
-    public static BuildDefinition fromStartParameterForBuild(StartParameter startParameter, String name, File buildRootDir, PluginRequests pluginRequests, Action<? super DependencySubstitutions> dependencySubstitutions, PublicBuildPath fromBuild) {
-        return new BuildDefinition(name, buildRootDir, configure(startParameter, buildRootDir), pluginRequests, dependencySubstitutions, fromBuild);
+    public boolean isPluginBuild() {
+        return pluginBuild;
     }
 
-    public static BuildDefinition fromStartParameter(StartParameter startParameter, @Nullable PublicBuildPath fromBuild) {
-        return new BuildDefinition(null, null, startParameter, PluginRequests.EMPTY, Actions.doNothing(), fromBuild);
+    public static BuildDefinition fromStartParameterForBuild(
+        StartParameterInternal startParameter,
+        String name,
+        File buildRootDir,
+        PluginRequests pluginRequests,
+        Action<? super DependencySubstitutions> dependencySubstitutions,
+        PublicBuildPath fromBuild,
+        boolean pluginBuild
+    ) {
+        return new BuildDefinition(
+            name,
+            buildRootDir,
+            startParameterForIncludedBuildFrom(startParameter, buildRootDir),
+            pluginRequests,
+            dependencySubstitutions,
+            fromBuild,
+            pluginBuild);
     }
 
-    private static StartParameter configure(StartParameter startParameter, File buildRootDir) {
-        StartParameter includedBuildStartParam = startParameter.newBuild();
+    public static BuildDefinition fromStartParameter(StartParameterInternal startParameter, @Nullable PublicBuildPath fromBuild) {
+        return new BuildDefinition(null, null, startParameter, PluginRequests.EMPTY, Actions.doNothing(), fromBuild, false);
+    }
+
+    private static StartParameterInternal startParameterForIncludedBuildFrom(StartParameterInternal startParameter, File buildRootDir) {
+        StartParameterInternal includedBuildStartParam = startParameter.newBuild();
         includedBuildStartParam.setCurrentDir(buildRootDir);
-        ((StartParameterInternal) includedBuildStartParam).setSearchUpwardsWithoutDeprecationWarning(false);
-        includedBuildStartParam.setConfigureOnDemand(false);
+        includedBuildStartParam.doNotSearchUpwards();
         includedBuildStartParam.setInitScripts(startParameter.getInitScripts());
+        includedBuildStartParam.setExcludedTaskNames(startParameter.getExcludedTaskNames());
         return includedBuildStartParam;
     }
 
@@ -113,6 +134,6 @@ public class BuildDefinition {
      * Creates a defensive copy of this build definition, to isolate this instance from mutations made to the {@link StartParameter} during execution of the build.
      */
     public BuildDefinition newInstance() {
-        return new BuildDefinition(name, buildRootDir, startParameter.newInstance(), injectedSettingsPlugins, dependencySubstitutions, fromBuild);
+        return new BuildDefinition(name, buildRootDir, startParameter.newInstance(), injectedSettingsPlugins, dependencySubstitutions, fromBuild, pluginBuild);
     }
 }

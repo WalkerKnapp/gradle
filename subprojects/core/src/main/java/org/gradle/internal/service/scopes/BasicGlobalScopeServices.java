@@ -24,6 +24,7 @@ import org.gradle.api.internal.file.FileLookup;
 import org.gradle.api.internal.file.FileResolver;
 import org.gradle.api.internal.file.collections.DefaultDirectoryFileTreeFactory;
 import org.gradle.api.internal.file.collections.DirectoryFileTreeFactory;
+import org.gradle.api.internal.file.temp.TemporaryFileProvider;
 import org.gradle.api.internal.provider.PropertyHost;
 import org.gradle.api.internal.tasks.DefaultTaskDependencyFactory;
 import org.gradle.api.tasks.util.PatternSet;
@@ -38,10 +39,11 @@ import org.gradle.internal.Factory;
 import org.gradle.internal.concurrent.DefaultExecutorFactory;
 import org.gradle.internal.concurrent.ExecutorFactory;
 import org.gradle.internal.event.DefaultListenerManager;
-import org.gradle.internal.event.ListenerManager;
 import org.gradle.internal.file.PathToFileResolver;
-import org.gradle.internal.jvm.inspection.CachingJvmVersionDetector;
+import org.gradle.internal.jvm.inspection.CachingJvmMetadataDetector;
+import org.gradle.internal.jvm.inspection.DefaultJvmMetadataDetector;
 import org.gradle.internal.jvm.inspection.DefaultJvmVersionDetector;
+import org.gradle.internal.jvm.inspection.JvmMetadataDetector;
 import org.gradle.internal.jvm.inspection.JvmVersionDetector;
 import org.gradle.internal.nativeintegration.ProcessEnvironment;
 import org.gradle.internal.nativeintegration.filesystem.FileSystem;
@@ -86,12 +88,16 @@ public class BasicGlobalScopeServices {
         return new DocumentationRegistry();
     }
 
-    JvmVersionDetector createJvmVersionDetector(ExecHandleFactory execHandleFactory) {
-        return new CachingJvmVersionDetector(new DefaultJvmVersionDetector(execHandleFactory));
+    JvmMetadataDetector createJvmMetadataDetector(ExecHandleFactory execHandleFactory, TemporaryFileProvider temporaryFileProvider) {
+        return new CachingJvmMetadataDetector(new DefaultJvmMetadataDetector(execHandleFactory, temporaryFileProvider));
     }
 
-    ExecFactory createExecFactory(FileResolver fileResolver, FileCollectionFactory fileCollectionFactory, ExecutorFactory executorFactory) {
-        return DefaultExecActionFactory.of(fileResolver, fileCollectionFactory, executorFactory);
+    JvmVersionDetector createJvmVersionDetector(JvmMetadataDetector detector) {
+        return new DefaultJvmVersionDetector(detector);
+    }
+
+    ExecFactory createExecFactory(FileResolver fileResolver, FileCollectionFactory fileCollectionFactory, ExecutorFactory executorFactory, TemporaryFileProvider temporaryFileProvider) {
+        return DefaultExecActionFactory.of(fileResolver, fileCollectionFactory, executorFactory, temporaryFileProvider);
     }
 
     FileResolver createFileResolver(FileLookup lookup) {
@@ -118,7 +124,7 @@ public class BasicGlobalScopeServices {
         return PatternSets.getPatternSetFactory(patternSpecFactory);
     }
 
-    ListenerManager createListenerManager() {
+    DefaultListenerManager createListenerManager() {
         return new DefaultListenerManager(Global.class);
     }
 }

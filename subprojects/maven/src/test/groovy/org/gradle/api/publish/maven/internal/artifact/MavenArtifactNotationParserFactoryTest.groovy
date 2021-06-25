@@ -19,10 +19,10 @@ package org.gradle.api.publish.maven.internal.artifact
 
 import com.google.common.collect.ImmutableSet
 import org.gradle.api.Task
+import org.gradle.api.artifacts.PublishArtifact
 import org.gradle.api.file.FileCollection
 import org.gradle.api.file.RegularFile
 import org.gradle.api.internal.TaskOutputsInternal
-import org.gradle.api.internal.artifacts.PublishArtifactInternal
 import org.gradle.api.internal.file.FileResolver
 import org.gradle.api.internal.provider.ProviderInternal
 import org.gradle.api.internal.tasks.DefaultTaskDependency
@@ -42,7 +42,7 @@ class MavenArtifactNotationParserFactoryTest extends AbstractProjectBuilderSpec 
     def dependencies = ImmutableSet.of(task)
     def taskDependency = new DefaultTaskDependency(null, dependencies)
     def fileNotationParser = Mock(NotationParser)
-    def publishArtifact = Stub(PublishArtifactInternal) {
+    def publishArtifact = Stub(PublishArtifact) {
         getExtension() >> 'extension'
         getClassifier() >> 'classifier'
         getFile() >> new File('foo')
@@ -126,17 +126,17 @@ class MavenArtifactNotationParserFactoryTest extends AbstractProjectBuilderSpec 
         when:
         def rootProject = TestUtil.createRootProject(temporaryFolder.testDirectory)
         def archive = rootProject.task('foo', type: Jar, {})
-        archive.setBaseName("baseName")
-        archive.setDestinationDir(temporaryFolder.testDirectory)
-        archive.setExtension(archiveExtension)
-        archive.setClassifier(archiveClassifier)
+        archive.archiveBaseName.set("baseName")
+        archive.destinationDirectory.set(temporaryFolder.testDirectory)
+        archive.archiveExtension.set(archiveExtension)
+        archive.archiveClassifier.set(archiveClassifier)
 
         MavenArtifact mavenArtifact = parser.parseNotation(archive)
 
         then:
         mavenArtifact.extension == artifactExtension
         mavenArtifact.classifier == artifactClassifier
-        mavenArtifact.file == archive.archivePath
+        mavenArtifact.file == archive.archiveFile.get().asFile
         mavenArtifact.buildDependencies.getDependencies(null) == [archive] as Set
 
         where:

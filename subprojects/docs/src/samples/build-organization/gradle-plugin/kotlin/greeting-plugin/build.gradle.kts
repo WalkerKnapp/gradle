@@ -5,8 +5,8 @@ plugins {
 }
 
 repositories {
-    // Use jcenter for resolving dependencies
-    jcenter()
+    // Use Maven Central for resolving dependencies
+    mavenCentral()
 }
 
 dependencies {
@@ -34,7 +34,7 @@ val functionalTestTask = tasks.register<Test>("functionalTest") {
     classpath = configurations[functionalTest.runtimeClasspathConfigurationName] + functionalTest.output
 }
 
-tasks.check.configure {
+tasks.check {
     // Run the functional tests as part of `check`
     dependsOn(functionalTestTask)
 }

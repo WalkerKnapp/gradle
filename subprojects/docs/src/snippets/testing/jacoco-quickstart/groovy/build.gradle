@@ -1,20 +1,4 @@
 
-/*
- * Copyright 2018 the original author or authors.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 // tag::apply-plugin[]
 plugins {
     // end::apply-plugin[]
@@ -26,8 +10,8 @@ plugins {
 
 // tag::jacoco-configuration[]
 jacoco {
-    toolVersion = "0.8.5"
-    reportsDir = file("$buildDir/customJacocoReportDir")
+    toolVersion = "0.8.7"
+    reportsDirectory = layout.buildDirectory.dir('customJacocoReportDir')
 }
 // end::jacoco-configuration[]
 
@@ -42,8 +26,8 @@ dependencies {
 // tag::testtask-configuration[]
 test {
     jacoco {
-        destinationFile = file("$buildDir/jacoco/jacocoTest.exec")
-        classDumpDir = file("$buildDir/jacoco/classpathdumps")
+        destinationFile = layout.buildDirectory.file('jacoco/jacocoTest.exec').get().asFile
+        classDumpDir = layout.buildDirectory.dir('jacoco/classpathdumps').get().asFile
     }
 }
 // end::testtask-configuration[]
@@ -60,9 +44,9 @@ jacocoTestReport {
 // tag::report-configuration[]
 jacocoTestReport {
     reports {
-        xml.enabled false
-        csv.enabled false
-        html.destination file("${buildDir}/jacocoHtml")
+        xml.required = false
+        csv.required = false
+        html.outputLocation = layout.buildDirectory.dir('jacocoHtml')
     }
 }
 // end::report-configuration[]
@@ -95,7 +79,7 @@ jacocoTestCoverageVerification {
 test {
     jacoco {
         enabled = true
-        destinationFile = file("$buildDir/jacoco/${name}.exec")
+        destinationFile = layout.buildDirectory.file("jacoco/${name}.exec").get().asFile
         includes = []
         excludes = []
         excludeClassLoaders = []

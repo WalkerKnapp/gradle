@@ -55,20 +55,21 @@ public class GradleWrapperMain {
 
         File gradleUserHome = gradleUserHome(options);
 
-        addSystemProperties(gradleUserHome, rootDir);
+        addSystemProperties(systemProperties, gradleUserHome, rootDir);
 
         Logger logger = logger(options);
 
         WrapperExecutor wrapperExecutor = WrapperExecutor.forWrapperPropertiesFile(propertiesFile);
         wrapperExecutor.execute(
                 args,
-                new Install(logger, new Download(logger, "gradlew", UNKNOWN_VERSION), new PathAssembler(gradleUserHome)),
+                new Install(logger, new Download(logger, "gradlew", UNKNOWN_VERSION), new PathAssembler(gradleUserHome, rootDir)),
                 new BootstrapMainStarter());
     }
 
-    private static void addSystemProperties(File gradleHome, File rootDir) {
-        System.getProperties().putAll(SystemPropertiesHandler.getSystemProperties(new File(gradleHome, "gradle.properties")));
-        System.getProperties().putAll(SystemPropertiesHandler.getSystemProperties(new File(rootDir, "gradle.properties")));
+    private static void addSystemProperties(Properties systemProperties, File gradleUserHome, File rootDir) {
+        // The location with highest priority needs to come last here, as it overwrites any previous entries.
+        systemProperties.putAll(SystemPropertiesHandler.getSystemProperties(new File(rootDir, "gradle.properties")));
+        systemProperties.putAll(SystemPropertiesHandler.getSystemProperties(new File(gradleUserHome, "gradle.properties")));
     }
 
     private static File rootDir(File wrapperJar) {

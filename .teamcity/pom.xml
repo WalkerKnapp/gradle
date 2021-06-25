@@ -3,14 +3,15 @@
     <modelVersion>4.0.0</modelVersion>
     <name>Gradle_Check Config DSL Script</name>
     <properties>
-        <kotlin.version>1.3.61</kotlin.version>
-        <teamcity.dsl.version>2020.1</teamcity.dsl.version>
+        <kotlin.version>1.4.32</kotlin.version>
+        <teamcity.dsl.version>2021.1</teamcity.dsl.version>
         <mockk.version>1.9</mockk.version>
         <bytebuddy.version>1.10.6</bytebuddy.version>
-        <junit.version>5.6.2</junit.version>
+        <junit.version>5.7.0</junit.version>
         <maven.compiler.source>1.8</maven.compiler.source>
         <maven.compiler.target>1.8</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <dslContextParameter.branch>master</dslContextParameter.branch>
     </properties>
     <groupId>Gradle_Check</groupId>
     <artifactId>Gradle_Check_dsl</artifactId>
@@ -41,8 +42,8 @@
     </pluginRepositories>
 
     <build>
-        <sourceDirectory>.</sourceDirectory>
-        <testSourceDirectory>../.teamcityTest/Gradle_Check_Tests</testSourceDirectory>
+        <sourceDirectory>${project.basedir}/src/main/kotlin</sourceDirectory>
+        <testSourceDirectory>${project.basedir}/src/test/kotlin</testSourceDirectory>
         <plugins>
             <plugin>
                 <artifactId>kotlin-maven-plugin</artifactId>
@@ -74,6 +75,9 @@
                 <configuration>
                     <format>kotlin</format>
                     <dstDir>target/generated-configs</dstDir>
+                    <contextParameters>
+                        <Branch>${dslContextParameter.branch}</Branch>
+                    </contextParameters>
                 </configuration>
                 <dependencies>
                     <dependency>
@@ -121,7 +125,7 @@
         <dependency>
             <groupId>com.alibaba</groupId>
             <artifactId>fastjson</artifactId>
-            <version>1.2.62</version>
+            <version>1.2.75</version>
         </dependency>
         <dependency>
             <groupId>org.jetbrains.teamcity</groupId>
@@ -161,35 +165,32 @@
             <version>${kotlin.version}</version>
             <scope>compile</scope>
         </dependency>
+
+        <!-- For tests only. Must be in compile scope such that the Teamcity generate goal is able to compile the tests -->
         <dependency>
             <groupId>io.mockk</groupId>
             <artifactId>mockk</artifactId>
             <version>${mockk.version}</version>
-            <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>net.bytebuddy</groupId>
             <artifactId>byte-buddy</artifactId>
             <version>${bytebuddy.version}</version>
-            <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter-params</artifactId>
             <version>${junit.version}</version>
-            <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter-api</artifactId>
             <version>${junit.version}</version>
-            <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter-engine</artifactId>
             <version>${junit.version}</version>
-            <scope>test</scope>
         </dependency>
     </dependencies>
 </project>

@@ -15,7 +15,7 @@
 [[scala_plugin]]
 = The Scala Plugin
 
-The Scala plugin extends the <<java_plugin.adoc#,Java plugin>> to add support for https://www.scala-lang.org/[Scala] projects.
+The Scala plugin extends the <<java_plugin.adoc#java_plugin,Java plugin>> to add support for https://www.scala-lang.org/[Scala] projects.
 It can deal with Scala code, mixed Scala and Java code, and even pure Java code (although we don't necessarily recommend to use it for the latter).
 The plugin supports _joint compilation_, which allows you to freely mix and match Scala and Java code, with dependencies in both directions.
 For example, a Scala class can extend a Java class that in turn extends a Scala class.
@@ -149,7 +149,7 @@ Unless a task's `scalaClasspath` is configured explicitly, the Scala (base) plug
 [[sec:configure_zinc_compiler]]
 == Configuring the Zinc compiler
 
-The Scala plugin uses a configuration named `zinc` to resolve the https://github.com/typesafehub/zinc[Zinc compiler] and its dependencies.
+The Scala plugin uses a configuration named `zinc` to resolve the https://github.com/sbt/zinc[Zinc compiler] and its dependencies.
 Gradle will provide a default version of Zinc, but if you need to use a particular Zinc version, you can change it.
 Gradle supports version 1.2.0 of Zinc and above.
 
@@ -163,7 +163,7 @@ The Zinc compiler itself needs a compatible version of `scala-library` that may 
 Gradle takes care of specifying a compatible version of `scala-library` for you.
 footnote:[Gradle does not support running the Zinc compiler v1.2.0 with Scala 2.11.]
 
-You can diagnose problems with the version of the Zinc compiler selected by running <<viewing_debugging_dependencies.adoc#,dependencyInsight>> for the `zinc` configuration.
+You can diagnose problems with the version of the Zinc compiler selected by running <<viewing_debugging_dependencies.adoc#viewing-debugging-dependencies,dependencyInsight>> for the `zinc` configuration.
 
 .Zinc compatibility table
 [%header%autowidth,compact]
@@ -194,7 +194,7 @@ The Scala plugin does not add any convention properties to the project.
 [[sec:scala_source_set_properties]]
 == Source set properties
 
-The Scala plugin adds the following convention properties to each source set in the project. You can use these properties in your build script as though they were properties of the source set object.
+The Scala plugin adds the following extensions to each source set in the project. You can use these  in your build script as though they were properties of the source set object.
 
 `scala` — link:{groovyDslPath}/org.gradle.api.file.SourceDirectorySet.html[SourceDirectorySet] (read-only)::
 The Scala source files of this source set. Contains all `.scala` and `.java` files found in the Scala source directories, and excludes all other types of files. _Default value:_ non-null.
@@ -207,7 +207,7 @@ _Default value:_ `[__projectDir__/src/__name__/scala]`.
 `allScala` — link:{javadocPath}/org/gradle/api/file/FileTree.html[FileTree] (read-only)::
 All Scala source files of this source set. Contains only the `.scala` files found in the Scala source directories. _Default value:_ non-null.
 
-These convention properties are provided by a convention object of type link:{groovyDslPath}/org.gradle.api.tasks.ScalaSourceSet.html[ScalaSourceSet].
+These extensions are backed by an object of type link:{groovyDslPath}/org.gradle.api.plugins.scala.ScalaSourceSet.html[ScalaSourceSet].
 
 The Scala plugin also modifies some source set properties:
 
@@ -253,24 +253,6 @@ The Zinc-based Scala Compiler supports joint compilation of Java and Scala code.
 Incremental compilation requires dependency analysis of the source code. The results of this analysis are stored in the file designated by `scalaCompileOptions.incrementalOptions.analysisFile` (which has a sensible default). In a multi-project build, analysis files are passed on to downstream `ScalaCompile` tasks to enable incremental compilation across project boundaries. For `ScalaCompile` tasks added by the Scala plugin, no configuration is necessary to make this work. For other `ScalaCompile` tasks that you might add, the property `scalaCompileOptions.incrementalOptions.publishedCode` needs to be configured to point to the classes folder or Jar archive by which the code is passed on to compile class paths of downstream `ScalaCompile` tasks. Note that if `publishedCode` is not set correctly, downstream tasks may not recompile code affected by upstream changes, leading to incorrect compilation results.
 
 Note that Zinc's Nailgun based daemon mode is not supported. Instead, we plan to enhance Gradle's own compiler daemon to stay alive across Gradle invocations, reusing the same Scala compiler. This is expected to yield another significant speedup for Scala compilation.
-
-[[sec:scala_cross_compilation]]
-== Compiling and testing for Java 6 or Java 7
-
-The Scala compiler ignores Gradle's `targetCompatibility` and `sourceCompatibility` settings. In Scala 2.11, the Scala compiler always compiles to Java 6 compatible bytecode. In Scala 2.12, the Scala compiler always compiles to Java 8 compatible bytecode. If you also have Java source, you can follow the same steps as for the <<building_java_projects.adoc#sec:java_cross_compilation,Java plugin>> to ensure the correct Java compiler is used.
-
-.Configure Java 6 build for Scala
-
-[source,properties]
-.gradle.properties
-----
-include::{snippetsPath}/scala/crossCompilation/groovy/gradle.properties[]
-----
-
-====
-include::sample[dir="snippets/scala/crossCompilation/groovy",files="build.gradle[tags=scala-cross-compilation]"]
-include::sample[dir="snippets/scala/crossCompilation/kotlin",files="build.gradle.kts[tags=scala-cross-compilation]"]
-====
 
 [[sec:eclipse_integration]]
 == Eclipse Integration

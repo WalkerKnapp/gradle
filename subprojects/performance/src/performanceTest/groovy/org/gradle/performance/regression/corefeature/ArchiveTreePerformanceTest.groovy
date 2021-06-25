@@ -16,16 +16,25 @@
 
 package org.gradle.performance.regression.corefeature
 
-import org.gradle.performance.AbstractCrossVersionGradleProfilerPerformanceTest
+import org.gradle.performance.AbstractCrossVersionPerformanceTest
+import org.gradle.performance.annotations.RunFor
+import org.gradle.performance.annotations.Scenario
 
-class ArchiveTreePerformanceTest extends AbstractCrossVersionGradleProfilerPerformanceTest {
+import static org.gradle.performance.annotations.ScenarioType.PER_COMMIT
+import static org.gradle.performance.annotations.ScenarioType.PER_DAY
+import static org.gradle.performance.results.OperatingSystem.LINUX
+
+
+class ArchiveTreePerformanceTest extends AbstractCrossVersionPerformanceTest {
     def setup() {
-        runner.targetVersions = ["6.7-20200723220251+0000"]
+        runner.targetVersions = ["7.1-20210427170827+0000"]
     }
 
+    @RunFor(
+        @Scenario(type = PER_COMMIT, operatingSystems = [LINUX], testProjects = ["archivePerformanceProject"])
+    )
     def "visiting zip trees"() {
         given:
-        runner.testProject = "archivePerformanceProject"
         runner.tasksToRun = ['visitZip']
 
         when:
@@ -34,9 +43,12 @@ class ArchiveTreePerformanceTest extends AbstractCrossVersionGradleProfilerPerfo
         then:
         result.assertCurrentVersionHasNotRegressed()
     }
+
+    @RunFor(
+        @Scenario(type = PER_DAY, operatingSystems = [LINUX], testProjects = ["archivePerformanceProject"])
+    )
     def "visiting tar trees"() {
         given:
-        runner.testProject = "archivePerformanceProject"
         runner.tasksToRun = ['visitTar']
 
         when:
@@ -46,9 +58,11 @@ class ArchiveTreePerformanceTest extends AbstractCrossVersionGradleProfilerPerfo
         result.assertCurrentVersionHasNotRegressed()
     }
 
+    @RunFor(
+        @Scenario(type = PER_DAY, operatingSystems = [LINUX], testProjects = ["archivePerformanceProject"])
+    )
     def "visiting gzip tar trees"() {
         given:
-        runner.testProject = "archivePerformanceProject"
         runner.tasksToRun = ['visitTarGz']
 
         when:

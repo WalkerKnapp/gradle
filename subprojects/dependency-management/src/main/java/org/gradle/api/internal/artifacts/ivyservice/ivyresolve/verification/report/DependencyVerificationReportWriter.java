@@ -23,6 +23,8 @@ import org.gradle.api.internal.artifacts.verification.verifier.MissingChecksums;
 import org.gradle.api.internal.artifacts.verification.verifier.SignatureVerificationFailure;
 import org.gradle.api.internal.artifacts.verification.verifier.VerificationFailure;
 import org.gradle.api.internal.properties.GradleProperties;
+import org.gradle.api.logging.Logger;
+import org.gradle.api.logging.Logging;
 import org.gradle.internal.Factory;
 import org.gradle.internal.component.external.model.ModuleComponentArtifactIdentifier;
 
@@ -34,6 +36,8 @@ import java.util.List;
 import java.util.Map;
 
 public class DependencyVerificationReportWriter {
+    private static final Logger LOGGER = Logging.getLogger(DependencyVerificationReportWriter.class);
+
     private static final Comparator<Map.Entry<ModuleComponentArtifactIdentifier, Collection<RepositoryAwareVerificationFailure>>> DELETED_LAST = Comparator.comparing(e -> e.getValue().stream().anyMatch(f -> f.getFailure() instanceof DeletedArtifact) ? 1 : 0);
     private static final Comparator<Map.Entry<ModuleComponentArtifactIdentifier, Collection<RepositoryAwareVerificationFailure>>> MISSING_LAST = Comparator.comparing(e -> e.getValue().stream().anyMatch(f -> f.getFailure() instanceof MissingChecksums) ? 1 : 0);
     private static final Comparator<Map.Entry<ModuleComponentArtifactIdentifier, Collection<RepositoryAwareVerificationFailure>>> BY_MODULE_ID = Comparator.comparing(e -> e.getKey().getDisplayName());
@@ -59,8 +63,15 @@ public class DependencyVerificationReportWriter {
     }
 
     private static boolean isVerboseConsoleReport(GradleProperties gradleProperties) {
-        String param = gradleProperties.find(VERBOSE_CONSOLE);
-        return VERBOSE_VALUE.equals(param);
+        try {
+            String param = gradleProperties.find(VERBOSE_CONSOLE);
+            return VERBOSE_VALUE.equals(param);
+        } catch (IllegalStateException e) {
+            // Gradle properties are not loaded yet, which can happen in init scripts
+            // let's return a default value
+            LOGGER.warn("Gradle properties are not loaded yet, any customization to dependency verification will be ignored until the main build script is loaded.");
+            return false;
+        }
     }
 
     private AbstractTextDependencyVerificationReportRenderer createConsoleRenderer(Path gradleUserHome, DocumentationRegistry documentationRegistry, GradleProperties gradleProperties) {
@@ -72,12 +83,13 @@ public class DependencyVerificationReportWriter {
     }
 
     public VerificationReport generateReport(String displayName,
-                                             Multimap<ModuleComponentArtifactIdentifier, RepositoryAwareVerificationFailure> failuresByArtifact) {
+                                             Multimap<ModuleComponentArtifactIdentifier, RepositoryAwareVerificationFailure> failuresByArtifact,
+                                             boolean useKeyServers) {
         assertInitialized();
         // We need at least one fatal failure: if it's only "warnings" we don't care
         // but of there's a fatal failure AND a warning we want to show both
-        doRender(displayName, failuresByArtifact, summaryRenderer);
-        doRender(displayName, failuresByArtifact, htmlRenderer);
+        doRender(displayName, failuresByArtifact, summaryRenderer, useKeyServers);
+        doRender(displayName, failuresByArtifact, htmlRenderer, useKeyServers);
         File htmlReport = htmlRenderer.writeReport();
         return new VerificationReport(summaryRenderer.render(), htmlReport);
     }
@@ -89,8 +101,14 @@ public class DependencyVerificationReportWriter {
         }
     }
 
-    public void doRender(String displayName, Multimap<ModuleComponentArtifactIdentifier, RepositoryAwareVerificationFailure> failuresByArtifact, DependencyVerificationReportRenderer renderer) {
+    public void doRender(String displayName,
+                         Multimap<ModuleComponentArtifactIdentifier, RepositoryAwareVerificationFailure> failuresByArtifact,
+                         DependencyVerificationReportRenderer renderer,
+                         boolean useKeyServers) {
         ReportState reportState = new ReportState();
+        if (!useKeyServers) {
+            reportState.keyServersAreDisabled();
+        }
         renderer.startNewSection(displayName);
         renderer.startArtifactErrors(() -> {
             // Sorting entries so that error messages are always displayed in a reproducible order

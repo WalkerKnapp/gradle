@@ -52,7 +52,7 @@ class CancellationIntegrationTest extends DaemonIntegrationSpec implements Direc
 
             task javaExec(type: JavaExec) {
                 classpath = sourceSets.main.output
-                main = 'Block'
+                mainClass = 'Block'
             }
 
             task blockingCustomTask() {
@@ -93,7 +93,7 @@ class CancellationIntegrationTest extends DaemonIntegrationSpec implements Direc
 
             task exec(type: MyJavaExec) {
                 classpath = sourceSets.main.output
-                main = 'Block'
+                mainClass = 'Block'
                 ignoreExitValue = ${ignoreExitValue}
             }
         """
@@ -115,8 +115,6 @@ class CancellationIntegrationTest extends DaemonIntegrationSpec implements Direc
         file('outputFile') << ''
         blockCode()
         buildFile << """
-            import javax.inject.Inject
-
             apply plugin: 'java'
 
             @CacheableTask

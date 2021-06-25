@@ -18,14 +18,16 @@ package org.gradle.execution.taskgraph
 
 import org.gradle.integtests.fixtures.AbstractIntegrationSpec
 import org.gradle.integtests.fixtures.executer.GradleContextualExecuter
+import org.gradle.internal.reflect.validation.ValidationMessageChecker
 import org.gradle.test.fixtures.server.http.BlockingHttpServer
 import org.junit.Rule
 import spock.lang.IgnoreIf
+import spock.lang.Requires
 import spock.lang.Timeout
 
 @IgnoreIf({ GradleContextualExecuter.parallel })
 // no point, always runs in parallel
-class ParallelTaskExecutionIntegrationTest extends AbstractIntegrationSpec {
+class ParallelTaskExecutionIntegrationTest extends AbstractIntegrationSpec implements ValidationMessageChecker {
 
     @Rule
     public final BlockingHttpServer blockingServer = new BlockingHttpServer()
@@ -36,11 +38,7 @@ class ParallelTaskExecutionIntegrationTest extends AbstractIntegrationSpec {
         settingsFile << 'include "a", "b"'
 
         buildFile << """
-            import javax.inject.Inject
-            import org.gradle.workers.WorkerExecutor
-            import org.gradle.workers.IsolationMode
-
-            class SerialPing extends DefaultTask {
+            abstract class SerialPing extends DefaultTask {
 
                 SerialPing() { outputs.upToDateWhen { false } }
 
@@ -50,16 +48,13 @@ class ParallelTaskExecutionIntegrationTest extends AbstractIntegrationSpec {
                 }
             }
 
-            public class TestParallelRunnable implements Runnable {
-                final String path
+            interface TestParallelWorkActionConfig extends WorkParameters {
+                Property<String> getPath()
+            }
 
-                @Inject
-                public TestParallelRunnable(String path) {
-                    this.path = path
-                }
-
-                public void run() {
-                    new URL("http://localhost:${blockingServer.port}/" + path).text
+            abstract class TestParallelWorkAction implements WorkAction<TestParallelWorkActionConfig> {
+                void execute() {
+                    new URL("http://localhost:${blockingServer.port}/" + parameters.path.get()).text
                 }
             }
 
@@ -72,11 +67,15 @@ class ParallelTaskExecutionIntegrationTest extends AbstractIntegrationSpec {
 
                 @TaskAction
                 void ping() {
-                    workerExecutor.submit(TestParallelRunnable) { config ->
-                        config.params = [ path ]
-                        config.isolationMode = IsolationMode.NONE
+                    def taskPath = path
+                    workerExecutor.noIsolation().submit(TestParallelWorkAction) { config ->
+                        config.path.set(taskPath)
                     }
                 }
+            }
+
+            abstract class PingWithCacheableWarnings extends Ping {
+                @Optional @InputFile File invalidInput
             }
 
             class FailingPing extends DefaultTask {
@@ -101,6 +100,11 @@ class ParallelTaskExecutionIntegrationTest extends AbstractIntegrationSpec {
                         tasks.create(name, FailingPing)
                     }
                 }
+                tasks.addRule("<>PingWithCacheableWarnings") { String name ->
+                    if (name.endsWith("PingWithCacheableWarnings")) {
+                        tasks.create(name, PingWithCacheableWarnings)
+                    }
+                }
                 tasks.addRule("<>SerialPing") { String name ->
                     if (name.endsWith("SerialPing")) {
                         tasks.create(name, SerialPing)
@@ -111,6 +115,21 @@ class ParallelTaskExecutionIntegrationTest extends AbstractIntegrationSpec {
         executer.beforeExecute {
             withArgument('--info')
         }
+    }
+
+    void withInvalidPing() {
+        buildFile << """
+            abstract class InvalidPing extends Ping {
+                @org.gradle.integtests.fixtures.validation.ValidationProblem File invalidInput
+            }
+            allprojects {
+                tasks.addRule("<>InvalidPing") { String name ->
+                    if (name.endsWith("InvalidPing")) {
+                        tasks.create(name, InvalidPing)
+                    }
+                }
+            }
+        """
     }
 
     void withParallelThreads(int threadCount) {
@@ -245,9 +264,13 @@ class ParallelTaskExecutionIntegrationTest extends AbstractIntegrationSpec {
         withParallelThreads(3)
 
         expect:
-        2.times {
-            blockingServer.expectConcurrent(":a:aSerialPing")
-            blockingServer.expectConcurrent(":b:aPing", ":b:bPing")
+        blockingServer.expectConcurrent(":a:aSerialPing")
+        blockingServer.expectConcurrent(":b:aPing", ":b:bPing")
+        run ":a:aSerialPing", ":b:aPing", ":b:bPing"
+
+        // when configuration is loaded from configuration cache, all tasks are executed in parallel
+        if (GradleContextualExecuter.configCache) {
+            blockingServer.expectConcurrent(":a:aSerialPing", ":b:aPing", ":b:bPing")
             run ":a:aSerialPing", ":b:aPing", ":b:bPing"
         }
     }
@@ -453,6 +476,49 @@ class ParallelTaskExecutionIntegrationTest extends AbstractIntegrationSpec {
             blockingServer.expectConcurrent(":aPing")
             fails ":aPing"
             failure.assertHasCause "BOOM!"
+        }
+    }
+
+    @Requires({ GradleContextualExecuter.embedded })
+    // this test only works in embedded mode because of the use of validation test fixtures
+    def "other tasks are not started when an invalid task task is running"() {
+        given:
+        withParallelThreads(3)
+        withInvalidPing()
+
+        expect:
+        2.times {
+            expectThatExecutionOptimizationDisabledWarningIsDisplayed(executer, dummyValidationProblem('InvalidPing', 'invalidInput'))
+
+            blockingServer.expect(":aInvalidPing")
+            blockingServer.expectConcurrent(":bPing", ":cPing")
+            run ":aInvalidPing", ":bPing", ":cPing"
+        }
+    }
+
+    def "cacheability warnings do not prevent a task from running in parallel"() {
+        given:
+        withParallelThreads(3)
+
+        expect:
+        blockingServer.expectConcurrent(":aPingWithCacheableWarnings", ":bPing", ":cPing")
+        run ":aPingWithCacheableWarnings", ":bPing", ":cPing"
+    }
+
+    @Requires({ GradleContextualExecuter.embedded })
+    // this test only works in embedded mode because of the use of validation test fixtures
+    def "invalid task is not executed in parallel with other task"() {
+        given:
+        withParallelThreads(3)
+        withInvalidPing()
+
+        expect:
+        2.times {
+            expectThatExecutionOptimizationDisabledWarningIsDisplayed(executer, dummyValidationProblem('InvalidPing', 'invalidInput'))
+
+            blockingServer.expectConcurrent(":aPing", ":bPing")
+            blockingServer.expect(":cInvalidPing")
+            run ":aPing", ":bPing", ":cInvalidPing"
         }
     }
 }

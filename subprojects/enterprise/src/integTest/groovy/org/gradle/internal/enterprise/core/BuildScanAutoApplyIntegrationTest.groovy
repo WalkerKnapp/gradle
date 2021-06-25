@@ -17,12 +17,11 @@
 package org.gradle.internal.enterprise.core
 
 import org.gradle.integtests.fixtures.AbstractIntegrationSpec
-import org.gradle.integtests.fixtures.ToBeFixedForConfigurationCache
 import org.gradle.internal.enterprise.GradleEnterprisePluginCheckInFixture
 import org.gradle.internal.enterprise.impl.DefautGradleEnterprisePluginCheckInService
 import org.gradle.internal.enterprise.impl.legacy.LegacyGradleEnterprisePluginCheckInService
 import org.gradle.plugin.management.internal.autoapply.AutoAppliedGradleEnterprisePlugin
-import org.gradle.util.VersionNumber
+import org.gradle.util.internal.VersionNumber
 import spock.lang.Issue
 import spock.lang.Unroll
 
@@ -59,6 +58,7 @@ class BuildScanAutoApplyIntegrationTest extends AbstractIntegrationSpec {
     def "only applies once when -b used"() {
         when:
         file("other-build.gradle") << "task dummy {}"
+        executer.expectDocumentedDeprecationWarning("Specifying custom build file location has been deprecated. This is scheduled to be removed in Gradle 8.0. Consult the upgrading guide for further information: https://docs.gradle.org/current/userguide/upgrading_version_7.html#configuring_custom_build_layout")
         runBuildWithScanRequest("-b", "other-build.gradle")
 
         then:
@@ -87,7 +87,6 @@ class BuildScanAutoApplyIntegrationTest extends AbstractIntegrationSpec {
         pluginAppliedOnce()
     }
 
-    @ToBeFixedForConfigurationCache(because = "composite builds")
     def "does not apply plugin to nested builds in a composite"() {
         when:
         settingsFile << """
@@ -281,7 +280,6 @@ class BuildScanAutoApplyIntegrationTest extends AbstractIntegrationSpec {
         fixture.didNotIssuedNoPluginWarning(output)
     }
 
-    @ToBeFixedForConfigurationCache(because = "composite builds")
     def "does not warn for each nested build if --scan used"() {
         given:
         applyPlugin()

@@ -20,9 +20,14 @@ import com.google.common.collect.ImmutableCollection;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSortedMap;
 import org.gradle.api.Describable;
+import org.gradle.internal.Cast;
 import org.gradle.internal.execution.history.AfterPreviousExecutionState;
 import org.gradle.internal.execution.history.BeforeExecutionState;
 import org.gradle.internal.fingerprint.CurrentFileCollectionFingerprint;
+import org.gradle.internal.snapshot.FileSystemSnapshot;
+import org.gradle.internal.snapshot.impl.KnownImplementationSnapshot;
+
+import static org.gradle.internal.execution.history.impl.OutputSnapshotUtil.findOutputsStillPresentSincePreviousExecution;
 
 public class DefaultExecutionStateChangeDetector implements ExecutionStateChangeDetector {
     @Override
@@ -32,15 +37,21 @@ public class DefaultExecutionStateChangeDetector implements ExecutionStateChange
             lastExecution.isSuccessful());
 
         // Capture changes to implementation
+
+        // After validation, the current implementations can't be unknown when detecting changes.
+        // Previous implementations can still be unknown, since we store the inputs in the task history even if validation fails.
+        // When we fail the build for unknown implementations, then the previous implementations also can't be unknown.
+        KnownImplementationSnapshot currentImplementation = Cast.uncheckedNonnullCast(thisExecution.getImplementation());
+        ImmutableList<KnownImplementationSnapshot> currentAdditionalImplementations = Cast.uncheckedNonnullCast(thisExecution.getAdditionalImplementations());
         ChangeContainer implementationChanges = new ImplementationChanges(
             lastExecution.getImplementation(), lastExecution.getAdditionalImplementations(),
-            thisExecution.getImplementation(), thisExecution.getAdditionalImplementations(),
+            currentImplementation, currentAdditionalImplementations,
             executable);
 
         // Capture non-file input changes
         ChangeContainer inputPropertyChanges = new PropertyChanges(
-            lastExecution.getInputProperties(),
-            thisExecution.getInputProperties(),
+            lastExecution.getInputProperties().keySet(),
+            thisExecution.getInputProperties().keySet(),
             "Input",
             executable);
         ChangeContainer inputPropertyValueChanges = new InputValueChanges(
@@ -50,8 +61,8 @@ public class DefaultExecutionStateChangeDetector implements ExecutionStateChange
 
         // Capture input files state
         ChangeContainer inputFilePropertyChanges = new PropertyChanges(
-            lastExecution.getInputFileProperties(),
-            thisExecution.getInputFileProperties(),
+            lastExecution.getInputFileProperties().keySet(),
+            thisExecution.getInputFileProperties().keySet(),
             "Input file",
             executable);
         InputFileChanges nonIncrementalInputFileChanges = incrementalInputProperties.nonIncrementalChanges(
@@ -61,13 +72,16 @@ public class DefaultExecutionStateChangeDetector implements ExecutionStateChange
 
         // Capture output files state
         ChangeContainer outputFilePropertyChanges = new PropertyChanges(
-            lastExecution.getOutputFileProperties(),
-            thisExecution.getOutputFileProperties(),
+            lastExecution.getOutputFilesProducedByWork().keySet(),
+            thisExecution.getOutputFileLocationSnapshots().keySet(),
             "Output",
             executable);
+        ImmutableSortedMap<String, FileSystemSnapshot> remainingPreviouslyProducedOutputs = thisExecution.getDetectedOverlappingOutputs().isPresent()
+            ? findOutputsStillPresentSincePreviousExecution(lastExecution.getOutputFilesProducedByWork(), thisExecution.getOutputFileLocationSnapshots())
+            : thisExecution.getOutputFileLocationSnapshots();
         OutputFileChanges outputFileChanges = new OutputFileChanges(
-            lastExecution.getOutputFileProperties(),
-            thisExecution.getOutputFileProperties()
+            lastExecution.getOutputFilesProducedByWork(),
+            remainingPreviouslyProducedOutputs
         );
 
         // Collect changes that would trigger a rebuild

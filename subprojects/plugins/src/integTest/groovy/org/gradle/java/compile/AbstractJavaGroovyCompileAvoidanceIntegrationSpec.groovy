@@ -82,7 +82,7 @@ abstract class AbstractJavaGroovyCompileAvoidanceIntegrationSpec extends Abstrac
                 configurations.apiElements.outgoing.variants {
                     classes {
                         attributes.attribute(USAGE_ATTRIBUTE, objects.named(Usage, Usage.JAVA_API_CLASSES))
-                        artifact file: ${language.compileTaskName}.destinationDir, builtBy: ${language.compileTaskName}
+                        artifact file: ${language.compileTaskName}.destinationDirectory.asFile.get(), builtBy: ${language.compileTaskName}
                         artifact file: emptyDirs.destinationDir, builtBy: emptyDirs
                         artifact file: processResources.destinationDir, builtBy: processResources
                     }
@@ -707,7 +707,7 @@ abstract class AbstractJavaGroovyCompileAvoidanceIntegrationSpec extends Abstrac
     def "detects changes in compile classpath"() {
         given:
         buildFile << """
-            ${jcenterRepository()}
+            ${mavenCentralRepository()}
 
             dependencies {
                if (providers.gradleProperty('useCommons').forUseAtConfigurationTime().present) {
@@ -760,7 +760,7 @@ abstract class AbstractJavaGroovyCompileAvoidanceIntegrationSpec extends Abstrac
                 }
             """
         buildFile << """
-            ${jcenterRepository()}
+            ${mavenCentralRepository()}
 
             def order = providers.gradleProperty('order').forUseAtConfigurationTime().get() as int
 

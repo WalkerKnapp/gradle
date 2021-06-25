@@ -25,7 +25,7 @@ import org.gradle.util.GradleVersion
 
 import static org.gradle.testkit.runner.TaskOutcome.FAILED
 import static org.gradle.testkit.runner.TaskOutcome.SUCCESS
-import static org.gradle.util.TextUtil.normaliseLineSeparators
+import static org.gradle.util.internal.TextUtil.normaliseLineSeparators
 
 @SuppressWarnings('IntegrationTestFixtures')
 class GradleRunnerBuildFailureIntegrationTest extends BaseGradleRunnerIntegrationTest {
@@ -93,8 +93,8 @@ class GradleRunnerBuildFailureIntegrationTest extends BaseGradleRunnerIntegratio
 
         when:
         def runner = gradleVersion >= GradleVersion.version("4.5")
-            ? runner('helloWorld', '--warning-mode=none')
-            : runner('helloWorld')
+            ? this.runner('helloWorld', '--warning-mode=none')
+            : this.runner('helloWorld')
         runner.buildAndFail()
 
         then:
@@ -143,7 +143,7 @@ $t.buildResult.output"""
         """
 
         when:
-        def runner = runner('helloWorld')
+        def runner = this.runner('helloWorld')
         runner.build()
 
         then:

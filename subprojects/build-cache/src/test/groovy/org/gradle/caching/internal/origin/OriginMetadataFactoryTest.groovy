@@ -19,6 +19,8 @@ package org.gradle.caching.internal.origin
 import org.gradle.caching.internal.CacheableEntity
 import spock.lang.Specification
 
+import java.time.Duration
+
 class OriginMetadataFactoryTest extends Specification {
     def entry = Mock(CacheableEntity)
     def rootDir = Mock(File)
@@ -34,9 +36,10 @@ class OriginMetadataFactoryTest extends Specification {
 
     def "converts to origin metadata"() {
         entry.identity >> "identity"
+        entry.type >> CacheableEntity
         rootDir.absolutePath >> "root"
         def origin = new Properties()
-        def writer = factory.createWriter(entry, 10)
+        def writer = factory.createWriter(entry, Duration.ofMillis(10))
         def baos = new ByteArrayOutputStream()
         writer.execute(baos)
         when:
@@ -47,7 +50,7 @@ class OriginMetadataFactoryTest extends Specification {
         origin.load(new ByteArrayInputStream(baos.toByteArray()))
         then:
         origin.identity == "identity"
-        origin.type == entry.getClass().canonicalName
+        origin.type == CacheableEntity.canonicalName
         origin.gradleVersion == "3.0"
         origin.creationTime != null
         origin.executionTime == "10"

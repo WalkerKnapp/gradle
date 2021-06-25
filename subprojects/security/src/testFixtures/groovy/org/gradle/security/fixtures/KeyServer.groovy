@@ -22,6 +22,9 @@ import org.gradle.security.internal.Fingerprint
 import org.gradle.test.fixtures.file.TestFile
 import org.gradle.test.fixtures.server.http.HttpServer
 
+import javax.servlet.http.HttpServletRequest
+import javax.servlet.http.HttpServletResponse
+
 import static org.gradle.security.internal.SecuritySupport.toLongIdHexString
 
 class KeyServer extends HttpServer {
@@ -33,11 +36,11 @@ class KeyServer extends HttpServer {
         this.baseDirectory = baseDirectory
         allow("/pks/lookup", false, ["GET"], new HttpServer.ActionSupport("Get key") {
             @Override
-            void handle(javax.servlet.http.HttpServletRequest request, javax.servlet.http.HttpServletResponse response) {
+            void handle(HttpServletRequest request, HttpServletResponse response) {
                 if (request.queryString.startsWith("op=get&options=mr&search=0x")) {
                     String keyId = request.queryString - "op=get&options=mr&search=0x"
-                    if (keyFiles.containsKey(keyId)) {
-                        fileHandler("/pks/lookup", keyFiles[keyId]).handle(request, response)
+                    if (KeyServer.this.keyFiles.containsKey(keyId)) {
+                        KeyServer.this.fileHandler("/pks/lookup", KeyServer.this.keyFiles[keyId]).handle(request, response)
                     } else {
                         response.sendError(404, "not found")
                     }

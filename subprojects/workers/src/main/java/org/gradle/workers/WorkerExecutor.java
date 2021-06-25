@@ -17,7 +17,8 @@
 package org.gradle.workers;
 
 import org.gradle.api.Action;
-import org.gradle.api.Incubating;
+import org.gradle.internal.service.scopes.Scopes;
+import org.gradle.internal.service.scopes.ServiceScope;
 
 /**
  * Allows work to be submitted for asynchronous execution.  This api allows for safe, concurrent execution of work items and enables:
@@ -43,6 +44,7 @@ import org.gradle.api.Incubating;
  *
  * @since 3.5
  */
+@ServiceScope(Scopes.Project.class)
 public interface WorkerExecutor {
     /**
      * Submits a piece of work to be executed asynchronously.
@@ -61,7 +63,6 @@ public interface WorkerExecutor {
      *
      * @since 5.6
      */
-    @Incubating
     WorkQueue noIsolation();
 
     /**
@@ -69,7 +70,6 @@ public interface WorkerExecutor {
      *
      * @since 5.6
      */
-    @Incubating
     WorkQueue classLoaderIsolation();
 
     /**
@@ -79,7 +79,6 @@ public interface WorkerExecutor {
      *
      * @since 5.6
      */
-    @Incubating
     WorkQueue processIsolation();
 
     /**
@@ -87,7 +86,6 @@ public interface WorkerExecutor {
      *
      * @since 5.6
      */
-    @Incubating
     WorkQueue noIsolation(Action<? super WorkerSpec> action);
 
     /**
@@ -95,7 +93,6 @@ public interface WorkerExecutor {
      *
      * @since 5.6
      */
-    @Incubating
     WorkQueue classLoaderIsolation(Action<? super ClassLoaderWorkerSpec> action);
 
     /**
@@ -105,7 +102,6 @@ public interface WorkerExecutor {
      *
      * @since 5.6
      */
-    @Incubating
     WorkQueue processIsolation(Action<? super ProcessWorkerSpec> action);
 
     /**

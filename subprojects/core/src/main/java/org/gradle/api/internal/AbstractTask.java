@@ -30,7 +30,7 @@ import org.gradle.api.InvalidUserDataException;
 import org.gradle.api.Project;
 import org.gradle.api.Task;
 import org.gradle.api.internal.file.FileCollectionFactory;
-import org.gradle.api.internal.file.TemporaryFileProvider;
+import org.gradle.api.internal.file.temp.TemporaryFileProvider;
 import org.gradle.api.internal.project.ProjectInternal;
 import org.gradle.api.internal.project.taskfactory.TaskIdentity;
 import org.gradle.api.internal.tasks.DefaultTaskDependency;
@@ -69,7 +69,9 @@ import org.gradle.internal.execution.history.changes.InputChangesInternal;
 import org.gradle.internal.extensibility.ExtensibleDynamicObject;
 import org.gradle.internal.hash.ClassLoaderHierarchyHasher;
 import org.gradle.internal.instantiation.InstanceGenerator;
-import org.gradle.internal.logging.compatbridge.LoggingManagerInternalCompatibilityBridge;
+import org.gradle.internal.logging.LoggingManagerInternal;
+import org.gradle.internal.logging.StandardOutputCapture;
+import org.gradle.internal.logging.slf4j.ContextAwareTaskLogger;
 import org.gradle.internal.logging.slf4j.DefaultContextAwareTaskLogger;
 import org.gradle.internal.metaobject.DynamicObject;
 import org.gradle.internal.resources.ResourceLock;
@@ -78,8 +80,8 @@ import org.gradle.internal.scripts.ScriptOrigin;
 import org.gradle.internal.serialization.Cached;
 import org.gradle.internal.service.ServiceRegistry;
 import org.gradle.internal.snapshot.impl.ImplementationSnapshot;
-import org.gradle.util.ConfigureUtil;
-import org.gradle.util.GFileUtils;
+import org.gradle.util.internal.ConfigureUtil;
+import org.gradle.util.internal.GFileUtils;
 import org.gradle.util.Path;
 
 import javax.annotation.Nullable;
@@ -96,10 +98,10 @@ import java.util.Set;
 import java.util.concurrent.Callable;
 
 import static org.gradle.api.internal.lambdas.SerializableLambdas.factory;
-import static org.gradle.util.GUtil.uncheckedCall;
+import static org.gradle.util.internal.GUtil.uncheckedCall;
 
 /**
- * @deprecated This class will be removed in Gradle 7.0. Please use {@link org.gradle.api.DefaultTask} instead.
+ * @deprecated This class will be removed in Gradle 8.0. Please use {@link org.gradle.api.DefaultTask} instead.
  */
 @Deprecated
 public abstract class AbstractTask implements TaskInternal, DynamicObjectAware {
@@ -136,7 +138,7 @@ public abstract class AbstractTask implements TaskInternal, DynamicObjectAware {
 
     private final TaskStateInternal state;
 
-    private Logger logger = new DefaultContextAwareTaskLogger(BUILD_LOGGER);
+    private final ContextAwareTaskLogger logger = new DefaultContextAwareTaskLogger(BUILD_LOGGER);
 
     private final TaskMutator taskMutator;
     private ObservableList observableActionList;
@@ -147,8 +149,7 @@ public abstract class AbstractTask implements TaskInternal, DynamicObjectAware {
     private final TaskOutputsInternal taskOutputs;
     private final TaskDestroyables taskDestroyables;
     private final TaskLocalStateInternal taskLocalState;
-    @SuppressWarnings("deprecation")
-    private org.gradle.logging.LoggingManagerInternal loggingManager;
+    private LoggingManagerInternal loggingManager;
 
     private Set<Provider<? extends BuildService<?>>> requiredServices;
 
@@ -204,22 +205,26 @@ public abstract class AbstractTask implements TaskInternal, DynamicObjectAware {
         }
     }
 
+    @Internal
     @Override
     public TaskStateInternal getState() {
         return state;
     }
 
     @Override
+    @Internal
     public AntBuilder getAnt() {
         return project.getAnt();
     }
 
+    @Internal
     @Override
     public Project getProject() {
         notifyProjectAccess();
         return project;
     }
 
+    @Internal
     @Override
     public String getName() {
         return identity.name;
@@ -230,6 +235,7 @@ public abstract class AbstractTask implements TaskInternal, DynamicObjectAware {
         return identity;
     }
 
+    @Internal
     @Override
     public List<Action<? super Task>> getActions() {
         if (observableActionList == null) {
@@ -270,12 +276,14 @@ public abstract class AbstractTask implements TaskInternal, DynamicObjectAware {
         });
     }
 
+    @Internal
     @Override
     public TaskDependencyInternal getTaskDependencies() {
         notifyTaskDependenciesAccess("Task.taskDependencies");
         return dependencies;
     }
 
+    @Internal
     @Override
     public Set<Object> getDependsOn() {
         notifyTaskDependenciesAccess("Task.dependsOn");
@@ -346,6 +354,7 @@ public abstract class AbstractTask implements TaskInternal, DynamicObjectAware {
         return onlyIfSpec;
     }
 
+    @Internal
     @Override
     public boolean getDidWork() {
         return state.getDidWork();
@@ -361,6 +370,7 @@ public abstract class AbstractTask implements TaskInternal, DynamicObjectAware {
         return enabled;
     }
 
+    @Internal
     @Override
     public boolean getEnabled() {
         return enabled;
@@ -386,6 +396,7 @@ public abstract class AbstractTask implements TaskInternal, DynamicObjectAware {
         this.impliesSubProjects = impliesSubProjects;
     }
 
+    @Internal
     @Override
     public String getPath() {
         return identity.projectPath.toString();
@@ -457,29 +468,28 @@ public abstract class AbstractTask implements TaskInternal, DynamicObjectAware {
         }
     }
 
+    @Internal
     @Override
     public Logger getLogger() {
         return logger;
     }
 
+    @Internal
     @Override
-    @SuppressWarnings("deprecation")
-    public org.gradle.logging.LoggingManagerInternal getLogging() {
+    public org.gradle.api.logging.LoggingManager getLogging() {
+        return loggingManager();
+    }
+
+    @Override
+    public StandardOutputCapture getStandardOutputCapture() {
+        return loggingManager();
+    }
+
+    private LoggingManagerInternal loggingManager() {
         if (loggingManager == null) {
-            loggingManager = new LoggingManagerInternalCompatibilityBridge(services.getFactory(org.gradle.internal.logging.LoggingManagerInternal.class).create());
+            loggingManager = services.getFactory(org.gradle.internal.logging.LoggingManagerInternal.class).create();
         }
         return loggingManager;
-    }
-
-    @Override
-    public void replaceLogger(Logger logger) {
-        this.logger = logger;
-    }
-
-    @Override
-    @SuppressWarnings("deprecation")
-    public org.gradle.logging.StandardOutputCapture getStandardOutputCapture() {
-        return getLogging();
     }
 
     @Override
@@ -500,7 +510,9 @@ public abstract class AbstractTask implements TaskInternal, DynamicObjectAware {
         extensibleDynamicObject.setProperty(name, value);
     }
 
+    @Internal
     @Override
+    @Deprecated
     public Convention getConvention() {
         assertDynamicObject();
         return extensibleDynamicObject.getConvention();
@@ -519,6 +531,7 @@ public abstract class AbstractTask implements TaskInternal, DynamicObjectAware {
         return extensibleDynamicObject;
     }
 
+    @Internal
     @Override
     public String getDescription() {
         return description;
@@ -529,6 +542,7 @@ public abstract class AbstractTask implements TaskInternal, DynamicObjectAware {
         this.description = description;
     }
 
+    @Internal
     @Override
     public String getGroup() {
         return group;
@@ -539,21 +553,25 @@ public abstract class AbstractTask implements TaskInternal, DynamicObjectAware {
         this.group = group;
     }
 
+    @Internal
     @Override
     public TaskInputsInternal getInputs() {
         return taskInputs;
     }
 
+    @Internal
     @Override
     public TaskOutputsInternal getOutputs() {
         return taskOutputs;
     }
 
+    @Internal
     @Override
     public TaskDestroyables getDestroyables() {
         return taskDestroyables;
     }
 
+    @Internal
     @Override
     public TaskLocalState getLocalState() {
         return taskLocalState;
@@ -599,6 +617,7 @@ public abstract class AbstractTask implements TaskInternal, DynamicObjectAware {
         return ConfigureUtil.configureSelf(closure, this);
     }
 
+    @Internal
     @Override
     public File getTemporaryDir() {
         File dir = getServices().get(TemporaryFileProvider.class).newTemporaryFile(getName());
@@ -796,6 +815,7 @@ public abstract class AbstractTask implements TaskInternal, DynamicObjectAware {
         return this;
     }
 
+    @Internal
     @Override
     public TaskDependency getMustRunAfter() {
         return mustRunAfter;
@@ -822,6 +842,7 @@ public abstract class AbstractTask implements TaskInternal, DynamicObjectAware {
         return this;
     }
 
+    @Internal
     @Override
     public TaskDependency getFinalizedBy() {
         return finalizedBy;
@@ -848,6 +869,7 @@ public abstract class AbstractTask implements TaskInternal, DynamicObjectAware {
         });
     }
 
+    @Internal
     @Override
     public TaskDependency getShouldRunAfter() {
         return shouldRunAfter;
@@ -934,6 +956,7 @@ public abstract class AbstractTask implements TaskInternal, DynamicObjectAware {
         return hasCustomActions;
     }
 
+    @Internal
     @Override
     public Property<Duration> getTimeout() {
         return timeout;

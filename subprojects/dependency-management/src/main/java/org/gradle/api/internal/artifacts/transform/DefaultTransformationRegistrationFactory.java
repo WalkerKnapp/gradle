@@ -23,6 +23,7 @@ import org.gradle.api.artifacts.transform.InputArtifact;
 import org.gradle.api.artifacts.transform.InputArtifactDependencies;
 import org.gradle.api.artifacts.transform.TransformAction;
 import org.gradle.api.artifacts.transform.TransformParameters;
+import org.gradle.api.internal.DocumentationRegistry;
 import org.gradle.api.internal.DomainObjectContext;
 import org.gradle.api.internal.artifacts.ArtifactTransformRegistration;
 import org.gradle.api.internal.attributes.AttributeContainerInternal;
@@ -38,16 +39,17 @@ import org.gradle.api.internal.tasks.properties.TypeMetadata;
 import org.gradle.api.internal.tasks.properties.TypeMetadataStore;
 import org.gradle.api.tasks.FileNormalizer;
 import org.gradle.internal.exceptions.DefaultMultiCauseException;
-import org.gradle.internal.fingerprint.FileCollectionFingerprinterRegistry;
+import org.gradle.internal.execution.fingerprint.InputFingerprinter;
+import org.gradle.internal.fingerprint.DirectorySensitivity;
 import org.gradle.internal.hash.ClassLoaderHierarchyHasher;
 import org.gradle.internal.instantiation.InstantiationScheme;
 import org.gradle.internal.isolation.IsolatableFactory;
+import org.gradle.internal.model.CalculatedValueContainerFactory;
 import org.gradle.internal.operations.BuildOperationExecutor;
 import org.gradle.internal.reflect.DefaultTypeValidationContext;
 import org.gradle.internal.reflect.PropertyMetadata;
-import org.gradle.internal.reflect.TypeValidationContext;
+import org.gradle.internal.reflect.validation.Severity;
 import org.gradle.internal.service.ServiceLookup;
-import org.gradle.internal.snapshot.ValueSnapshotter;
 import org.gradle.model.internal.type.ModelType;
 
 import javax.annotation.Nullable;
@@ -60,57 +62,62 @@ public class DefaultTransformationRegistrationFactory implements TransformationR
     private final IsolatableFactory isolatableFactory;
     private final ClassLoaderHierarchyHasher classLoaderHierarchyHasher;
     private final TransformerInvocationFactory transformerInvocationFactory;
-    private final ValueSnapshotter valueSnapshotter;
     private final PropertyWalker parametersPropertyWalker;
     private final ServiceLookup internalServices;
     private final TypeMetadataStore actionMetadataStore;
     private final FileCollectionFactory fileCollectionFactory;
     private final FileLookup fileLookup;
-    private final FileCollectionFingerprinterRegistry fileCollectionFingerprinterRegistry;
+    private final InputFingerprinter inputFingerprinter;
+    private final CalculatedValueContainerFactory calculatedValueContainerFactory;
     private final DomainObjectContext owner;
     private final InstantiationScheme actionInstantiationScheme;
     private final InstantiationScheme legacyActionInstantiationScheme;
+    private final DocumentationRegistry documentationRegistry;
 
     public DefaultTransformationRegistrationFactory(
         BuildOperationExecutor buildOperationExecutor,
         IsolatableFactory isolatableFactory,
         ClassLoaderHierarchyHasher classLoaderHierarchyHasher,
         TransformerInvocationFactory transformerInvocationFactory,
-        ValueSnapshotter valueSnapshotter,
         FileCollectionFactory fileCollectionFactory,
         FileLookup fileLookup,
-        FileCollectionFingerprinterRegistry fileCollectionFingerprinterRegistry,
+        InputFingerprinter inputFingerprinter,
+        CalculatedValueContainerFactory calculatedValueContainerFactory,
         DomainObjectContext owner,
         ArtifactTransformParameterScheme parameterScheme,
         ArtifactTransformActionScheme actionScheme,
-        ServiceLookup internalServices
+        ServiceLookup internalServices,
+        DocumentationRegistry documentationRegistry
     ) {
         this.buildOperationExecutor = buildOperationExecutor;
         this.isolatableFactory = isolatableFactory;
         this.classLoaderHierarchyHasher = classLoaderHierarchyHasher;
         this.transformerInvocationFactory = transformerInvocationFactory;
-        this.valueSnapshotter = valueSnapshotter;
         this.fileCollectionFactory = fileCollectionFactory;
         this.fileLookup = fileLookup;
-        this.fileCollectionFingerprinterRegistry = fileCollectionFingerprinterRegistry;
+        this.inputFingerprinter = inputFingerprinter;
+        this.calculatedValueContainerFactory = calculatedValueContainerFactory;
         this.owner = owner;
         this.actionInstantiationScheme = actionScheme.getInstantiationScheme();
         this.actionMetadataStore = actionScheme.getInspectionScheme().getMetadataStore();
         this.legacyActionInstantiationScheme = actionScheme.getLegacyInstantiationScheme();
         this.parametersPropertyWalker = parameterScheme.getInspectionScheme().getPropertyWalker();
         this.internalServices = internalServices;
+        this.documentationRegistry = documentationRegistry;
     }
 
     @Override
     public ArtifactTransformRegistration create(ImmutableAttributes from, ImmutableAttributes to, Class<? extends TransformAction<?>> implementation, @Nullable TransformParameters parameterObject) {
         TypeMetadata actionMetadata = actionMetadataStore.getTypeMetadata(implementation);
         boolean cacheable = implementation.isAnnotationPresent(CacheableTransform.class);
-        DefaultTypeValidationContext validationContext = DefaultTypeValidationContext.withoutRootType(cacheable);
+        DefaultTypeValidationContext validationContext = DefaultTypeValidationContext.withoutRootType(documentationRegistry, cacheable);
         actionMetadata.visitValidationFailures(null, validationContext);
 
         // Should retain this on the metadata rather than calculate on each invocation
         Class<? extends FileNormalizer> inputArtifactNormalizer = null;
         Class<? extends FileNormalizer> dependenciesNormalizer = null;
+        DirectorySensitivity artifactDirectorySensitivity = DirectorySensitivity.DEFAULT;
+        DirectorySensitivity dependenciesDirectorySensitivity = DirectorySensitivity.DEFAULT;
         for (PropertyMetadata propertyMetadata : actionMetadata.getPropertiesMetadata()) {
             Class<? extends Annotation> propertyType = propertyMetadata.getPropertyType();
             if (propertyType.equals(InputArtifact.class)) {
@@ -118,15 +125,17 @@ public class DefaultTransformationRegistrationFactory implements TransformationR
                 NormalizerCollectingVisitor visitor = new NormalizerCollectingVisitor();
                 actionMetadata.getAnnotationHandlerFor(propertyMetadata).visitPropertyValue(propertyMetadata.getPropertyName(), null, propertyMetadata, visitor, null);
                 inputArtifactNormalizer = visitor.normalizer;
+                artifactDirectorySensitivity = visitor.directorySensitivity;
                 DefaultTransformer.validateInputFileNormalizer(propertyMetadata.getPropertyName(), inputArtifactNormalizer, cacheable, validationContext);
             } else if (propertyType.equals(InputArtifactDependencies.class)) {
                 NormalizerCollectingVisitor visitor = new NormalizerCollectingVisitor();
                 actionMetadata.getAnnotationHandlerFor(propertyMetadata).visitPropertyValue(propertyMetadata.getPropertyName(), null, propertyMetadata, visitor, null);
                 dependenciesNormalizer = visitor.normalizer;
+                dependenciesDirectorySensitivity = visitor.directorySensitivity;
                 DefaultTransformer.validateInputFileNormalizer(propertyMetadata.getPropertyName(), dependenciesNormalizer, cacheable, validationContext);
             }
         }
-        ImmutableMap<String, TypeValidationContext.Severity> validationMessages = validationContext.getProblems();
+        ImmutableMap<String, Severity> validationMessages = validationContext.getProblems();
         if (!validationMessages.isEmpty()) {
             String formatString = validationMessages.size() == 1
                 ? "A problem was found with the configuration of %s."
@@ -142,30 +151,32 @@ public class DefaultTransformationRegistrationFactory implements TransformationR
         Transformer transformer = new DefaultTransformer(
             implementation,
             parameterObject,
-            null,
             from,
             FileParameterUtils.normalizerOrDefault(inputArtifactNormalizer),
             FileParameterUtils.normalizerOrDefault(dependenciesNormalizer),
             cacheable,
+            artifactDirectorySensitivity,
+            dependenciesDirectorySensitivity,
             buildOperationExecutor,
             classLoaderHierarchyHasher,
             isolatableFactory,
-            valueSnapshotter,
             fileCollectionFactory,
             fileLookup,
             parametersPropertyWalker,
             actionInstantiationScheme,
-            owner.getModel(),
-            internalServices);
+            owner,
+            calculatedValueContainerFactory,
+            internalServices,
+            documentationRegistry);
 
-        return new DefaultArtifactTransformRegistration(from, to, new TransformationStep(transformer, transformerInvocationFactory, owner, fileCollectionFingerprinterRegistry));
+        return new DefaultArtifactTransformRegistration(from, to, new TransformationStep(transformer, transformerInvocationFactory, owner, inputFingerprinter));
     }
 
     @Override
     @SuppressWarnings("deprecation")
     public ArtifactTransformRegistration create(ImmutableAttributes from, ImmutableAttributes to, Class<? extends org.gradle.api.artifacts.transform.ArtifactTransform> implementation, Object[] params) {
         Transformer transformer = new LegacyTransformer(implementation, params, legacyActionInstantiationScheme, from, classLoaderHierarchyHasher, isolatableFactory);
-        return new DefaultArtifactTransformRegistration(from, to, new TransformationStep(transformer, transformerInvocationFactory, owner, fileCollectionFingerprinterRegistry));
+        return new DefaultArtifactTransformRegistration(from, to, new TransformationStep(transformer, transformerInvocationFactory, owner, inputFingerprinter));
     }
 
     private static class DefaultArtifactTransformRegistration implements ArtifactTransformRegistration {
@@ -197,10 +208,21 @@ public class DefaultTransformationRegistrationFactory implements TransformationR
 
     private static class NormalizerCollectingVisitor extends PropertyVisitor.Adapter {
         private Class<? extends FileNormalizer> normalizer;
+        private DirectorySensitivity directorySensitivity = DirectorySensitivity.DEFAULT;
 
         @Override
-        public void visitInputFileProperty(String propertyName, boolean optional, boolean skipWhenEmpty, boolean incremental, @Nullable Class<? extends FileNormalizer> fileNormalizer, PropertyValue value, InputFilePropertyType filePropertyType) {
+        public void visitInputFileProperty(
+            String propertyName,
+            boolean optional,
+            boolean skipWhenEmpty,
+            DirectorySensitivity directorySensitivity,
+            boolean incremental,
+            @Nullable Class<? extends FileNormalizer> fileNormalizer,
+            PropertyValue value,
+            InputFilePropertyType filePropertyType
+        ) {
             this.normalizer = fileNormalizer;
+            this.directorySensitivity = directorySensitivity;
         }
     }
 }

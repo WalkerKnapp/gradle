@@ -155,7 +155,7 @@ As you can see, you can have multiple `from()` declarations in a copy specificat
 [[sec:unpacking_archives_example]]
 == Unpacking archives
 
-Archives are effectively self-contained file systems, so unpacking them is a case of copying the files from that file system onto the local file system — or even into another archive. \
+Archives are effectively self-contained file systems, so unpacking them is a case of copying the files from that file system onto the local file system — or even into another archive.
 Gradle enables this by providing some wrapper functions that make archives available as hierarchical collections of files (<<sec:file_trees,file trees>>).
 
 The two functions of interest are link:{groovyDslPath}/org.gradle.api.Project.html#org.gradle.api.Project:zipTree(java.lang.Object)[Project.zipTree(java.lang.Object)] and link:{groovyDslPath}/org.gradle.api.Project.html#org.gradle.api.Project:tarTree(java.lang.Object)[Project.tarTree(java.lang.Object)], which produce a link:{javadocPath}/org/gradle/api/file/FileTree.html[FileTree] from a corresponding archive file. That file tree can then be used in a `from()` specification, like so:
@@ -781,7 +781,7 @@ Gradle does of course allow you create as many archive tasks as you want, but it
 
 Gradle has several conventions around the naming of archives and where they are created based on the plugins your project uses. The main convention is provided by the <<base_plugin.adoc#base_plugin,Base Plugin>>, which defaults to creating archives in the `$buildDir/distributions` directory and typically uses archive names of the form _[projectName]-[version].[type]_.
 
-The following example comes from a project named `zipProject`, hence the `myZip` task creates an archive named `zipProject-1.0.zip`:
+The following example comes from a project named `archive-naming`, hence the `myZip` task creates an archive named `archive-naming-1.0.zip`:
 
 .Creation of ZIP archive
 ====
@@ -879,4 +879,5 @@ include::sample[dir="snippets/files/archives/groovy",files="build.gradle[tags=re
 include::sample[dir="snippets/files/archives/kotlin",files="build.gradle.kts[tags=reproducible]"]
 ====
 
-Often you will want to publish an archive, so that it is usable from another project. This process is described in <<artifact_management.adoc#artifact_management,Legacy Publishing>>.
+Often you will want to publish an archive, so that it is usable from another project.
+This process is described in <<cross_project_publications.adoc#cross_project_publications,Cross-Project publications>>.

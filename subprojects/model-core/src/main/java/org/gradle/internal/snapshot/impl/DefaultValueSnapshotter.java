@@ -20,6 +20,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import org.gradle.api.attributes.Attribute;
 import org.gradle.internal.hash.ClassLoaderHierarchyHasher;
+import org.gradle.internal.hash.HashCode;
 import org.gradle.internal.isolation.Isolatable;
 import org.gradle.internal.isolation.IsolatableFactory;
 import org.gradle.internal.logging.text.TreeFormatter;
@@ -45,8 +46,8 @@ public class DefaultValueSnapshotter implements ValueSnapshotter, IsolatableFact
     private final ValueVisitor<Isolatable<?>> isolatableValueVisitor;
 
     public DefaultValueSnapshotter(ClassLoaderHierarchyHasher classLoaderHasher, ManagedFactoryRegistry managedFactoryRegistry) {
-        valueSnapshotValueVisitor = new ValueSnapshotVisitor(classLoaderHasher);
-        isolatableValueVisitor = new IsolatableVisitor(classLoaderHasher, managedFactoryRegistry);
+        this.valueSnapshotValueVisitor = new ValueSnapshotVisitor(classLoaderHasher);
+        this.isolatableValueVisitor = new IsolatableVisitor(classLoaderHasher, managedFactoryRegistry);
     }
 
     @Override
@@ -159,6 +160,9 @@ public class DefaultValueSnapshotter implements ValueSnapshotter, IsolatableFact
         if (value instanceof Isolatable) {
             return visitor.fromIsolatable((Isolatable<?>) value);
         }
+        if (value instanceof HashCode) {
+            return visitor.hashCode((HashCode) value);
+        }
 
         // Fall back to serialization
         return serialize(value, visitor);
@@ -199,6 +203,8 @@ public class DefaultValueSnapshotter implements ValueSnapshotter, IsolatableFact
         T longValue(Long value);
 
         T shortValue(Short value);
+
+        T hashCode(HashCode value);
 
         T attributeValue(Attribute<?> value);
 
@@ -260,6 +266,11 @@ public class DefaultValueSnapshotter implements ValueSnapshotter, IsolatableFact
         @Override
         public ValueSnapshot shortValue(Short value) {
             return new ShortValueSnapshot(value);
+        }
+
+        @Override
+        public ValueSnapshot hashCode(HashCode value) {
+            return new HashCodeSnapshot(value);
         }
 
         @Override
@@ -375,6 +386,11 @@ public class DefaultValueSnapshotter implements ValueSnapshotter, IsolatableFact
         @Override
         public Isolatable<?> shortValue(Short value) {
             return new ShortValueSnapshot(value);
+        }
+
+        @Override
+        public Isolatable<?> hashCode(HashCode value) {
+            return new HashCodeSnapshot(value);
         }
 
         @Override

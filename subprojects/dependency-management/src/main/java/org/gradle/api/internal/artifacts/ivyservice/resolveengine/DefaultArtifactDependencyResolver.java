@@ -20,6 +20,7 @@ import org.gradle.api.Action;
 import org.gradle.api.InvalidUserCodeException;
 import org.gradle.api.artifacts.DependencySubstitution;
 import org.gradle.api.attributes.AttributesSchema;
+import org.gradle.api.internal.FeaturePreviews;
 import org.gradle.api.internal.artifacts.ArtifactDependencyResolver;
 import org.gradle.api.internal.artifacts.ComponentSelectorConverter;
 import org.gradle.api.internal.artifacts.GlobalDependencyResolutionRules;
@@ -61,6 +62,7 @@ import org.gradle.api.specs.Spec;
 import org.gradle.internal.Actions;
 import org.gradle.internal.component.model.DependencyMetadata;
 import org.gradle.internal.instantiation.InstantiatorFactory;
+import org.gradle.internal.model.CalculatedValueContainerFactory;
 import org.gradle.internal.operations.BuildOperationExecutor;
 import org.gradle.internal.reflect.Instantiator;
 import org.gradle.internal.resolve.caching.ComponentMetadataSupplierRuleExecutor;
@@ -91,6 +93,8 @@ public class DefaultArtifactDependencyResolver implements ArtifactDependencyReso
     private final ComponentMetadataSupplierRuleExecutor componentMetadataSupplierRuleExecutor;
     private final Instantiator instantiator;
     private final ComponentSelectionDescriptorFactory componentSelectionDescriptorFactory;
+    private final FeaturePreviews featurePreviews;
+    private final CalculatedValueContainerFactory calculatedValueContainerFactory;
 
     public DefaultArtifactDependencyResolver(BuildOperationExecutor buildOperationExecutor,
                                              List<ResolverProviderFactory> resolverFactories,
@@ -105,7 +109,9 @@ public class DefaultArtifactDependencyResolver implements ArtifactDependencyReso
                                              VersionParser versionParser,
                                              ComponentMetadataSupplierRuleExecutor componentMetadataSupplierRuleExecutor,
                                              InstantiatorFactory instantiatorFactory,
-                                             ComponentSelectionDescriptorFactory componentSelectionDescriptorFactory) {
+                                             ComponentSelectionDescriptorFactory componentSelectionDescriptorFactory,
+                                             FeaturePreviews featurePreviews,
+                                             CalculatedValueContainerFactory calculatedValueContainerFactory) {
         this.resolverFactories = resolverFactories;
         this.projectDependencyResolver = projectDependencyResolver;
         this.ivyFactory = ivyFactory;
@@ -120,10 +126,12 @@ public class DefaultArtifactDependencyResolver implements ArtifactDependencyReso
         this.componentMetadataSupplierRuleExecutor = componentMetadataSupplierRuleExecutor;
         this.instantiator = instantiatorFactory.decorateScheme().instantiator();
         this.componentSelectionDescriptorFactory = componentSelectionDescriptorFactory;
+        this.featurePreviews = featurePreviews;
+        this.calculatedValueContainerFactory = calculatedValueContainerFactory;
     }
 
     @Override
-    public void resolve(ResolveContext resolveContext, List<? extends ResolutionAwareRepository> repositories, GlobalDependencyResolutionRules metadataHandler, Spec<? super DependencyMetadata> edgeFilter, DependencyGraphVisitor graphVisitor, DependencyArtifactsVisitor artifactsVisitor, AttributesSchemaInternal consumerSchema, ArtifactTypeRegistry artifactTypeRegistry) {
+    public void resolve(ResolveContext resolveContext, List<? extends ResolutionAwareRepository> repositories, GlobalDependencyResolutionRules metadataHandler, Spec<? super DependencyMetadata> edgeFilter, DependencyGraphVisitor graphVisitor, DependencyArtifactsVisitor artifactsVisitor, AttributesSchemaInternal consumerSchema, ArtifactTypeRegistry artifactTypeRegistry, boolean includeSyntheticDependencies) {
         LOGGER.debug("Resolving {}", resolveContext);
 
         validateResolutionStrategy(resolveContext.getResolutionStrategy());
@@ -134,7 +142,7 @@ public class DefaultArtifactDependencyResolver implements ArtifactDependencyReso
         DependencyGraphVisitor artifactsGraphVisitor = new ResolvedArtifactsGraphVisitor(artifactsVisitor, resolvers.getArtifactSelector());
 
         // Resolve the dependency graph
-        builder.resolve(resolveContext, new CompositeDependencyGraphVisitor(graphVisitor, artifactsGraphVisitor));
+        builder.resolve(resolveContext, new CompositeDependencyGraphVisitor(graphVisitor, artifactsGraphVisitor), includeSyntheticDependencies);
     }
 
     private static void validateResolutionStrategy(ResolutionStrategyInternal resolutionStrategy) {
@@ -190,7 +198,7 @@ public class DefaultArtifactDependencyResolver implements ArtifactDependencyReso
         resolvers.add(projectDependencyResolver);
         ResolutionStrategyInternal resolutionStrategy = resolveContext.getResolutionStrategy();
         resolvers.add(ivyFactory.create(resolveContext.getName(), resolutionStrategy, repositories, metadataHandler.getComponentMetadataProcessorFactory(), resolveContext.getAttributes(), consumerSchema, attributesFactory, componentMetadataSupplierRuleExecutor));
-        return new ComponentResolversChain(resolvers, artifactTypeRegistry);
+        return new ComponentResolversChain(resolvers, artifactTypeRegistry, calculatedValueContainerFactory);
     }
 
     private ResolveContextToComponentResolver createResolveContextConverter() {

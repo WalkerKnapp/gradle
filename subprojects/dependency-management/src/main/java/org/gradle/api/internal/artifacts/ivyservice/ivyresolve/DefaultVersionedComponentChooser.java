@@ -15,7 +15,6 @@
  */
 package org.gradle.api.internal.artifacts.ivyservice.ivyresolve;
 
-import com.google.common.collect.Lists;
 import org.gradle.api.Action;
 import org.gradle.api.artifacts.ComponentMetadata;
 import org.gradle.api.artifacts.ComponentSelection;
@@ -39,7 +38,7 @@ import org.gradle.internal.resolve.RejectedByRuleVersion;
 import org.gradle.internal.resolve.result.BuildableModuleComponentMetaDataResolveResult;
 import org.gradle.internal.resolve.result.ComponentSelectionContext;
 import org.gradle.internal.rules.SpecRuleAction;
-import org.gradle.util.CollectionUtils;
+import org.gradle.util.internal.CollectionUtils;
 
 import javax.annotation.Nullable;
 import java.util.Collection;
@@ -88,10 +87,17 @@ class DefaultVersionedComponentChooser implements VersionedComponentChooser {
 
         // Loop over all listed versions, sorted by LATEST first
         List<ModuleComponentResolveState> resolveStates = sortLatestFirst(versions);
-        resolveStates = filterModules(resolveStates, result);
+        Action<? super ArtifactResolutionDetails> contentFilter = result.getContentFilter();
         for (ModuleComponentResolveState candidate : resolveStates) {
-            DefaultMetadataProvider metadataProvider = createMetadataProvider(candidate);
+            if (contentFilter != null) {
+                DynamicArtifactResolutionDetails details = new DynamicArtifactResolutionDetails(candidate, result.getConfigurationName(), result.getConsumerAttributes());
+                contentFilter.execute(details);
+                if (!details.found) {
+                    continue;
+                }
+            }
 
+            DefaultMetadataProvider metadataProvider = createMetadataProvider(candidate);
             boolean versionMatches = versionMatches(requestedVersionMatcher, candidate, metadataProvider);
             if (metadataIsNotUsable(result, metadataProvider)) {
                 return;
@@ -129,24 +135,6 @@ class DefaultVersionedComponentChooser implements VersionedComponentChooser {
         // if we reach this point, no match was found, either because there are no versions matching the selector
         // or all of them were rejected
         result.noMatchFound();
-    }
-
-    private List<ModuleComponentResolveState> filterModules(List<ModuleComponentResolveState> resolveStates, ComponentSelectionContext result) {
-        Action<? super ArtifactResolutionDetails> contentFilter = result.getContentFilter();
-        if (contentFilter == null) {
-            return resolveStates;
-        }
-        List<ModuleComponentResolveState> out = Lists.newArrayListWithCapacity(resolveStates.size());
-        String configurationName = result.getConfigurationName();
-        ImmutableAttributes consumerAttributes = result.getConsumerAttributes();
-        for (ModuleComponentResolveState resolveState : resolveStates) {
-            DynamicArtifactResolutionDetails details = new DynamicArtifactResolutionDetails(resolveState, configurationName, consumerAttributes);
-            contentFilter.execute(details);
-            if (details.found) {
-                out.add(resolveState);
-            }
-        }
-        return out;
     }
 
     @Nullable

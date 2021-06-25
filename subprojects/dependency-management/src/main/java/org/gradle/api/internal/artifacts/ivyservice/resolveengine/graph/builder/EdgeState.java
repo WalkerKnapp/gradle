@@ -190,9 +190,9 @@ class EdgeState implements DependencyGraphEdge {
         }
     }
 
-    public void restartConnected(boolean checkUnattached) {
+    public void restartConnected() {
         if (from.isSelected() && isUsed()) {
-            restartInternal(checkUnattached);
+            restartInternal(true);
         }
     }
 
@@ -365,20 +365,17 @@ class EdgeState implements DependencyGraphEdge {
         return selectedComponent != null && selectedComponent.getModule().isVirtualPlatform();
     }
 
+    boolean hasSelectedVariant() {
+        return resolvedVariant != null || !findTargetNodes().isEmpty();
+    }
+
     @Override
     @Nullable
     public ResolvedVariantResult getSelectedVariant() {
         if (resolvedVariant != null) {
             return resolvedVariant;
         }
-        List<NodeState> targetNodes = this.targetNodes;
-        if (targetNodes.isEmpty()) {
-            // happens for substituted dependencies
-            ComponentState targetComponent = getTargetComponent();
-            if (targetComponent != null) {
-                targetNodes = targetComponent.getNodes();
-            }
-        }
+        List<NodeState> targetNodes = findTargetNodes();
         assert !targetNodes.isEmpty();
         for (NodeState targetNode : targetNodes) {
             if (targetNode.isSelected()) {
@@ -387,6 +384,18 @@ class EdgeState implements DependencyGraphEdge {
             }
         }
         return null;
+    }
+
+    private List<NodeState> findTargetNodes() {
+        List<NodeState> targetNodes = this.targetNodes;
+        if (targetNodes.isEmpty()) {
+            // happens for substituted dependencies
+            ComponentState targetComponent = getTargetComponent();
+            if (targetComponent != null) {
+                targetNodes = targetComponent.getNodes();
+            }
+        }
+        return targetNodes;
     }
 
     @Override
@@ -459,6 +468,11 @@ class EdgeState implements DependencyGraphEdge {
         }
     }
 
+    @Nullable
+    ExcludeSpec getTransitiveExclusions() {
+        return transitiveExclusions;
+    }
+
     public void markUnattached() {
         this.unattached = true;
     }
@@ -487,5 +501,9 @@ class EdgeState implements DependencyGraphEdge {
      */
     boolean isUsed() {
         return used;
+    }
+
+    public boolean isArtifactOnlyEdge() {
+        return !isTransitive && !dependencyMetadata.getArtifacts().isEmpty();
     }
 }

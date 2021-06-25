@@ -173,7 +173,9 @@ project(":project3") {
     def "ivy-publish plugin does not take archivesBaseName into account"() {
         createBuildScripts("""
 project(":project2") {
-    archivesBaseName = "changed"
+    base {
+        archivesName = "changed"
+    }
 }
         """)
 
@@ -226,7 +228,9 @@ project(":project1") {
 }
 project(":project2") {
     apply plugin: 'java'
-    archivesBaseName = "changed"
+    base {
+        archivesName = "changed"
+    }
 }
         """
 
@@ -254,7 +258,7 @@ allprojects {
 project(':project1') {
     apply plugin: 'java'
 
-    ${jcenterRepository()}
+    ${mavenCentralRepository()}
 
     dependencies {
         implementation 'commons-logging:commons-logging:1.2'

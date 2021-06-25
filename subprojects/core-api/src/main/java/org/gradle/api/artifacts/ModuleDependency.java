@@ -18,7 +18,6 @@ package org.gradle.api.artifacts;
 import groovy.lang.Closure;
 import groovy.lang.DelegatesTo;
 import org.gradle.api.Action;
-import org.gradle.api.Incubating;
 import org.gradle.api.attributes.AttributeContainer;
 import org.gradle.api.attributes.HasConfigurableAttributes;
 import org.gradle.api.capabilities.Capability;
@@ -91,7 +90,7 @@ public interface ModuleDependency extends Dependency, HasConfigurableAttributes<
      * <p>Adds an artifact to this dependency.</p>
      *
      * <p>If no artifact is added to a dependency, an implicit default artifact is used. This default artifact has the
-     * same name as the module and its type and extension is <em>jar</em>. If at least one artifact is explicitly added,
+     * same name as the module and its type and extension is {@code jar}. If at least one artifact is explicitly added,
      * the implicit default artifact won't be used any longer.</p>
      *
      * @return this
@@ -103,10 +102,12 @@ public interface ModuleDependency extends Dependency, HasConfigurableAttributes<
      * org.gradle.api.artifacts.DependencyArtifact} instance, which it can configure.</p>
      *
      * <p>If no artifact is added to a dependency, an implicit default artifact is used. This default artifact has the
-     * same name as the module and its type and extension is <em>jar</em>. If at least one artifact is explicitly added,
+     * same name as the module and its type and extension is {@code jar}. If at least one artifact is explicitly added,
      * the implicit default artifact won't be used any longer.</p>
      *
-     * @return this
+     * @return the added artifact
+     *
+     * @see DependencyArtifact
      */
     DependencyArtifact artifact(@DelegatesTo(value = DependencyArtifact.class, strategy = DELEGATE_FIRST) Closure configureClosure);
 
@@ -115,10 +116,12 @@ public interface ModuleDependency extends Dependency, HasConfigurableAttributes<
      * org.gradle.api.artifacts.DependencyArtifact} instance, which it can configure.</p>
      *
      * <p>If no artifact is added to a dependency, an implicit default artifact is used. This default artifact has the
-     * same name as the module and its type and extension is <em>jar</em>. If at least one artifact is explicitly added,
+     * same name as the module and its type and extension is {@code jar}. If at least one artifact is explicitly added,
      * the implicit default artifact won't be used any longer.</p>
      *
-     * @return this
+     * @return the added artifact
+     *
+     * @see DependencyArtifact
      *
      * @since 3.1
      */
@@ -178,6 +181,7 @@ public interface ModuleDependency extends Dependency, HasConfigurableAttributes<
      * target variant, in particular when a single component provides different variants.
      *
      * @param configureAction the attributes mutation action
+     * @return this
      *
      * @since 4.8
      */
@@ -186,7 +190,9 @@ public interface ModuleDependency extends Dependency, HasConfigurableAttributes<
 
     /**
      * Configures the requested capabilities of this dependency.
+     *
      * @param configureAction the configuration action
+     * @return this
      *
      * @since 5.3
      */
@@ -208,7 +214,6 @@ public interface ModuleDependency extends Dependency, HasConfigurableAttributes<
      *
      * @since 6.0
      */
-    @Incubating
     void endorseStrictVersions();
 
     /**
@@ -216,7 +221,6 @@ public interface ModuleDependency extends Dependency, HasConfigurableAttributes<
      *
      * @since 6.0
      */
-    @Incubating
     void doNotEndorseStrictVersions();
 
     /**
@@ -224,6 +228,5 @@ public interface ModuleDependency extends Dependency, HasConfigurableAttributes<
      *
      * @since 6.0
      */
-    @Incubating
     boolean isEndorsingStrictVersions();
 }

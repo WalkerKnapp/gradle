@@ -18,7 +18,7 @@ package org.gradle.api.internal.artifacts.publish;
 import org.gradle.api.artifacts.ConfigurablePublishArtifact;
 import org.gradle.api.artifacts.PublishArtifact;
 import org.gradle.api.internal.artifacts.PublishArtifactInternal;
-import org.gradle.util.GUtil;
+import org.gradle.util.internal.GUtil;
 
 import java.io.File;
 import java.util.Date;
@@ -48,17 +48,17 @@ public class DecoratingPublishArtifact extends AbstractPublishArtifact implement
 
     @Override
     public String getName() {
-        return GUtil.elvis(name, publishArtifact.getName());
+        return GUtil.getOrDefault(name, publishArtifact::getName);
     }
 
     @Override
     public String getExtension() {
-        return GUtil.elvis(extension, publishArtifact.getExtension());
+        return GUtil.getOrDefault(extension, publishArtifact::getExtension);
     }
 
     @Override
     public String getType() {
-        return GUtil.elvis(type, publishArtifact.getType());
+        return GUtil.getOrDefault(type, publishArtifact::getType);
     }
 
     @Override
@@ -102,10 +102,6 @@ public class DecoratingPublishArtifact extends AbstractPublishArtifact implement
 
     @Override
     public boolean shouldBePublished() {
-        if (publishArtifact instanceof PublishArtifactInternal) {
-            return ((PublishArtifactInternal) publishArtifact).shouldBePublished();
-        }
-        // This can happen for custom publish artifacts
-        return true;
+        return PublishArtifactInternal.shouldBePublished(publishArtifact);
     }
 }

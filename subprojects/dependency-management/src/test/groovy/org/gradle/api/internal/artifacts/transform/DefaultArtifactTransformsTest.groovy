@@ -16,7 +16,6 @@
 
 package org.gradle.api.internal.artifacts.transform
 
-
 import org.gradle.api.internal.artifacts.ivyservice.resolveengine.artifact.ArtifactVisitor
 import org.gradle.api.internal.artifacts.ivyservice.resolveengine.artifact.ResolvedArtifactSet
 import org.gradle.api.internal.artifacts.ivyservice.resolveengine.artifact.ResolvedVariant
@@ -30,13 +29,11 @@ import org.gradle.internal.component.AmbiguousVariantSelectionException
 import org.gradle.internal.component.NoMatchingVariantSelectionException
 import org.gradle.internal.component.model.AttributeMatcher
 import org.gradle.internal.component.model.AttributeMatchingExplanationBuilder
-import org.gradle.internal.operations.RunnableBuildOperation
-import org.gradle.internal.operations.TestBuildOperationExecutor
 import org.gradle.util.AttributeTestUtil
 import spock.lang.Specification
 
 import static org.gradle.api.internal.artifacts.ArtifactAttributes.ARTIFACT_FORMAT
-import static org.gradle.util.TextUtil.toPlatformLineSeparators
+import static org.gradle.util.internal.TextUtil.toPlatformLineSeparators
 
 class DefaultArtifactTransformsTest extends Specification {
     def matchingCache = Mock(ConsumerProvidedVariantFinder)
@@ -130,8 +127,8 @@ class DefaultArtifactTransformsTest extends Specification {
         consumerSchema.withProducer(producerSchema) >> attributeMatcher
         attributeMatcher.matches(_, _, _) >> []
 
-        matchingCache.collectConsumerVariants(_, _) >> { AttributeContainerInternal from, AttributeContainerInternal to ->
-            match(to, Stub(Transformation), 1)
+        matchingCache.collectConsumerVariants(_, _) >> { ImmutableAttributes from, ImmutableAttributes to ->
+            match(to, Stub(TransformationStep), 1)
         }
 
         def selector = transforms.variantSelector(typeAttributes("dll"), true, dependenciesResolver)
@@ -211,9 +208,11 @@ Found the following transforms:
     }
 
     def visit(ResolvedArtifactSet set) {
-        def visitor = Stub(ArtifactVisitor)
-        _ * visitor.visitFailure(_) >> { Throwable t -> throw t }
-        set.startVisit(new TestBuildOperationExecutor.TestBuildOperationQueue<RunnableBuildOperation>(), Stub(ResolvedArtifactSet.AsyncArtifactListener)).visit(visitor)
+        def artifactVisitor = Stub(ArtifactVisitor)
+        _ * artifactVisitor.visitFailure(_) >> { Throwable t -> throw t }
+        def visitor = Stub(ResolvedArtifactSet.Visitor)
+        _ * visitor.visitArtifacts(_) >> { ResolvedArtifactSet.Artifacts artifacts -> artifacts.visit(artifactVisitor) }
+        set.visit(visitor)
     }
 
     private static AttributeContainerInternal typeAttributes(String artifactType) {
@@ -222,9 +221,9 @@ Found the following transforms:
         attributeContainer.asImmutable()
     }
 
-    static MutableConsumerVariantMatchResult match(ImmutableAttributes output, Transformation trn, int depth) {
+    static MutableConsumerVariantMatchResult match(ImmutableAttributes output, TransformationStep trn, int depth) {
         def result = new MutableConsumerVariantMatchResult(2)
-        result.matched(output, trn, depth)
+        result.matched(output, trn, null, depth)
         result
     }
 }

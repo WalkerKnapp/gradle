@@ -22,7 +22,6 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.io.Files;
-import org.gradle.api.GradleException;
 import org.gradle.api.Task;
 import org.gradle.api.UncheckedIOException;
 import org.gradle.api.artifacts.transform.CacheableTransform;
@@ -31,6 +30,9 @@ import org.gradle.api.file.ConfigurableFileCollection;
 import org.gradle.api.file.EmptyFileVisitor;
 import org.gradle.api.file.FileVisitDetails;
 import org.gradle.api.file.RegularFileProperty;
+import org.gradle.api.internal.DocumentationRegistry;
+import org.gradle.api.logging.Logger;
+import org.gradle.api.logging.Logging;
 import org.gradle.api.provider.Property;
 import org.gradle.api.tasks.CacheableTask;
 import org.gradle.internal.classanalysis.AsmConstants;
@@ -47,9 +49,12 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 
-import static org.gradle.internal.reflect.TypeValidationContext.Severity.ERROR;
+import static org.gradle.internal.reflect.validation.Severity.ERROR;
 
 public abstract class ValidateAction implements WorkAction<ValidateAction.Params> {
+    private final static Logger LOGGER = Logging.getLogger(ValidateAction.class);
+    public static final String PROBLEM_SEPARATOR = "--------";
+
     public interface Params extends WorkParameters {
         ConfigurableFileCollection getClasses();
         RegularFileProperty getOutputFile();
@@ -82,7 +87,8 @@ public abstract class ValidateAction implements WorkAction<ValidateAction.Params
                     try {
                         clazz = classLoader.loadClass(className);
                     } catch (IllegalAccessError | NoClassDefFoundError | VerifyError | ClassNotFoundException e) {
-                        throw new GradleException("Could not load class: " + className, e);
+                        LOGGER.debug("Could not load class: " + className, e);
+                        continue;
                     }
                     collectValidationProblems(clazz, taskValidationProblems, params.getEnableStricterValidation().get());
                 }
@@ -95,6 +101,7 @@ public abstract class ValidateAction implements WorkAction<ValidateAction.Params
     private static void collectValidationProblems(Class<?> topLevelBean, Map<String, Boolean> problems, boolean enableStricterValidation) {
         boolean cacheable;
         boolean mapErrorsToWarnings;
+        DocumentationRegistry documentationRegistry = new DocumentationRegistry();
         if (Task.class.isAssignableFrom(topLevelBean)) {
             cacheable = enableStricterValidation || topLevelBean.isAnnotationPresent(CacheableTask.class);
             // Treat all errors as warnings, for backwards compatibility
@@ -107,7 +114,7 @@ public abstract class ValidateAction implements WorkAction<ValidateAction.Params
             mapErrorsToWarnings = false;
         }
 
-        DefaultTypeValidationContext validationContext = DefaultTypeValidationContext.withRootType(topLevelBean, cacheable);
+        DefaultTypeValidationContext validationContext = DefaultTypeValidationContext.withRootType(documentationRegistry, topLevelBean, cacheable);
         PropertyValidationAccess.collectValidationProblems(topLevelBean, validationContext);
         validationContext.getProblems()
             .forEach((message, severity) -> problems.put(message, severity == ERROR || !mapErrorsToWarnings));
@@ -119,7 +126,7 @@ public abstract class ValidateAction implements WorkAction<ValidateAction.Params
             try {
                 //noinspection ResultOfMethodCallIgnored
                 output.createNewFile();
-                Files.asCharSink(output, Charsets.UTF_8).write(Joiner.on('\n').join(problemMessages));
+                Files.asCharSink(output, Charsets.UTF_8).write(Joiner.on("\n" + PROBLEM_SEPARATOR + "\n").join(problemMessages));
             } catch (IOException ex) {
                 throw new java.io.UncheckedIOException(ex);
             }

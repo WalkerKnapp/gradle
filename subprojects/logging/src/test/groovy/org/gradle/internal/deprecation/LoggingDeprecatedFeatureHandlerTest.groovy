@@ -33,7 +33,7 @@ import org.gradle.internal.operations.OperationIdentifier
 import org.gradle.internal.operations.OperationProgressEvent
 import org.gradle.internal.time.Clock
 import org.gradle.util.SetSystemProperties
-import org.gradle.util.TextUtil
+import org.gradle.util.internal.TextUtil
 import org.junit.Rule
 import spock.lang.Specification
 import spock.lang.Subject
@@ -388,16 +388,12 @@ class LoggingDeprecatedFeatureHandlerTest extends Specification {
         currentBuildOperationRef.set(new DefaultBuildOperationRef(new OperationIdentifier(1), null))
         handler.featureUsed(deprecatedFeatureUsage('feature1'))
 
-        then:
         1 * buildOperationListener.progress(_, _) >> { progressFired(it[1], 'feature1') }
 
-        when:
         handler.featureUsed(deprecatedFeatureUsage('feature2'))
 
-        then:
         1 * buildOperationListener.progress(_, _) >> { progressFired(it[1], 'feature2') }
 
-        when:
         handler.featureUsed(deprecatedFeatureUsage('feature2'))
 
         then:

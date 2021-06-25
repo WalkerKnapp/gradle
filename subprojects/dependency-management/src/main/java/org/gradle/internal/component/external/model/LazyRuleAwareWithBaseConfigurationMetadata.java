@@ -29,6 +29,7 @@ import org.gradle.internal.component.model.ExcludeMetadata;
 import org.gradle.internal.component.model.IvyArtifactName;
 import org.gradle.internal.component.model.ModuleConfigurationMetadata;
 import org.gradle.internal.component.model.VariantResolveMetadata;
+import org.gradle.internal.deprecation.DeprecationMessageBuilder;
 
 import javax.annotation.Nullable;
 import java.util.List;
@@ -51,14 +52,22 @@ class LazyRuleAwareWithBaseConfigurationMetadata implements ModuleConfigurationM
     private CapabilitiesMetadata computedCapabilities;
     private ImmutableList<? extends ComponentArtifactMetadata> computedArtifacts;
     private final ImmutableAttributes componentLevelAttributes;
+    private final boolean externalVariant;
 
-    LazyRuleAwareWithBaseConfigurationMetadata(String name, @Nullable ModuleConfigurationMetadata base, ModuleComponentIdentifier componentId, ImmutableAttributes componentLevelAttributes, VariantMetadataRules variantMetadataRules, ImmutableList<ExcludeMetadata> excludes) {
+    LazyRuleAwareWithBaseConfigurationMetadata(String name,
+                                               @Nullable ModuleConfigurationMetadata base,
+                                               ModuleComponentIdentifier componentId,
+                                               ImmutableAttributes componentLevelAttributes,
+                                               VariantMetadataRules variantMetadataRules,
+                                               ImmutableList<ExcludeMetadata> excludes,
+                                               boolean externalVariant) {
         this.name = name;
         this.base = base;
         this.componentId = componentId;
         this.variantMetadataRules = variantMetadataRules;
         this.componentLevelAttributes = componentLevelAttributes;
         this.excludes = excludes;
+        this.externalVariant = externalVariant;
     }
 
     @Override
@@ -154,7 +163,12 @@ class LazyRuleAwareWithBaseConfigurationMetadata implements ModuleConfigurationM
     }
 
     @Override
-    public List<String> getConsumptionAlternatives() {
-        return ImmutableList.of();
+    public DeprecationMessageBuilder.WithDocumentation getConsumptionDeprecation() {
+        return null;
+    }
+
+    @Override
+    public boolean isExternalVariant() {
+        return externalVariant;
     }
 }

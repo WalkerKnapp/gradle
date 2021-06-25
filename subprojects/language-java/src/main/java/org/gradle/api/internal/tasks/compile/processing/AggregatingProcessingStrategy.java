@@ -16,9 +16,8 @@
 
 package org.gradle.api.internal.tasks.compile.processing;
 
-import com.sun.tools.javac.code.Symbol;
 import org.gradle.api.internal.tasks.compile.incremental.processing.AnnotationProcessorResult;
-import org.gradle.api.internal.tasks.compile.incremental.processing.GeneratedResource;
+import org.gradle.api.internal.tasks.compile.incremental.compilerapi.deps.GeneratedResource;
 
 import javax.annotation.processing.RoundEnvironment;
 import javax.lang.model.element.Element;
@@ -60,25 +59,23 @@ class AggregatingProcessingStrategy extends IncrementalProcessingStrategy {
 
     private void recordAggregatedTypes(Set<String> supportedAnnotationTypes, Set<? extends TypeElement> annotations, RoundEnvironment roundEnv) {
         if (supportedAnnotationTypes.contains("*")) {
-            result.getAggregatedTypes().addAll(namesOfElementsWithSource(roundEnv.getRootElements()));
+            result.getAggregatedTypes().addAll(namesOfElements(roundEnv.getRootElements()));
         } else {
             for (TypeElement annotation : annotations) {
-                result.getAggregatedTypes().addAll(namesOfElementsWithSource(roundEnv.getElementsAnnotatedWith(annotation)));
+                result.getAggregatedTypes().addAll(namesOfElements(roundEnv.getElementsAnnotatedWith(annotation)));
             }
         }
     }
 
-    // We need to filter classes which actually _have_ sources
-    // see https://github.com/gradle/gradle/issues/13767
-    private static Set<String> namesOfElementsWithSource(Set<? extends Element> orig) {
+    private static Set<String> namesOfElements(Set<? extends Element> orig) {
         if (orig == null || orig.isEmpty()) {
             return Collections.emptySet();
         }
-        return ElementUtils.getTopLevelTypeNames(orig.stream()
-            .filter(Symbol.ClassSymbol.class::isInstance)
-            .map(Symbol.ClassSymbol.class::cast)
-            .filter(e -> e.sourcefile != null)
-            .collect(Collectors.toSet()));
+        return orig
+            .stream()
+            .map(ElementUtils::getTopLevelType)
+            .map(ElementUtils::getElementName)
+            .collect(Collectors.toSet());
     }
 
     @Override
@@ -94,5 +91,10 @@ class AggregatingProcessingStrategy extends IncrementalProcessingStrategy {
         } else {
             result.getGeneratedAggregatingResources().add(new GeneratedResource(resourceLocation, pkg, relativeName));
         }
+    }
+
+    @Override
+    public String toString() {
+        return "Aggregating strategy for " + result.getClassName();
     }
 }

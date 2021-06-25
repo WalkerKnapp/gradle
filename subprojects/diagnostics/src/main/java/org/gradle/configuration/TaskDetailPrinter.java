@@ -26,7 +26,7 @@ import org.gradle.api.Transformer;
 import org.gradle.api.internal.plugins.DslObject;
 import org.gradle.api.internal.tasks.options.OptionDescriptor;
 import org.gradle.api.internal.tasks.options.OptionReader;
-import org.gradle.execution.TaskSelector;
+import org.gradle.execution.TaskSelection;
 import org.gradle.internal.logging.text.LinePrefixingStyledTextOutput;
 import org.gradle.internal.logging.text.StyledTextOutput;
 
@@ -43,18 +43,18 @@ import java.util.Set;
 import java.util.TreeSet;
 
 import static org.gradle.internal.logging.text.StyledTextOutput.Style.UserInput;
-import static org.gradle.util.CollectionUtils.collect;
-import static org.gradle.util.CollectionUtils.filter;
-import static org.gradle.util.CollectionUtils.sort;
+import static org.gradle.util.internal.CollectionUtils.collect;
+import static org.gradle.util.internal.CollectionUtils.filter;
+import static org.gradle.util.internal.CollectionUtils.sort;
 
 @NonNullApi
 public class TaskDetailPrinter {
     private final String taskPath;
-    private final TaskSelector.TaskSelection selection;
+    private final TaskSelection selection;
     private static final String INDENT = "     ";
     private final OptionReader optionReader;
 
-    public TaskDetailPrinter(String taskPath, TaskSelector.TaskSelection selection, OptionReader optionReader) {
+    public TaskDetailPrinter(String taskPath, TaskSelection selection, OptionReader optionReader) {
         this.taskPath = taskPath;
         this.selection = selection;
         this.optionReader = optionReader;

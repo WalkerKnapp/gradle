@@ -64,33 +64,40 @@ class LockfileFixture {
         lockFile.writelns(lines.sort())
     }
 
-    void verifyBuildscriptLockfile(String configurationName, List<String> expectedModules, boolean unique = true) {
-        internalVerifyLockfile([(configurationName): expectedModules], unique, true)
+    void verifyUniqueSettingsLockfile(String configurationName, List<String> expectedModules) {
+        internalVerifyLockfile([(configurationName): expectedModules], LockScope.SETTINGS)
     }
 
-    void verifyLockfile(String configurationName, List<String> expectedModules, boolean unique = true) {
-        internalVerifyLockfile([(configurationName): expectedModules], unique, false)
+    void verifyBuildscriptLockfile(String configurationName, List<String> expectedModules) {
+        internalVerifyLockfile([(configurationName): expectedModules], LockScope.BUILDSCRIPT)
     }
 
-    void verifyLockfile(Map<String, List<String>> expected, boolean unique = true) {
-        internalVerifyLockfile(expected, unique, false)
+    void verifyLockfile(String configurationName, List<String> expectedModules) {
+        internalVerifyLockfile([(configurationName): expectedModules], LockScope.PROJECT)
+    }
+
+    void verifyLockfile(Map<String, List<String>> expected) {
+        internalVerifyLockfile(expected, LockScope.PROJECT)
     }
 
     static void verifyCustomLockfile(TestFile lockFile, String configuration, List<String> expected) {
         internalVerifyLockFileWithFile(lockFile, [(configuration): expected])
     }
 
-    private void internalVerifyLockfile(Map<String, List<String>> expected, boolean unique, boolean buildScript) {
-        if (unique) {
-            def fileName = buildScript ? LockFileReaderWriter.BUILD_SCRIPT_PREFIX + LockFileReaderWriter.UNIQUE_LOCKFILE_NAME : LockFileReaderWriter.UNIQUE_LOCKFILE_NAME
-            def lockFile = testDirectory.file(fileName)
-            internalVerifyLockFileWithFile(lockFile, expected)
-        } else {
-            expected.entrySet().each {
-                def fileName = buildScript ? LockFileReaderWriter.BUILD_SCRIPT_PREFIX + it.key : it.key
-                verifyLegacyLockfile(fileName, it.value)
-            }
+    private void internalVerifyLockfile(Map<String, List<String>> expected, LockScope lockScope) {
+        def fileName
+        switch(lockScope) {
+            case LockScope.SETTINGS:
+                fileName = LockFileReaderWriter.SETTINGS_SCRIPT_PREFIX + LockFileReaderWriter.UNIQUE_LOCKFILE_NAME
+                break
+            case LockScope.BUILDSCRIPT:
+                fileName = LockFileReaderWriter.BUILD_SCRIPT_PREFIX + LockFileReaderWriter.UNIQUE_LOCKFILE_NAME
+                break
+            case LockScope.PROJECT:
+                fileName = LockFileReaderWriter.UNIQUE_LOCKFILE_NAME
         }
+        def lockFile = testDirectory.file(fileName)
+        internalVerifyLockFileWithFile(lockFile, expected)
     }
 
     private static void internalVerifyLockFileWithFile(TestFile lockFile, Map<String, List<String>> expected) {
@@ -129,34 +136,38 @@ class LockfileFixture {
         assert lockedModules == entries
     }
 
-    private void verifyLegacyLockfile(String configurationName, List<String> expectedModules) {
-        def lockFile = testDirectory.file(LockFileReaderWriter.DEPENDENCY_LOCKING_FOLDER, "$configurationName$LockFileReaderWriter.FILE_SUFFIX")
-        assert lockFile.exists()
-        def lockedModules = []
-        lockFile.eachLine { String line ->
-            if (!line.startsWith('#')) {
-                lockedModules << line
-            }
-        }
-
-        assert lockedModules as Set == expectedModules as Set
-    }
-
-    void expectLockStateMissing(String configurationName, boolean unique = true) {
-        if (unique) {
-            def lockFile = testDirectory.file(LockFileReaderWriter.DEPENDENCY_LOCKING_FOLDER, LockFileReaderWriter.UNIQUE_LOCKFILE_NAME)
-            if (lockFile.exists()) {
-                assert !lockFile.text.contains(configurationName)
-            } else {
-                assert !lockFile.exists()
-            }
+    void expectLockStateMissing(String configurationName) {
+        def lockFile = testDirectory.file(LockFileReaderWriter.UNIQUE_LOCKFILE_NAME)
+        if (lockFile.exists()) {
+            assert !lockFile.text.contains(configurationName)
         } else {
-            expectLegacyMissing(configurationName)
+            assert !lockFile.exists()
         }
     }
 
-    private void expectLegacyMissing(String configurationName) {
+    void expectNoLockFile() {
+        expectMissingLockFile(LockFileReaderWriter.UNIQUE_LOCKFILE_NAME)
+    }
+
+    void expectNoSettingsLockFile() {
+        expectMissingLockFile(LockFileReaderWriter.SETTINGS_SCRIPT_PREFIX + LockFileReaderWriter.UNIQUE_LOCKFILE_NAME)
+    }
+
+    void expectNoBuildscripLockFile() {
+        expectMissingLockFile(LockFileReaderWriter.BUILD_SCRIPT_PREFIX + LockFileReaderWriter.UNIQUE_LOCKFILE_NAME)
+    }
+
+    private void expectMissingLockFile(String fileName) {
+        def lockFile = testDirectory.file(fileName)
+        assert !lockFile.exists()
+    }
+
+    void assertLegacyLockfileMissing(String configurationName) {
         def lockFile = testDirectory.file(LockFileReaderWriter.DEPENDENCY_LOCKING_FOLDER, "$configurationName$LockFileReaderWriter.FILE_SUFFIX")
         assert !lockFile.exists()
+    }
+
+    private enum LockScope {
+        PROJECT, BUILDSCRIPT, SETTINGS
     }
 }

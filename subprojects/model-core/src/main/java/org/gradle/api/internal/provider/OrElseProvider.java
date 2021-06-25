@@ -35,16 +35,23 @@ class OrElseProvider<T> extends AbstractMinimalProvider<T> {
 
     @Override
     public ValueProducer getProducer() {
-        if (left.isPresent()) {
-            return left.getProducer();
-        } else {
-            return right.getProducer();
-        }
+        return new OrElseValueProducer(left, right, right.getProducer());
     }
 
     @Override
     public boolean calculatePresence(ValueConsumer consumer) {
         return left.calculatePresence(consumer) || right.calculatePresence(consumer);
+    }
+
+    @Override
+    public ExecutionTimeValue<? extends T> calculateExecutionTimeValue() {
+        ExecutionTimeValue<? extends T> leftValue = left.calculateExecutionTimeValue();
+        if (!leftValue.isMissing()) {
+            // favour left execution time value if present for better configuration cache integration
+            // of idioms like `property.convention(provider.orElse(somethingElse))`
+            return leftValue;
+        }
+        return super.calculateExecutionTimeValue();
     }
 
     @Override
